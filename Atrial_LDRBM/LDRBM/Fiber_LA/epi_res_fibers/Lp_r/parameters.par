@@ -1,0 +1,91 @@
+# CARP GIT commit hash: 1ea7d98608b51624ec9f836f72d18c2c6738a6d2
+# dependency hashes:    
+
+# /Volumes/bordeaux/IBT/openCARP/bin/openCARP +F ./Parfiles/la_lps_r.par -ellip_use_pt 0 -parab_use_pt 0 -parab_options_file /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/ilu_cg_opts
+# -ellip_options_file /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/amg_cg_opts -simID epi_res_fibers/Lp_r
+# -meshname /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/LA -stimulus[0].vtx_file /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_LPV
+# -stimulus[1].vtx_file /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_RPV -stimulus[2].vtx_file
+# /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_LAA -stimulus[3].vtx_file /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_MV
+# 
+
+#=======================================================>>
+## ./Parfiles/la_lps_r.par ##
+#simID = /home/jbayer/Fibers/LPS/L_EPI
+
+#meshname = /home/jbayer/Fibers/Mesh/Heart_R3_i
+
+num_gregions = 1
+
+gregion[0].g_et = 1 # when solving a laplacian, all conductivities should be 1
+gregion[0].g_el = 1
+gregion[0].g_en = 1
+gregion[0].g_il = 1
+gregion[0].g_it = 1
+gregion[0].g_in = 1
+#gregion[0].num_IDs = 1
+#gregion[0].ID[0] = 2
+
+experiment = 2 # 2 == laplacian solve.
+bidomain = 1 # this option must be set or the code segfaults.  The laplacian solve takes place on the extracellular grid.
+
+#Stimulus setup
+num_stim = 4
+
+stimulus[0].stimtype = 3
+#stimulus[0].vtx_file = /home/jbayer/Fibers/Mesh/Heart_R3_i.lendo.surf
+# should be lpv
+
+stimulus[1].stimtype = 3
+#stimulus[1].vtx_file = /home/jbayer/Fibers/Mesh/Heart_R3_i.rendo.surf
+# should be rpv
+
+stimulus[2].stimtype = 3
+#stimulus[2].vtx_file = /home/jbayer/Fibers/Mesh/Heart_R3_i.rendo.surf
+# should be ap
+
+stimulus[3].start = 0
+stimulus[3].duration = 1
+stimulus[3].strength = 1.0
+stimulus[3].stimtype = 2
+#stimulus[3].vtx_file = /home/jbayer/Fibers/Mesh/Heart_R3_i.epi.surf
+# should be mv
+
+#I/0 parameters
+#timedt = 1
+#spacedt = 1
+
+##END of ./Parfiles/la_lps_r.par
+#=======================================================<<
+
+ellip_use_pt                            = 0
+parab_use_pt                            = 0
+parab_options_file = /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/ilu_cg_opts
+#=======================================================>>
+## /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/ilu_cg_opts ##
+#-pc_type bjacobi
+#-sub_pc_type ilu
+#-ksp_type cg
+##-ksp_view
+
+##END of /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/ilu_cg_opts
+#=======================================================<<
+
+ellip_options_file = /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/amg_cg_opts
+#=======================================================>>
+## /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/amg_cg_opts ##
+#-ksp_type cg
+#-pc_type hypre
+#-pc_hypre_type boomeramg
+#-pc_hypre_boomeramg_max_iter 1
+#-pc_hypre_boomeramg_strong_threshold 0.0
+#-options_left
+
+##END of /Volumes/bordeaux/IBT/openCARP/carputils/carputils/resources/petsc_options/amg_cg_opts
+#=======================================================<<
+
+simID                                   = epi_res_fibers/Lp_r
+meshname                                = /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/LA
+stimulus[0].vtx_file                    = /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_LPV
+stimulus[1].vtx_file                    = /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_RPV
+stimulus[2].vtx_file                    = /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_LAA
+stimulus[3].vtx_file                    = /Volumes/beaujolais/Benutzer/la816/Only_Assistants/Patricia/meshes/dk01/epi_res_surf/ids_MV
