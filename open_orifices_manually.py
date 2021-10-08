@@ -23,6 +23,7 @@ import pymeshfix
 from pymeshfix import _meshfix
 import pyvista as pv
 import collections
+pv.set_plot_theme('dark')
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 import extract_rings
@@ -107,7 +108,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         picked_pt = None
         while picked_pt is None:
             p = pv.Plotter(notebook=False)
-            p.add_mesh(meshfix.mesh)
+            p.add_mesh(meshfix.mesh,'r')
             p.add_text('Select the center of the {} and close the window to cut, otherwise just close'.format(r),position='lower_left')
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
             p.show()
@@ -308,4 +309,4 @@ def point_array_mapper(mesh1, mesh2, idat):
     return meshNew.VTKObject
 
 if __name__ == '__main__':
-    run(sys.argv[1:])
+    run()

@@ -23,6 +23,7 @@ import pymeshfix
 from pymeshfix import _meshfix
 import pyvista as pv
 import collections
+pv.set_plot_theme('dark')
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 import extract_rings
@@ -250,9 +251,9 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     if MRI:            
         cc = pv.PolyData(valve_center)
         p = pv.Plotter(notebook=False)
-        p.add_mesh(meshfix.mesh)
+        p.add_mesh(meshfix.mesh, 'r')
         p.add_text('Select the appendage apex and close the window',position='lower_left')
-        p.add_mesh(cc, color='blue', point_size=30., render_points_as_spheres=True)
+        p.add_mesh(cc, color='w', point_size=30., render_points_as_spheres=True)
         p.enable_point_picking(meshfix.mesh, use_mesh=True)
 
         p.show()
@@ -424,7 +425,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             p = pv.Plotter(notebook=False)
             mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
             p.add_mesh(mesh_from_vtk, 'r')
-            p.add_mesh(point_cloud, color='black', point_size=30., render_points_as_spheres=True)
+            p.add_mesh(point_cloud, color='w', point_size=30., render_points_as_spheres=True)
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
             p.add_text('Select the appendage apex and close the window',position='lower_left')
             p.show()

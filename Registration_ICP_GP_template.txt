@@ -1,0 +1,61 @@
+val target = MeshIO.readMesh(new File("$target_dir/LA_prealigned.stl")).get
+show(target,"target")
+
+val model = StatismoIO.readStatismoMeshModel(new File("$SSM_file.h5")).get
+show(model, "model")
+
+val landmarks = LandmarkIO.readLandmarksJson[_3D](new File("$SSM_dir/landmarks.json")).get
+val candidateLM = LandmarkIO.readLandmarksJson[_3D](new File("$target_dir/landmarks.json")).get
+
+addLandmarksTo(landmarks, "model")
+
+def attributeCorrespondences(pts : Seq[Point[_3D]]) : Seq[Point[_3D]] = {
+  pts.map{pt => target.findClosestPoint(pt).point}
+}
+
+val candidates = attributeCorrespondences(landmarks.map { l => l.point }) 
+show(candidates, "candidates")
+
+val pointIds = landmarks.map{l => model.mean.findClosestPoint(l.point).id}.toIndexedSeq
+val modelPts = pointIds.map(id => model.referenceMesh.point(id) )
+val domain = UnstructuredPointsDomain[_3D](modelPts.toIndexedSeq)
+val values =  (modelPts.zip(candidates)).map{case (mPt, pPt) => pPt -mPt}
+val field = DiscreteVectorField(domain, values.toIndexedSeq)  
+show(field, "deformations")
+
+val littleNoise = NDimensionalNormalDistribution(Vector(0,0,0), SquareMatrix((1f,0,0), (0,1f,0), (0,0,1f)))
+
+def fitModel(pointIds: IndexedSeq[PointId],candidateCorresp: Seq[Point[_3D]]) :TriangleMesh = { 
+  val trainingData = (pointIds zip candidateCorresp).map{ case (mId, pPt) => 
+    (mId, pPt, littleNoise)
+  }
+  val posterior = model.posterior(trainingData.toIndexedSeq)
+  posterior.mean
+}
+
+val fit = fitModel(pointIds, candidates)
+show(fit, "fit")
+
+val fittedPoints = pointIds.map(id => fit.point(id))
+show(fittedPoints, "fittedPoints")
+remove("candidates"); remove("deformations")
+
+def recursion(currentPoints : Seq[Point[_3D]], nbIterations : Int) : Unit= {
+
+  val candidates = attributeCorrespondences(currentPoints)
+  val fit = fitModel(pointIds, candidates)  
+  val coefficients = model.coefficients(fit)
+  println(coefficients)
+  remove("fit")
+  show(fit, "fit")
+  
+  val newPoints= pointIds.map(id => fit.point(id))
+  remove("newPoints")
+  show(newPoints, "newPoints")
+
+  if(nbIterations> 0) {
+    recursion(newPoints, nbIterations - 1)
+  }
+}
+
+recursion( candidateLM.map{l => (l.point)}, 10)

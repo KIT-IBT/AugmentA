@@ -13,12 +13,13 @@ from glob import glob
 import pandas as pd
 import vtk
 from vtk.util import numpy_support
-import scipy.spatial as spatial
 from vtk.numpy_interface import dataset_adapter as dsa
 import datetime
 from sklearn.cluster import KMeans
 import argparse
 from scipy.spatial import cKDTree
+
+vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 class Ring:
    def __init__(self, index, name, points_num, center_point, distance, polydata):
@@ -28,11 +29,9 @@ class Ring:
        self.center = center_point
        self.ap_dist = distance
        self.vtk_polydata = polydata
-      
-def run(args):
 
-    vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
-
+def parser():
+    
     parser = argparse.ArgumentParser(description='Generate boundaries.')
     parser.add_argument('--mesh',
                         type=str,
@@ -54,45 +53,57 @@ def run(args):
                         type=str,
                         default="",
                         help='RAA basis point index, leave empty if no RA')
+    return parser
 
-    args = parser.parse_args(args)
+def smart_reader(path):
+
+    extension = str(path).split(".")[-1]
+
+    if extension == "vtk":
+        data_checker = vtk.vtkDataSetReader()
+        data_checker.SetFileName(str(path))
+        data_checker.Update()
+
+        if data_checker.IsFilePolyData():
+            reader = vtk.vtkPolyDataReader()
+        elif data_checker.IsFileUnstructuredGrid():
+            reader = vtk.vtkUnstructuredGridReader()
+
+    elif extension == "vtp":
+        reader = vtk.vtkXMLPolyDataReader()
+    elif extension == "vtu":
+        reader = vtk.vtkXMLUnstructuredGridReader()
+    elif extension == "obj":
+        reader = vtk.vtkOBJReader()
+    else:
+        print("No polydata or unstructured grid")
+
+    reader.SetFileName(str(path))
+    reader.Update()
+    output = reader.GetOutput()
+
+    return output
+
+def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_id=""):
 
     """Extrating Rings"""
     print('Extracting rings...')
     
-    data_checker = vtk.vtkDataSetReader()
-    data_checker.SetFileName('{}.vtk'.format(args.mesh))
-    data_checker.Update()
-    
-    if data_checker.IsFilePolyData():
-        reader = vtk.vtkPolyDataReader()
-    elif data_checker.IsFileUnstructuredGrid():
-        reader = vtk.vtkUnstructuredGridReader()
-    
-    reader.SetFileName('{}.vtk'.format(args.mesh))
-    reader.Update()
-
-    # reader = vtk.vtkOBJReader()
-    # reader.SetFileName('{}.obj'.format(args.mesh))
-    # reader.Update()
+    mesh_surf = smart_reader(mesh)
 
     geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputConnection(reader.GetOutputPort())
+    geo_filter.SetInputData(mesh_surf)
     geo_filter.Update()
     
     mesh_surf = geo_filter.GetOutput()
     
-    #idFilter = vtk.vtkIdFilter()
-    #idFilter.SetInputConnection(geo_filter.GetOutputPort())
-    #idFilter.SetIdsArrayName("Ids")
-    #idFilter.SetPointIds(True)
-    #idFilter.SetCellIds(False)
-    #idFilter.Update()
-    
     centroids = dict()
     
-    meshname = args.mesh.split("/")[-1]
-    outdir = "{}_surf".format(args.mesh)
+    extension = mesh.split('.')[-1]
+    mesh = mesh[:-(len(extension)+1)]
+
+    meshname = mesh.split("/")[-1]
+    outdir = "{}_surf".format(mesh)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     
@@ -100,27 +111,19 @@ def run(args):
     for r in fname:
         os.remove(r)
     
-    if (args.LAA != "" and args.RAA != ""):
-        LA_ap_point = mesh_surf.GetPoint(int(args.LAA))
-        RA_ap_point = mesh_surf.GetPoint(int(args.RAA))
+    if (LAA_id != "" and RAA_id != ""):
+        LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
+        RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
 
         centroids["LAA"] = LA_ap_point
         centroids["RAA"] = RA_ap_point
         
-        if (args.LAA_base != "" and args.RAA_base != ""):
-            LA_bs_point = mesh_surf.GetPoint(int(args.LAA_base))
-            RA_bs_point = mesh_surf.GetPoint(int(args.RAA_base))
+        if (LAA_base_id != "" and RAA_base_id != ""):
+            LA_bs_point = mesh_surf.GetPoint(int(LAA_base_id))
+            RA_bs_point = mesh_surf.GetPoint(int(RAA_base_id))
 
             centroids["LAA_base"] = LA_bs_point
             centroids["RAA_base"] = RA_bs_point
-    
-        
-        # idFilter = vtk.vtkIdFilter()
-        # idFilter.SetInputConnection(geo_filter.GetOutputPort())
-        # idFilter.SetIdsArrayName("Gl_Ids")
-        # idFilter.SetPointIds(True)
-        # idFilter.SetCellIds(False)
-        # idFilter.Update()
     
         connect = vtk.vtkConnectivityFilter()
         connect.SetInputConnection(geo_filter.GetOutputPort())
@@ -135,10 +138,10 @@ def run(args):
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(mesh_conn)
         loc.BuildLocator()
-        args.LAA = loc.FindClosestPoint(LA_ap_point)
+        LAA_id = loc.FindClosestPoint(LA_ap_point)
 
-        LA_tag = id_vec[int(args.LAA)]
-        RA_tag = id_vec[int(args.RAA)]
+        LA_tag = id_vec[int(LAA_id)]
+        RA_tag = id_vec[int(RAA_id)]
         
         thr = vtk.vtkThreshold()
         thr.SetInputData(mesh_conn)
@@ -164,31 +167,22 @@ def run(args):
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(LA)
         loc.BuildLocator()
-        args.LAA = loc.FindClosestPoint(LA_ap_point)
+        LAA_id = loc.FindClosestPoint(LA_ap_point)
         
-        if args.LAA_base != "":
+        if LAA_base_id != "":
             loc = vtk.vtkPointLocator()
             loc.SetDataSet(LA)
             loc.BuildLocator()
-            args.LAA_base = loc.FindClosestPoint(LA_bs_point)
-        
-        # locator = vtk.vtkStaticPointLocator()
-        # locator.SetDataSet(LA)
-        # locator.BuildLocator()
-        # temp_result = vtk.vtkIdList()
-        # locator.FindPointsWithinRadius(1000, LA_ap_point, temp_result)
-        # args.LAA = []
-        # for j in range(temp_result.GetNumberOfIds()):
-        #     args.LAA.append(temp_result.GetId(j))
+            LAA_base_id = loc.FindClosestPoint(LA_bs_point)
         
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
 
         LA_rings = detect_and_mark_rings(LA, LA_ap_point)
-        b_tag, centroids = mark_LA_rings(args, LA_rings, b_tag, centroids, outdir, LA)
+        b_tag, centroids = mark_LA_rings(LAA_id, LA_rings, b_tag, centroids, outdir, LA)
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(args.mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(mesh))
 
         thr.ThresholdBetween(RA_tag,RA_tag)
         thr.Update()
@@ -210,28 +204,28 @@ def run(args):
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(RA)
         loc.BuildLocator()
-        args.RAA = loc.FindClosestPoint(RA_ap_point)
+        RAA_id = loc.FindClosestPoint(RA_ap_point)
         
-        if args.LAA_base != "":
+        if LAA_base_id != "":
             loc = vtk.vtkPointLocator()
             loc.SetDataSet(RA)
             loc.BuildLocator()
-            args.RAA_base = loc.FindClosestPoint(RA_bs_point)
+            RAA_base_id = loc.FindClosestPoint(RA_bs_point)
         
         vtkWrite(RA, outdir+'/RA.vtk')
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
-        b_tag, centroids, RA_rings = mark_RA_rings(args, RA_rings, b_tag, centroids, outdir)
+        b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
         cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir)
 
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(args.mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(mesh))
     
-    elif args.RAA == "":
-        vtkWrite(geo_filter.GetOutput(), outdir+'/LA.vtk'.format(args.mesh))
-        LA_ap_point = mesh_surf.GetPoint(int(args.LAA))
+    elif RAA_id == "":
+        vtkWrite(geo_filter.GetOutput(), outdir+'/LA.vtk'.format(mesh))
+        LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         centroids["LAA"] = LA_ap_point
         idFilter = vtk.vtkIdFilter()
         idFilter.SetInputConnection(geo_filter.GetOutputPort())
@@ -244,16 +238,16 @@ def run(args):
         LA = idFilter.GetOutput()
         LA_rings = detect_and_mark_rings(LA, LA_ap_point)
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
-        b_tag, centroids = mark_LA_rings(args, LA_rings, b_tag, centroids, outdir, LA)
+        b_tag, centroids = mark_LA_rings(LAA_id, LA_rings, b_tag, centroids, outdir, LA)
 
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(args.mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(mesh))
 
-    elif args.LAA == "":
-        vtkWrite(geo_filter.GetOutput(), outdir+'/RA.vtk'.format(args.mesh))
-        RA_ap_point = mesh_surf.GetPoint(int(args.RAA))
+    elif LAA_id == "":
+        vtkWrite(geo_filter.GetOutput(), outdir+'/RA.vtk'.format(mesh))
+        RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
         idFilter = vtk.vtkIdFilter()
         idFilter.SetInputConnection(geo_filter.GetOutputPort())
         if int(vtk_version) >= 9:
@@ -266,16 +260,22 @@ def run(args):
         RA = idFilter.GetOutput()
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
-        b_tag, centroids = mark_RA_rings(args, RA_rings, b_tag, centroids, outdir)
+        b_tag, centroids = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
         cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir)
 
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(args.mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(mesh))
     
     df = pd.DataFrame(centroids)
     df.to_csv(outdir+"/rings_centroids.csv", float_format="%.2f", index=False)
+
+def run():
+
+    args = parser().parse_args()
+
+    label_atrial_orifices(args.mesh, args.LAA, args.RAA, args.LAA_base, args.RAA_base)
     
 def detect_and_mark_rings(surf, ap_point):
     
@@ -335,7 +335,7 @@ def detect_and_mark_rings(surf, ap_point):
     
     return rings
 
-def mark_LA_rings(args, rings, b_tag, centroids, outdir, LA):
+def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
     rings[np.argmax([r.np for r in rings])].name = "MV"
     pvs = [i for i in range(len(rings)) if rings[i].name!="MV"]
     
@@ -349,10 +349,6 @@ def mark_LA_rings(args, rings, b_tag, centroids, outdir, LA):
     LPVs = [pvs[i] for i in np.where(label_pred == label_LPV)[0]]
     LSPV_id = LPVs.index(pvs[min_ap_dist])
     RPVs = [pvs[i] for i in np.where(label_pred != label_LPV)[0]]
-    
-    
-    #min_ap_dist_RPVs = np.argmin([r.ap_dist for r in [rings[i] for i in RPVs]])
-    #RSPV_id = min_ap_dist_RPVs
     
     cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir)
     
@@ -419,16 +415,8 @@ def mark_LA_rings(args, rings, b_tag, centroids, outdir, LA):
     f = open(fname, 'w')
     f.write('{}\n'.format(1))
     f.write('extra\n')
-    f.write('{}\n'.format(args.LAA))
+    f.write('{}\n'.format(LAA_id))
     f.close()
-    
-    # fname = outdir+'/ids_LAA.vtx'
-    # f = open(fname, 'w')
-    # f.write('{}\n'.format(len(args.LAA)))
-    # f.write('extra\n')
-    # for i in args.LAA:
-    #     f.write('{}\n'.format(i))
-    # f.close()
     
     fname = outdir+'/ids_LPV.vtx'
     f = open(fname, 'w')
@@ -448,7 +436,7 @@ def mark_LA_rings(args, rings, b_tag, centroids, outdir, LA):
     
     return b_tag, centroids
 
-def mark_RA_rings(args, rings, b_tag, centroids, outdir):
+def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
     rings[np.argmax([r.np for r in rings])].name = "TV"
     other = [i for i in range(len(rings)) if rings[i].name!="TV"]
     
@@ -497,7 +485,7 @@ def mark_RA_rings(args, rings, b_tag, centroids, outdir):
     f = open(fname, 'w')
     f.write('{}\n'.format(1))
     f.write('extra\n')
-    f.write('{}\n'.format(args.RAA))
+    f.write('{}\n'.format(RAA_id))
     f.close()
     
     return b_tag, centroids, rings
@@ -927,4 +915,4 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     f.close()
 
 if __name__ == '__main__':
-    run(sys.argv[1:])
+    run()
