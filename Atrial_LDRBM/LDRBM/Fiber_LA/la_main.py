@@ -42,6 +42,10 @@ def parser():
                     type=int,
                     default=1,
                     help='normal unit is mm, set scaling factor if different')
+    parser.add_argument('--normals_inside',
+                    type=int,
+                    default=0,
+                    help='set to 0 if surface normals are pointing inside')
 
     return parser
 
@@ -60,14 +64,15 @@ def run(args, job):
     reader.Update()
     LA = reader.GetOutput()
     
-    # # Warning: set -1 if pts normals are pointing outside
-    # reverse = vtk.vtkReverseSense()
-    # reverse.ReverseCellsOn()
-    # reverse.ReverseNormalsOn()
-    # reverse.SetInputConnection(reader.GetOutputPort())
-    # reverse.Update()
+    # Warning: set -1 if pts normals are pointing outside
+    if args.normals_inside:
+        reverse = vtk.vtkReverseSense()
+        reverse.ReverseCellsOn()
+        reverse.ReverseNormalsOn()
+        reverse.SetInputConnection(reader.GetOutputPort())
+        reverse.Update()
 
-    # LA = reverse.GetOutput()
+        LA = reverse.GetOutput()
     
     # LA2 = laplace_0_1(args, job, LA, "MV", "RPV_LPV", "phie_mv_roof")
     # LA2 = laplace_0_1(args, job, LA, "MV_LPV", "MV_RPV", "phie_lr")

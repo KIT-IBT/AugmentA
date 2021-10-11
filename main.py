@@ -91,47 +91,47 @@ def run():
     args.SSM_basename = os.path.abspath(args.SSM_basename)
     args.mesh = os.path.abspath(args.mesh)
     
-    if args.closed_surface:
-        # Open atrial orifices
-        if args.use_curvature_to_open:
-            # Opening atrial orifices using curvature
-            print("Opening atrial orifices using curvature")
-            open_orifices_with_curvature(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
-        else:
-            # Opening atrial orifices manually
-            print("Opening atrial orifices manually")
-            open_orifices_manually(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
-    else:
-        if args.SSM_fitting:
-            # Manually select the appendage apex and extract rings, these are going to be used to compute the landmarks for the fitting
-            print("Manually select the appendage apex and extract rings")
+    # if args.closed_surface:
+    #     # Open atrial orifices
+    #     if args.use_curvature_to_open:
+    #         # Opening atrial orifices using curvature
+    #         print("Opening atrial orifices using curvature")
+    #         open_orifices_with_curvature(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
+    #     else:
+    #         # Opening atrial orifices manually
+    #         print("Opening atrial orifices manually")
+    #         open_orifices_manually(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
+    # else:
+    #     if args.SSM_fitting:
+    #         # Manually select the appendage apex and extract rings, these are going to be used to compute the landmarks for the fitting
+    #         print("Manually select the appendage apex and extract rings")
             
-            p = pv.Plotter(notebook=False)
-            mesh_from_vtk = pv.PolyData(args.mesh)
-            p.add_mesh(mesh_from_vtk, 'r')
-            p.add_text('Select the appendage apex and close the window',position='lower_left')
-            p.enable_point_picking(mesh_from_vtk, use_mesh=True)
-            p.show()
+    #         p = pv.Plotter(notebook=False)
+    #         mesh_from_vtk = pv.PolyData(args.mesh)
+    #         p.add_mesh(mesh_from_vtk, 'r')
+    #         p.add_text('Select the appendage apex and close the window',position='lower_left')
+    #         p.enable_point_picking(mesh_from_vtk, use_mesh=True)
+    #         p.show()
 
-            if p.picked_point is not None:
-                apex = p.picked_point
-            else:
-                raise ValueError("Please select the appendage apex")
+    #         if p.picked_point is not None:
+    #             apex = p.picked_point
+    #         else:
+    #             raise ValueError("Please select the appendage apex")
 
-            tree = cKDTree(mesh_from_vtk.points.astype(np.double))
-            dd, apex_id = tree.query(apex)
+    #         tree = cKDTree(mesh_from_vtk.points.astype(np.double))
+    #         dd, apex_id = tree.query(apex)
 
-            LAA = ""
-            RAA = ""
-            if args.atrium == "LA":
-                LAA = apex_id
-            elif args.atrium == "RA":
-                RAA = apex_id
+    #         LAA = ""
+    #         RAA = ""
+    #         if args.atrium == "LA":
+    #             LAA = apex_id
+    #         elif args.atrium == "RA":
+    #             RAA = apex_id
 
-            label_atrial_orifices(args.mesh,LAA,RAA)
-        else:
-            # Atrial orifices already open
-            print("Atrial orifices already open, proceed to resampling")
+    #         label_atrial_orifices(args.mesh,LAA,RAA)
+    #     else:
+    #         # Atrial orifices already open
+    #         print("Atrial orifices already open, proceed to resampling")
 
     extension = args.mesh.split('/')[-1]
     mesh_dir = args.mesh[:-len(extension)]
@@ -176,16 +176,16 @@ def run():
 
     else:
 
-        #Convert mesh from vtk to obj
-        meshin = pv.read('{}.vtk'.format(mesh_dir+'LA_cutted'))
-        pv.save_meshio('{}.obj'.format(mesh_dir+'LA_cutted'), meshin, "obj")
+        # #Convert mesh from vtk to obj
+        # meshin = pv.read('{}.vtk'.format(mesh_dir+'LA_cutted'))
+        # pv.save_meshio('{}.obj'.format(mesh_dir+'LA_cutted'), meshin, "obj")
 
-        # Resample surface mesh with given target average edge length
-        resample_surf_mesh('{}'.format(mesh_dir+'LA_cutted'), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+        # # Resample surface mesh with given target average edge length
+        # resample_surf_mesh('{}'.format(mesh_dir+'LA_cutted'), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
 
-        # Label atrial orifices using LAA id found in the resampling algorithm
-        df = pd.read_csv('{}_mesh_data.csv'.format(mesh_dir+'LA_cutted'))
-        label_atrial_orifices('{}_res.obj'.format(mesh_dir+'LA_cutted'),LAA_id=int(df["LAA_id"]))
+        # # Label atrial orifices using LAA id found in the resampling algorithm
+        # df = pd.read_csv('{}_mesh_data.csv'.format(mesh_dir+'LA_cutted'))
+        # label_atrial_orifices('{}_res.obj'.format(mesh_dir+'LA_cutted'),LAA_id=int(df["LAA_id"]))
 
         # Atrial region annotation and fiber generation using LDRBM
         la_main.run(["--mesh",'{}_res'.format(mesh_dir+'LA_cutted'), "--np", str(n_cpu)])
