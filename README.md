@@ -39,3 +39,15 @@ Show all options:
 source ~/myEnv/bin/activate
 python main.py --help
 ```
+
+## License
+
+All source code is subject to the terms of the Apache License 2.0.  
+Copyright 2021 Luca Azzolin, Karlsruhe Institute of Technology.
+
+## Contact
+
+Luca Azzolin 
+Institute of Biomedical Engineering  
+Karlsruhe Institute of Technology  
+www.ibt.kit.edu
