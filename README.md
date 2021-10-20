@@ -7,15 +7,11 @@ PI-AGenT consists firstly of a pre-processing step applied to the input geometry
 
 ## Files and Folders
 
-- **main.py:** main script. Don't forget to re-install carputils with ```pip3 install .```
-- **stimulation_LA.par:** parameters file containing all ionic models to assign to each region
-- **endo/:** contains the endocardium surface mesh in carp format
-- **mesh/:** contains the bilayer mesh in both vtk/carp format
-- **results/**: all simulation results will be put here (will be created on first usage)
-- **prepace/**: all steady-states of the PSD rotors will be put here (will be created on first usage)
-- **run_files/**: contains multiple json files that specify all parameters and ablation primitives for a series of simulations.
-- **tissue_ablation_3d.py:** script that performs one job. Direct use is discouraged as there are a lot of paramters
-- **tissue_ablation_3d_job_runner.py:** main script that executes a series of jobs as specified by a given json run file (see below)
+- **main.py:** PI-AGenT's main script.
+- **mesh/:** contains the exemplary mesh and the statistical shape model
+- **standalones/:** standalone tools used in the pipeline
+- **template/**: template for non-rigid fitting process
+- **Atrial_LDRBM/**: Laplace-Dirichlet-Rule-based-Method to annotate anatomical regions and generate atrial fiber orientation in the atria.
 
 ## Setup
 
@@ -33,4 +29,10 @@ pip install -r requirements.txt
 Remember to source to myEnv before using the pipeline:
 ```
 source ~/myEnv/bin/activate
+python main.py --MRI 1 --mesh mesh/LA_map.vtk
+```
+User parameters:
+```
+source ~/myEnv/bin/activate
+python main.py --help
 ```
