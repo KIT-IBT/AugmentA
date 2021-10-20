@@ -10,6 +10,8 @@ import pyvista as pv
 from scipy.spatial import cKDTree
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
+
+sys.path.append('standalones')
 from open_orifices_with_curvature import open_orifices_with_curvature
 from open_orifices_manually import open_orifices_manually
 from prealign_meshes import prealign_meshes
@@ -19,7 +21,6 @@ from resample_surf_mesh import resample_surf_mesh
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 sys.path.append('Atrial_LDRBM/LDRBM/Fiber_LA')
-
 import la_main
 from extract_rings import label_atrial_orifices
 
@@ -159,7 +160,7 @@ def run():
         get_landmarks(mesh_dir+'LA_cutted', 1, 1)
 
         # Create Scalismo ICP-GP fitting algorithm script 
-        with open('Registration_ICP_GP_template.txt','r') as f:
+        with open('template/Registration_ICP_GP_template.txt','r') as f:
             lines = f.readlines()
         lines = ''.join(lines)
 
