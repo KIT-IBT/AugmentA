@@ -47,7 +47,7 @@ Copyright 2021 Luca Azzolin, Karlsruhe Institute of Technology.
 
 ## Contact
 
-Luca Azzolin 
+Luca Azzolin
 Institute of Biomedical Engineering  
 Karlsruhe Institute of Technology  
 www.ibt.kit.edu
