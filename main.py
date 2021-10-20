@@ -193,7 +193,7 @@ def run():
 
             processed_mesh = '{}_res'.format(meshname)
         else:
-            
+
             p = pv.Plotter(notebook=False)
 
             p.add_mesh(meshin,color='r')
@@ -206,6 +206,8 @@ def run():
             else:
                 apex = p.picked_point
                 print("Apex coordinates: ", apex)
+            
+            mesh_data = dict()
             tree = cKDTree(meshin.points.astype(np.double))
             dist, apex_id = tree.query(apex)
 
