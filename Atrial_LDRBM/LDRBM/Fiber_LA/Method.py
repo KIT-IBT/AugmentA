@@ -197,11 +197,15 @@ def generate_bilayer(endo, epi):
     
     return bilayer
 
-def write_bilayer(bilayer, job):
+def write_bilayer(bilayer, args, job):
     
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(job.ID+"/result_LA/LA_bilayer_with_fiber.vtk")
-    writer.SetFileTypeToBinary()
+    if args.ofmt == 'vtk':
+        writer = vtk.vtkUnstructuredGridWriter()
+        writer.SetFileName(job.ID+"/result_LA/LA_bilayer_with_fiber.vtk")
+        writer.SetFileTypeToBinary()
+    else:
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName(job.ID+"/result_LA/LA_bilayer_with_fiber.vtu")
     writer.SetInputData(bilayer)
     writer.Write()
     

@@ -21,9 +21,8 @@ sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 sys.path.append('Atrial_LDRBM/LDRBM/Fiber_LA')
 
 import la_main
-
-#print(EXAMPLE_DIR+'/Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import label_atrial_orifices
+
 pv.set_plot_theme('dark')
 n_cpu=os.cpu_count()
 if not n_cpu % 2:
@@ -80,6 +79,10 @@ def parser():
                         type=int,
                         default=1,
                         help='set to 1 if surface normals are pointing outside, 0 otherwise')
+    parser.add_argument('--ofmt',
+                        default='vtu',
+                        choices=['vtu','vtk'],
+                        help='Output mesh format')
     parser.add_argument('--debug',
                         type=int,
                         default=0,
@@ -94,6 +97,9 @@ def run():
     args.SSM_basename = os.path.abspath(args.SSM_basename)
     args.mesh = os.path.abspath(args.mesh)
     
+    extension = args.mesh.split('/')[-1]
+    mesh_dir = args.mesh[:-len(extension)]
+
     extension = args.mesh.split('.')[-1]
     meshname = args.mesh[:-(len(extension)+1)]
 
@@ -107,6 +113,7 @@ def run():
             # Opening atrial orifices manually
             print("Opening atrial orifices manually")
             open_orifices_manually(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
+        meshname = mesh_dir + "LA_cutted"
     else:
         if args.SSM_fitting:
             # Manually select the appendage apex and extract rings, these are going to be used to compute the landmarks for the fitting
@@ -138,9 +145,6 @@ def run():
         else:
             # Atrial orifices already open
             print("Atrial orifices already open, proceed to resampling")
-
-    extension = args.mesh.split('/')[-1]
-    mesh_dir = args.mesh[:-len(extension)]
 
     if args.SSM_fitting:
 
@@ -193,22 +197,31 @@ def run():
         if args.resample_input:
             # Resample surface mesh with given target average edge length
             resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
-
             processed_mesh = '{}_res'.format(meshname)
+
         else:
+
+            os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, 30*args.scale))
+            curv = np.loadtxt('{}.curv.dat'.format(meshname))
+            mesh_curv = pv.read('{}.obj'.format(meshname))
+
+            apex = mesh_curv.points[np.argmax(curv),:]
+
+            point_cloud = pv.PolyData(apex)
 
             p = pv.Plotter(notebook=False)
 
             p.add_mesh(meshin,color='r')
+            p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
             p.enable_point_picking(meshin, use_mesh=True)
             p.add_text('Select the appendage apex and close the window',position='lower_left')
+
             p.show()
 
-            if p.picked_point is None:
-                raise Exception('Please pick a point as apex')
-            else:
+            if p.picked_point is not None:
                 apex = p.picked_point
-                print("Apex coordinates: ", apex)
+            
+            print("Apex coordinates: ", apex)
             
             mesh_data = dict()
             tree = cKDTree(meshin.points.astype(np.double))
@@ -227,10 +240,10 @@ def run():
         label_atrial_orifices(processed_mesh+'.obj',LAA_id=int(df["LAA_id"]))
         
         # Atrial region annotation and fiber generation using LDRBM
-        la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--debug", str(args.debug)])
+        la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
 
         geom = pv.Line()
-        bil = pv.read('{}_fibers/result_LA/LA_bilayer_with_fiber.vtk'.format(meshname))
+        bil = pv.read('{}_fibers/result_LA/LA_bilayer_with_fiber.{}'.format(processed_mesh, args.ofmt))
         mask = bil['elemTag'] >99
         bil['elemTag'][mask] = 0
         mask = bil['elemTag'] >80

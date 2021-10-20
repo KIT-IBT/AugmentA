@@ -185,6 +185,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         elif avg_edge_length < tgt_edge_length*0.95:
             loc_tgt_edge_length = tgt_edge_length*1.05
             print("New target resolution: {} mm".format(loc_tgt_edge_length/scale))
+        else:
+            break
         it += 1
     
     mesh_data["surf"]=[out_dict['surface_area']]

@@ -42,6 +42,10 @@ def parser():
                     type=int,
                     default=1,
                     help='normal unit is mm, set scaling factor if different')
+    parser.add_argument('--ofmt',
+                        default='vtu',
+                        choices=['vtu','vtk'],
+                        help='Output mesh format')
     parser.add_argument('--normals_outside',
                     type=int,
                     default=1,

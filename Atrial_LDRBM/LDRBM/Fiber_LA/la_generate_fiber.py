@@ -803,9 +803,13 @@ def la_generate_fiber(model, args, job):
         meshNew.CellData.append(tag_endo, "elemTag")
         meshNew.CellData.append(el_endo, "fiber")
         meshNew.CellData.append(sheet_endo, "sheet")
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtk")
-        writer.SetFileTypeToBinary()
+        if args.ofmt == 'vtk':
+            writer = vtk.vtkUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtk")
+            writer.SetFileTypeToBinary()
+        else:
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtu")
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
         
@@ -889,9 +893,13 @@ def la_generate_fiber(model, args, job):
         meshNew.CellData.append(tag_epi, "elemTag")
         meshNew.CellData.append(el_epi, "fiber")
         meshNew.CellData.append(sheet_epi, "sheet")
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_LA/LA_epi_with_fiber.vtk")
-        writer.SetFileTypeToBinary()
+        if args.ofmt == 'vtk':
+            writer = vtk.vtkUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_LA/LA_epi_with_fiber.vtk")
+            writer.SetFileTypeToBinary()
+        else:
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_LA/LA_epi_with_fiber.vtu")
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
         
@@ -924,7 +932,7 @@ def la_generate_fiber(model, args, job):
         endo = Method.move_surf_along_normals(endo, 0.1*args.scale, 1) #  Warning: set -1 if pts normals are pointing outside
         bilayer = Method.generate_bilayer(endo, epi)
         
-        Method.write_bilayer(bilayer, job)
+        Method.write_bilayer(bilayer, args, job)
         
     # ##### show the result #####
     # print("Visualizing in mayavi...")
