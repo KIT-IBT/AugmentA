@@ -42,10 +42,10 @@ def parser():
                     type=int,
                     default=1,
                     help='normal unit is mm, set scaling factor if different')
-    parser.add_argument('--normals_inside',
+    parser.add_argument('--normals_outside',
                     type=int,
-                    default=0,
-                    help='set to 0 if surface normals are pointing inside')
+                    default=1,
+                    help='set to 1 if surface normals are pointing outside')
 
     return parser
 
@@ -65,7 +65,7 @@ def run(args, job):
     LA = reader.GetOutput()
     
     # Warning: set -1 if pts normals are pointing outside
-    if args.normals_inside:
+    if args.normals_outside:
         reverse = vtk.vtkReverseSense()
         reverse.ReverseCellsOn()
         reverse.ReverseNormalsOn()

@@ -154,7 +154,7 @@ def la_generate_fiber(model, args, job):
     thr = Method.vtk_thr(model, 1, "CELLS","phie_v", 0.35)
     found, val = Method.optimize_shape_PV(thr, 10, 0)
     print('Calculating opt_tao_lpv done! tap_lpv = ', val)
-    if found:
+    if val!=0.35:
         thr = Method.vtk_thr(model, 1, "CELLS","phie_v",val)
     
     phie_r2_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetCellData().GetArray('phie_r2'))
@@ -558,11 +558,11 @@ def la_generate_fiber(model, args, job):
         
         LAA_s = Method.vtk_thr(model,0,"CELLS","phie_r2",max_phie_r2_tau_lpv+0.01)
         
-        LAA_s = Method.vtk_thr(LAA_s,1,"POINTS","phie_ab2",max_phie_ab_tau_lpv+0.01)
+        LAA_s = Method.vtk_thr(LAA_s,0,"POINTS","phie_ab2",max_phie_ab_tau_lpv-0.03)
         
         ## Optimize shape of LAA solving a laplacian with 0 in LAA and 1 in the boundary of LAA_s
         
-        LAA_bb = Method.vtk_thr(LAA_s,2,"POINTS","phie_ab2",max_phie_ab_tau_lpv, max_phie_ab_tau_lpv+0.01)
+        LAA_bb = Method.vtk_thr(model,2,"POINTS","phie_ab2",max_phie_ab_tau_lpv-0.03, max_phie_ab_tau_lpv+0.01)
         
         LAA_bb_ids = vtk.util.numpy_support.vtk_to_numpy(LAA_bb.GetPointData().GetArray('Global_ids'))
         
@@ -580,7 +580,7 @@ def la_generate_fiber(model, args, job):
         
         LAA_s = laplace_0_1(args, job, model, "LAA", "LAA_bb", "phie_ab3")
         
-        LAA_s = Method.vtk_thr(LAA_s,1,"POINTS","phie_ab3",0.92)
+        LAA_s = Method.vtk_thr(LAA_s,1,"POINTS","phie_ab3",0.95)
         
         #LPV_s = Method.vtk_thr(model,1,"CELLS","phie_v",tao_lpv)
         

@@ -170,6 +170,20 @@ def laplace_0_1(args, job, model, name1,name2, outname):
     data = igb.IGBFile(job.ID+"/Lp_ab/phie.igb").data()
     meshNew.PointData.append(data, outname)
     
+    if args.debug == 1:
+        # write
+        simid = job.ID+"/Laplace_Result"
+        try:
+            os.makedirs(simid)
+        except OSError:
+            print ("Creation of the directory %s failed" % simid)
+        else:
+            print ("Successfully created the directory %s " % simid)
+
+        writer = vtk.vtkUnstructuredGridWriter()
+        writer.SetFileName(simid+"/LA_with_laplace.vtk")
+        writer.SetInputData(meshNew.VTKObject)
+        writer.Write()
     # if args.debug == 1:
 
     #     simid = job.ID+"/Laplace_Result"
