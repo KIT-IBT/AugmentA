@@ -933,37 +933,3 @@ def la_generate_fiber(model, args, job):
         bilayer = Method.generate_bilayer(endo, epi)
         
         Method.write_bilayer(bilayer, args, job)
-        
-    # ##### show the result #####
-    # print("Visualizing in mayavi...")
-    # vtkCenters = vtk.vtkCellCenters()
-    # vtkCenters.SetInputData(model)
-    # vtkCenters.Update()
-    # centersOutput = vtkCenters.GetOutput().GetPoints().GetData()
-    # center_points = vtk.util.numpy_support.vtk_to_numpy(centersOutput)
-
-    # global mesh, cursor3d
-    # fig = mlab.figure('Rush B, blyat!')
-    # mlab.clf()
-    # vector = mlab.quiver3d(center_points[:, 0], center_points[:, 1], center_points[:, 2], el[:, 0], el[:, 1], el[:, 2])
-    # source = mlab.pipeline.open('Mesh/LA_mesh.vtk')  # Open the source
-    # surf = mlab.pipeline.surface(source, color=(0.0, 0.0, 0.9))
-    # mlab.show()
-
-    # start_time = datetime.datetime.now()
-    # print('Reading LA_with_lp_res_gradient.vtk... ' + str(start_time))
-    # end_time = datetime.datetime.now()
-    # running_time = end_time - start_time
-    # print('Reading LA_with_lp_res_gradient.vtk......done ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
-    # en = k-(k*et)*et
-    # abs_en = np.linalg.norm(en, axis=1, keepdims=True)
-    # for i in range(len(abs_en)):
-    #     if abs_en[i] == 0:
-    #         abs_en[i] =1
-    # en_norm = en/abs_en
-    # el =
-    # print(type(phie_grad))
-    # print(abs_phie_grad)
-    # phie_grad = r_grad.tolist()
-    # print(len(ab_grad))
-    # print(ab_grad[2])
