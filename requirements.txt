@@ -1,6 +1,7 @@
 vtk==9.0.3
+numpy=<1.19.3
 pymeshfix==0.15.0
 pymeshlab==2021.7
 sklearn<=0.24.2
 transformations==2021.6.6
-h5py
+h5py==3.4.0
