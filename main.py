@@ -90,6 +90,9 @@ def run():
     args.SSM_basename = os.path.abspath(args.SSM_basename)
     args.mesh = os.path.abspath(args.mesh)
     
+    extension = args.mesh.split('.')[-1]
+    meshname = args.mesh[:-(len(extension)+1)]
+
     if args.closed_surface:
         # Open atrial orifices
         if args.use_curvature_to_open:
@@ -181,26 +184,48 @@ def run():
     else:
 
         #Convert mesh from vtk to obj
-        meshin = pv.read('{}.vtk'.format(mesh_dir+'LA_cutted'))
-        pv.save_meshio('{}.obj'.format(mesh_dir+'LA_cutted'), meshin, "obj")
+        meshin = pv.read('{}.vtk'.format(meshname))
+        pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
 
         if args.resample_input:
             # Resample surface mesh with given target average edge length
-            resample_surf_mesh('{}'.format(mesh_dir+'LA_cutted'), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
 
-            processed_mesh = '{}_res'.format(mesh_dir+'LA_cutted')
+            processed_mesh = '{}_res'.format(meshname)
         else:
-            processed_mesh = mesh_dir+'LA_cutted'
+            
+            p = pv.Plotter(notebook=False)
 
+            p.add_mesh(meshin,color='r')
+            p.enable_point_picking(meshin, use_mesh=True)
+            p.add_text('Select the appendage apex and close the window',position='lower_left')
+            p.show()
+
+            if p.picked_point is None:
+                raise Exception('Please pick a point as apex')
+            else:
+                LAA_id = p.picked_point
+                print("Apex coordinates: ", LAA_id)
+            tree = cKDTree(meshin.points.astype(np.double))
+            dist, apex_id = tree.query(apex)
+
+            mesh_data["LAA_id"] = [apex_id]
+
+            fname = '{}_mesh_data.csv'.format(meshname)
+            df = pd.DataFrame(mesh_data)
+            df.to_csv(fname, float_format="%.2f", index=False)
+            processed_mesh = meshname
+        
         # Label atrial orifices using LAA id found in the resampling algorithm
-        df = pd.read_csv('{}_mesh_data.csv'.format(mesh_dir+'LA_cutted'))
+        df = pd.read_csv('{}_mesh_data.csv'.format(meshname))
+
         label_atrial_orifices(processed_mesh+'.obj',LAA_id=int(df["LAA_id"]))
         
         # Atrial region annotation and fiber generation using LDRBM
         la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu)])
 
         geom = pv.Line()
-        bil = pv.read('{}_res_fibers/result_LA/LA_bilayer_with_fiber.vtk'.format(mesh_dir+'LA_cutted'))
+        bil = pv.read('{}_res_fibers/result_LA/LA_bilayer_with_fiber.vtk'.format(meshname))
         mask = bil['elemTag'] >99
         bil['elemTag'][mask] = 0
         mask = bil['elemTag'] >80
