@@ -76,7 +76,6 @@ def parser():
                         type=float,
                         default=0.4,
                         help='target mesh resolution in mm')
-    
     parser.add_argument('--debug',
                         type=int,
                         default=0,
@@ -164,15 +163,20 @@ def run():
         else:
             raise ValueError("Create coefficients.txt file including the SSM coefficients from Scalismo")
 
-        # Resample surface mesh with given target average edge length
-        resample_surf_mesh(mesh_dir+'LA_cutted_surf/LA_fit', target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+        
+        if args.resample_input:
+            # Resample surface mesh with given target average edge length
+            resample_surf_mesh(mesh_dir+'LA_cutted_surf/LA_fit', target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+            processed_mesh = mesh_dir+'LA_cutted_surf/LA_fit_res'
+        else:
+            processed_mesh = mesh_dir+'LA_cutted_surf/LA_fit'
 
         # Label atrial orifices using LAA id found in the resampling algorithm
         df = pd.read_csv('{}_mesh_data.csv'.format(mesh_dir+'LA_cutted_surf/LA_fit'))
-        label_atrial_orifices('{}_res.obj'.format(mesh_dir+'LA_cutted_surf/LA_fit'),LAA_id=int(df["LAA_id"]))
+        label_atrial_orifices(processed_mesh+'obj',LAA_id=int(df["LAA_id"]))
 
         # Atrial region annotation and fiber generation using LDRBM
-        la_main.run(["--mesh",'{}_res'.format(mesh_dir+'LA_cutted'), "--np", str(n_cpu)])
+        la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu)])
 
     else:
 
@@ -180,15 +184,20 @@ def run():
         meshin = pv.read('{}.vtk'.format(mesh_dir+'LA_cutted'))
         pv.save_meshio('{}.obj'.format(mesh_dir+'LA_cutted'), meshin, "obj")
 
-        # Resample surface mesh with given target average edge length
-        resample_surf_mesh('{}'.format(mesh_dir+'LA_cutted'), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+        if args.resample_input:
+            # Resample surface mesh with given target average edge length
+            resample_surf_mesh('{}'.format(mesh_dir+'LA_cutted'), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+
+            processed_mesh = '{}_res'.format(mesh_dir+'LA_cutted')
+        else:
+            processed_mesh = mesh_dir+'LA_cutted'
 
         # Label atrial orifices using LAA id found in the resampling algorithm
         df = pd.read_csv('{}_mesh_data.csv'.format(mesh_dir+'LA_cutted'))
-        label_atrial_orifices('{}_res.obj'.format(mesh_dir+'LA_cutted'),LAA_id=int(df["LAA_id"]))
-
+        label_atrial_orifices(processed_mesh+'.obj',LAA_id=int(df["LAA_id"]))
+        
         # Atrial region annotation and fiber generation using LDRBM
-        la_main.run(["--mesh",'{}_res'.format(mesh_dir+'LA_cutted'), "--np", str(n_cpu)])
+        la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu)])
 
         geom = pv.Line()
         bil = pv.read('{}_res_fibers/result_LA/LA_bilayer_with_fiber.vtk'.format(mesh_dir+'LA_cutted'))
