@@ -34,7 +34,7 @@ Remember to source to myEnv before using the pipeline:
 source ~/myEnv/bin/activate
 python main.py --MRI 1 --mesh mesh/LA_map.vtk
 ```
-User parameters:
+Show all options:
 ```
 source ~/myEnv/bin/activate
 python main.py --help
