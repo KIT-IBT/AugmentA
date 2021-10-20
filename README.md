@@ -7,11 +7,11 @@ PI-AGenT consists firstly of a pre-processing step applied to the input geometry
 
 ## Files and Folders
 
-- **main.py:** PI-AGenT's main script.
+- **main.py:** PI-AGenT's main script
 - **mesh/:** contains the exemplary mesh and the statistical shape model
 - **standalones/:** standalone tools used in the pipeline
 - **template/**: template for non-rigid fitting process
-- **Atrial_LDRBM/**: Laplace-Dirichlet-Rule-based-Method to annotate anatomical regions and generate atrial fiber orientation in the atria.
+- **Atrial_LDRBM/**: Laplace-Dirichlet-Rule-based-Method to annotate anatomical regions and generate atrial fiber orientation in the atria
 
 ## Setup
 
@@ -21,7 +21,10 @@ python -m venv ~/myEnv
 source ~/myEnv/bin/activate
 pip install -r requirements.txt
 
-# Go to the carputils folder and re-install carputils' requirements
+```
+Go to the carputils folder and re-install carputils' requirements (assuming that carputils was installed in the home folder):
+```
+cd ~/carputils
 pip install -r requirements.txt
 ```
 ## Usage
