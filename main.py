@@ -204,8 +204,8 @@ def run():
             if p.picked_point is None:
                 raise Exception('Please pick a point as apex')
             else:
-                LAA_id = p.picked_point
-                print("Apex coordinates: ", LAA_id)
+                apex = p.picked_point
+                print("Apex coordinates: ", apex)
             tree = cKDTree(meshin.points.astype(np.double))
             dist, apex_id = tree.query(apex)
 
