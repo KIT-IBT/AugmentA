@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Nov 22 15:37:47 2020
+Created on Mon Apr 19 14:55:02 2021
 
-@author: tz205
+@author: Luca Azzolin
 """
 import os
-#os.environ['CARPUTILS_SETTINGS'] = '/Volumes/bordeaux/IBT/openCARP/.config/carputils/settings.yaml'
-#os.environ['PATH'] = '/Volumes/bordeaux/IBT/bin/macosx:/Volumes/bordeaux/IBT/src/CardioMechanics/trunk/src/Scripts:/Volumes/bordeaux/IBT/bin/macosx:/Volumes/bordeaux/IBT/pl:/Volumes/bordeaux/IBT/python:/Volumes/bordeaux/IBT/thirdparty/macosx/bin:/Volumes/bordeaux/IBT/thirdparty/macosx/openMPI-64bit/bin:/opt/X11/bin:/Applications/MATLAB_R2020a.app/bin/:/opt/local/bin:/opt/local/sbin:/usr/bin:/bin:/usr/sbin:/sbin:/Volumes/bordeaux/IBT/openCARP/bin:/Volumes/bordeaux/IBT/openCARP/bin:/usr/local/bin'
-
 from carputils import tools
 from ra_calculate_gradient import ra_calculate_gradient
 import vtk

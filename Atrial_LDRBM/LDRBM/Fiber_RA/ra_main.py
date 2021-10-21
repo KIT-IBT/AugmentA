@@ -1,4 +1,10 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Created on Mon Apr 19 14:55:02 2021
+
+@author: Luca Azzolin
+"""
 import os
 import numpy as np
 import vtk

@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Apr 19 14:55:02 2021
+
+@author: Luca Azzolin
+"""
+
+EXAMPLE_DESCRIPTIVE_NAME = 'PI-AGENT: Personalized Integrated Atria Generation Tool'
+EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
+
 import sys
 from glob import glob
 from shutil import copyfile
@@ -43,7 +54,7 @@ def parser():
     parser.add_argument('--MRI',
                         type=int,
                         default=0,
-                        help='set to 1 if the input is an MRI segmentation')
+                        help='set to 1 if the input is derived from tomographic image segmentation, 0 for electroanatomical map')
     parser.add_argument('--use_curvature_to_open',
                         type=int,
                         default=1,
@@ -109,11 +120,11 @@ def run():
         if args.use_curvature_to_open:
             # Opening atrial orifices using curvature
             print("Opening atrial orifices using curvature")
-            open_orifices_with_curvature(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
+            apex_id = open_orifices_with_curvature(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
         else:
             # Opening atrial orifices manually
             print("Opening atrial orifices manually")
-            open_orifices_manually(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
+            apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
         meshname = mesh_dir + "LA_cutted"
     else:
         if args.SSM_fitting:
@@ -141,11 +152,11 @@ def run():
                 LAA = apex_id
             elif args.atrium == "RA":
                 RAA = apex_id
-
+            print("Labelling atrial orifices")
             label_atrial_orifices(args.mesh,LAA,RAA)
         else:
             # Atrial orifices already open
-            print("Atrial orifices already open, proceed to resampling")
+            print("Atrial orifices already open")
 
     if args.SSM_fitting:
 
@@ -177,7 +188,7 @@ def run():
 
         if args.resample_input:
             # Resample surface mesh with given target average edge length
-            resample_surf_mesh(mesh_dir+'LA_cutted_surf/LA_fit', target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+            resample_surf_mesh(mesh_dir+'LA_cutted_surf/LA_fit', target_mesh_resolution=0.4, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id)
             processed_mesh = mesh_dir+'LA_cutted_surf/LA_fit_res'
         else:
             processed_mesh = mesh_dir+'LA_cutted_surf/LA_fit'
@@ -191,17 +202,17 @@ def run():
 
     else:
 
-        #Convert mesh from vtk to obj
-        meshin = pv.read('{}.vtk'.format(meshname))
-        pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
-
         if args.resample_input:
-            # Resample surface mesh with given target average edge length
-            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=1)
+            print("Resample surface mesh with given target average edge length")
+            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id)
             processed_mesh = '{}_res'.format(meshname)
-
         else:
 
+            #Convert mesh from vtk to obj
+            meshin = pv.read('{}.vtk'.format(meshname))
+            pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
+
+            print("Propose appendage apex location using surface curvature")
             os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, 30*args.scale))
             curv = np.loadtxt('{}.curv.dat'.format(meshname))
             mesh_curv = pv.read('{}.obj'.format(meshname))
@@ -236,7 +247,7 @@ def run():
             processed_mesh = meshname
         
         # Label atrial orifices using LAA id found in the resampling algorithm
-        df = pd.read_csv('{}_mesh_data.csv'.format(meshname))
+        df = pd.read_csv('{}_mesh_data.csv'.format(processed_mesh))
 
         label_atrial_orifices(processed_mesh+'.obj',LAA_id=int(df["LAA_id"]))
         
@@ -255,18 +266,6 @@ def run():
         p = pv.Plotter(notebook=False)
         p.add_mesh(bil, scalars="elemTag",show_scalar_bar=False,cmap='tab20')
         p.add_mesh(fibers,show_scalar_bar=False,cmap='tab20',line_width=10,render_lines_as_tubes=True)
-
-        # endo = pv.read('{}_res_fibers/result_LA/LA_endo_with_fiber.vtk'.format(mesh_dir+'LA_cutted'))
-        # endo_fibers = endo.glyph(orient="fiber",factor=0.5,geom=geom, scale="elemTag")
-        # epi = pv.read('{}_res_fibers/result_LA/LA_epi_with_fiber.vtk'.format(mesh_dir+'LA_cutted'))
-        # mask = epi['elemTag'] >80
-        # epi['elemTag'][mask] = 20
-        # epi_fibers = epi.glyph(orient="fiber",factor=0.3,geom=geom, scale="elemTag")
-        # p = pv.Plotter(notebook=False)
-        # p.add_mesh(endo, scalars="elemTag",show_scalar_bar=False,cmap='tab20')
-        # p.add_mesh(epi, scalars="elemTag",show_scalar_bar=False,cmap='tab20')
-        # p.add_mesh(endo_fibers,show_scalar_bar=False,cmap='tab20',line_width=10,render_lines_as_tubes=True)
-        # p.add_mesh(epi_fibers,show_scalar_bar=False,cmap='tab20',line_width=10,render_lines_as_tubes=True)
         p.show()
 
 if __name__ == '__main__':

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 30 10:05:58 2020
+Created on Mon Apr 19 14:55:02 2021
 
-@author: tz205
+@author: Luca Azzolin
 """
-# from mayavi import mlab
 import numpy as np
 import vtk
 import pandas as pd
@@ -25,20 +24,6 @@ from create_bridges import add_free_bridge
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 def ra_generate_fiber(model, args, job):
-    # Ideal tao
-    # tao_mv = 0.65
-    # tao_lpv = 0.65
-    # tao_lpv = 0.1
-    
-    # # Zygote
-    # tao_tv = 0.90
-    # tao_icv = 0.85
-    # tao_scv = 0.30
-    # tao_ct_plus = -0.55
-    # tao_ct_minus = -0.60
-    # tao_ib = -0.25
-    # tao_ras = -0.10
-    # tao_raw = 0.60
     
     simid = job.ID+"/result_RA"
     try:
@@ -79,8 +64,6 @@ def ra_generate_fiber(model, args, job):
     right_atrial_lateral_wall_epi = int(tag_dict['right_atrial_lateral_wall_epi'])
     isthmus_epi = int(tag_dict['isthmus_epi'])
     right_atrial_septum_epi = int(tag_dict['right_atrial_septum_epi'])
-    #right_atrial_septum_lower_epi = int(tag_dict['right_atrial_septum_lower_epi'])
-    #right_atrial_septum_upper_epi = int(tag_dict['right_atrial_septum_upper_epi'])
     pectinate_muscle = int(tag_dict['pectinate_muscle'])
     right_atrial_appendage_epi = int(tag_dict['right_atrial_appendage_epi'])
 
@@ -92,8 +75,6 @@ def ra_generate_fiber(model, args, job):
     right_atrial_lateral_wall_endo = int(tag_dict['right_atrial_lateral_wall_endo'])
     isthmus_endo = int(tag_dict['isthmus_endo'])
     right_atrial_septum_endo = int(tag_dict['right_atrial_septum_endo'])
-    #right_atrial_septum_lower_endo = int(tag_dict['right_atrial_septum_lower_endo'])
-    #right_atrial_septum_upper_endo = int(tag_dict['right_atrial_septum_upper_endo'])
     coronary_sinus = int(tag_dict['coronary_sinus'])
 
     # load bridges tag

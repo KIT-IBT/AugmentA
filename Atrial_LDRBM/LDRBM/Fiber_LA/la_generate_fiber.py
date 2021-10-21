@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 30 10:05:58 2020
+Created on Mon Apr 19 14:55:02 2021
 
-@author: tz205
+@author: Luca Azzolin
 """
-#from mayavi import mlab
 import numpy as np
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
@@ -22,10 +21,6 @@ EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
       
 def la_generate_fiber(model, args, job):
-    # Ideal tao
-    # tao_mv = 0.65
-    # tao_lpv = 0.65
-    # tao_lpv = 0.1
     
     # size(Radius) of Bachmann Bundle in mm
     w_bb = 2*args.scale
@@ -71,16 +66,6 @@ def la_generate_fiber(model, args, job):
     tao_mv = 0.85
     tao_lpv = 0.85
     tao_rpv = 0.2
-    
-    #start_time = datetime.datetime.now()
-    #print('Reading LA_with_lp_res_gradient.vtk... ' + str(start_time))
-
-    # TODO PLAN A: read all gradient and Phie(laplace solution) form one vtk file
-    ### Plan A using one VTK file
-    #reader = vtk.vtkUnstructuredGridReader()
-    #reader.SetFileName('gradient/LA_with_lp_res_gradient.vtk')
-    #reader.Update()
-    #model = reader.GetOutput()
 
     # ab
     ab = model.GetCellData().GetArray('phie_ab')
@@ -113,14 +98,9 @@ def la_generate_fiber(model, args, job):
     phie_grad = model.GetCellData().GetArray('grad_phi')
     phie_grad = vtk.util.numpy_support.vtk_to_numpy(phie_grad)
 
-
-    #end_time = datetime.datetime.now()
-    #running_time = end_time - start_time
-    #print('Reading LA_with_lp_res_gradient.vtk......done ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
-    
     cellid = vtk.vtkIdFilter()
     cellid.CellIdsOn()
-    cellid.SetInputData(model) # vtkPolyData()
+    cellid.SetInputData(model)
     cellid.PointIdsOn()
     if int(vtk_version) >= 9:
         cellid.SetPointIdsArrayName('Global_ids')
@@ -160,21 +140,11 @@ def la_generate_fiber(model, args, job):
     phie_r2_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetCellData().GetArray('phie_r2'))
     max_phie_r2_tau_lpv = np.max(phie_r2_tau_lpv)
     
-    #max_cell_phie_r2_tau_lpv=int(thresh.GetOutput().GetCellData().GetArray('Global_ids').GetTuple(np.argmax(phie_r2_tau_lpv))[0])
-
-    # writer = vtk.vtkUnstructuredGridWriter()
-    # writer.SetFileName(job.ID+"/LA_with_ab_2.vtk")
-    # writer.SetInputData(model)
-    # writer.Write()
-
     phie_ab_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetPointData().GetArray('phie_ab2'))
     max_phie_ab_tau_lpv = np.max(phie_ab_tau_lpv)
 
     print("max_phie_r2_tau_lpv ",max_phie_r2_tau_lpv)
     print("max_phie_ab_tau_lpv ",max_phie_ab_tau_lpv)
-
-    # phie_ab_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetCellData().GetArray('phie_ab'))
-    # max_phie_ab_tau_lpv = np.max(phie_ab_tau_lpv)
     
     # RPV
     lb = 0.6
@@ -194,114 +164,6 @@ def la_generate_fiber(model, args, job):
 
     start_time = datetime.datetime.now()
     print('Calculating fibers... ' + str(start_time))
-    
-    ## plan A
-    # #### Bundles selection ####
-    # for i in range(len(ab_grad)):
-    #     if r[i] >= tao_mv:
-    #         ab_grad[i] = r_grad[i]
-    #         tag[i] = mitral_valve_epi
-    #     elif ab[i] < -0.04:
-    #         tag[i] = left_atrial_appendage_epi
-    #     elif v[i] <= tao_lpv:
-    #         ab_grad[i] = v_grad[i]
-    #         tag[i] = inferior_left_pulmonary_vein_epi
-    #         lpv_id_test.InsertNextId(i)
-    #     elif v[i] >= tao_rpv:
-    #         ab_grad[i] = v_grad[i]
-    #         tag[i] = inferior_right_pulmonary_vein_epi
-    #         rpv_id_test.InsertNextId(i)
-    #     else:
-    #         tag[i] = left_atrial_wall_epi
-    
-    # Determine tao_bb
-    # # plan C region growing
-    # loc = vtk.vtkPointLocator()
-    # loc.SetDataSet(model)
-    # loc.BuildLocator()
-    # la_appendage_basis_id = loc.FindClosestPoint(appendage_basis)
-    # la_appendage_basis = model.GetPoint(la_appendage_basis_id)
-    # touch_ab = 0
-    # value = 0.9
-    # step = 0.05
-    # print(la_appendage_basis)
-    # print(la_appendage_basis[0])
-    # while touch_ab == 0:
-    #     thresh = vtk.vtkThreshold()
-    #     thresh.SetInputData(model)
-    #     thresh.ThresholdByUpper(value)
-    #     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r")
-    #     thresh.Update()
-    #     temp = thresh.GetOutput()
-    #     points_data = temp.GetPoints().GetData()
-    #     temp = vtk.util.numpy_support.vtk_to_numpy(points_data)
-    
-    #     # touch_ab = Method.multidim_intersect_bool(la_appendage_basis_array, temp)
-    #     # touch_ab = np.isin(la_appendage_basis_array, temp, invert=False)
-    #     touch_ab = (temp == la_appendage_basis).all(1).any()
-    #     print("touch_ab: ", touch_ab)
-    #     if touch_ab == 0:
-    #         value -= step
-    #     print("Iteration: ", k)
-    #     print("Value of tao_bb: ", value)
-    #     k += 1
-    
-    
-    
-    # appendage_basis = df["LAA_base"].to_numpy()
-    
-    # loc = vtk.vtkPointLocator()
-    # loc.SetDataSet(model)
-    # loc.BuildLocator()
-    # la_appendage_basis_id = loc.FindClosestPoint(appendage_basis)
-    # la_appendage_basis = model.GetPoint(la_appendage_basis_id)
-    
-    # cell_id_temp = vtk.vtkIdList()
-    # model.GetPointCells(la_appendage_basis_id, cell_id_temp)
-    # cell_id_tao_bb = cell_id_temp.GetId(0)
-    # tao_bb = r[cell_id_tao_bb]
-    # print('tao_bb is : ', tao_bb)
-
-    #lpv = Method.smart_reader('/Volumes/koala/Users/tz205/IBT_tz205_la816_MA/Data/AtrialLDRBM/Generate_Boundaries/LA/result_LA/la_lpv_surface.vtk')
-    #rpv = Method.smart_reader('/Volumes/koala/Users/tz205/IBT_tz205_la816_MA/Data/AtrialLDRBM/Generate_Boundaries/LA/result_LA/la_rpv_surface.vtk')
-    #mv = Method.smart_reader('/Volumes/koala/Users/tz205/IBT_tz205_la816_MA/Data/AtrialLDRBM/Generate_Boundaries/LA/result_LA/la_mv_surface.vtk')
-    
-    #lpv_mean = Method.get_mean_point(lpv)
-    #rpv_mean = Method.get_mean_point(rpv)
-    #mv_mean = Method.get_mean_point(mv)
-    
-    # lpv_mean = np.mean([df["LIPV"].to_numpy(), df["LSPV"].to_numpy()], axis = 0)
-    # rpv_mean = np.mean([df["RIPV"].to_numpy(), df["RSPV"].to_numpy()], axis = 0)
-    # mv_mean = df["MV"].to_numpy()
-    
-    # v1 = rpv_mean - mv_mean
-    # v2 = lpv_mean - mv_mean
-    # norm = np.cross(v2, v1)
-    
-    # # # normalize vector
-    # norm = norm / np.linalg.norm(norm)
-
-    # plane = vtk.vtkPlane()
-    # plane.SetNormal(norm[0], norm[1], norm[2])
-    # plane.SetOrigin(mv_mean[0], mv_mean[1], mv_mean[2])
-
-    # meshExtractFilter1 = vtk.vtkExtractGeometry()
-    # meshExtractFilter1.SetInputData(cellid.GetOutput())
-    # meshExtractFilter1.SetImplicitFunction(plane)
-    # meshExtractFilter1.Update()
-    
-    # band_cell_ids = vtk.util.numpy_support.vtk_to_numpy(meshExtractFilter1.GetOutput().GetCellData().GetArray('Global_ids'))
-    
-    # print(cell_ids)
-    # print(18884 in cell_ids)    
-    
-    # LAA_base = df["LAA_base"].to_numpy()
-    # loc = vtk.vtkPointLocator()
-    # loc.SetDataSet(model)
-    # loc.BuildLocator()
-    # LAA_base_id = loc.FindClosestPoint(LAA_base)
-    # mesh_cell_id_list = vtk.vtkIdList()
-    # model.GetPointCells(LAA_base_id, mesh_cell_id_list)
     
     #### Bundles selection ####
     # Volume mesh
@@ -492,11 +354,6 @@ def la_generate_fiber(model, args, job):
         meshNew.CellData.append(el, "fiber")
     
         model = meshNew.VTKObject
-        # meshNew = dsa.WrapDataObject(model)
-        # writer = vtk.vtkUnstructuredGridWriter()
-        # writer.SetFileName(job.ID+"/result_LA/LA_with_fiber.vtk")
-        # writer.SetInputData(meshNew.VTKObject)
-        # writer.Write()
     
         end_time = datetime.datetime.now()
         running_time = end_time - start_time
@@ -512,49 +369,6 @@ def la_generate_fiber(model, args, job):
         tag_epi[:] = left_atrial_wall_epi
         tag_endo = np.zeros(len(r), dtype=int)
         tag_endo[:] = left_atrial_wall_endo
-        # # tagging endo-layer
-        # for i in range(len(r)):
-        #     if tag_endo[i] == 0:
-        #         if r[i] >= tao_mv:
-        #             tag_endo[i] = mitral_valve_endo
-        #         elif ab[i] < max_phie_ab_tau_lpv+0.01 and r2[i]>max_phie_r2_tau_lpv+0.01:
-        #             tag_endo[i] = left_atrial_appendage_endo
-        #         elif v[i] <= tao_lpv and i in PVs["LIPV"]:
-        #             tag_endo[i] = inferior_left_pulmonary_vein_endo
-        #         elif v[i] <= tao_lpv and i in PVs["LSPV"]:
-        #             tag_endo[i] = superior_left_pulmonary_vein_endo
-        #         elif v[i] >= tao_rpv and i in PVs["RIPV"]:
-        #             tag_endo[i] = inferior_right_pulmonary_vein_endo
-        #         elif v[i] >= tao_rpv and i in PVs["RSPV"]:
-        #             tag_endo[i] = superior_right_pulmonary_vein_endo
-        #         else:
-        #             tag_endo[i] = left_atrial_wall_endo
-        
-        # # tagging epi-layer
-        # for i in range(len(r)):
-        #     if tag_epi[i] == 0:
-        #         if r[i] >= tao_mv:
-        #             ab_grad[i] = r_grad[i]
-        #             tag_epi[i] = mitral_valve_epi
-        #         elif ab[i] < max_phie_ab_tau_lpv+0.01 and r2[i]>max_phie_r2_tau_lpv+0.01:
-        #             tag_epi[i] = left_atrial_appendage_epi
-        #         elif v[i] <= tao_lpv and i in PVs["LIPV"]:
-        #             ab_grad[i] = v_grad[i]
-        #             tag_epi[i] = inferior_left_pulmonary_vein_epi
-        #         elif v[i] <= tao_lpv and i in PVs["LSPV"]:
-        #             ab_grad[i] = v_grad[i]
-        #             tag_epi[i] = superior_left_pulmonary_vein_epi
-        #         elif v[i] >= tao_rpv and i in PVs["RIPV"]:
-        #             ab_grad[i] = v_grad[i]
-        #             tag_epi[i] = inferior_right_pulmonary_vein_epi
-        #         elif v[i] >= tao_rpv and i in PVs["RSPV"]:
-        #             ab_grad[i] = v_grad[i]
-        #             tag_epi[i] = superior_right_pulmonary_vein_epi
-        #         else:
-        #             tag_epi[i] = left_atrial_wall_epi
-                    
-        # tagging endo-layer
-        #MV_s = Method.vtk_thr(model,0,"CELLS","phie_r",tao_mv)
         
         LAA_s = Method.vtk_thr(model,0,"CELLS","phie_r2",max_phie_r2_tau_lpv+0.01)
         
@@ -582,12 +396,6 @@ def la_generate_fiber(model, args, job):
         
         LAA_s = Method.vtk_thr(LAA_s,1,"POINTS","phie_ab3",0.95)
         
-        #LPV_s = Method.vtk_thr(model,1,"CELLS","phie_v",tao_lpv)
-        
-        #RPV_s = Method.vtk_thr(model,0,"CELLS","phie_v",tao_rpv)
-        
-        #MV_ids = vtk.util.numpy_support.vtk_to_numpy(MV_s.GetCellData().GetArray('Global_ids'))
-        
         ring_ids = np.loadtxt('{}_surf/'.format(args.mesh) + 'ids_MV.vtx', skiprows=2, dtype=int)
         
         rings_pts = vtk.util.numpy_support.vtk_to_numpy(model.GetPoints().GetData())[ring_ids,:]
@@ -596,22 +404,12 @@ def la_generate_fiber(model, args, job):
         
         LAA_ids = vtk.util.numpy_support.vtk_to_numpy(LAA_s.GetCellData().GetArray('Global_ids'))
         
-        #LPV_ids = vtk.util.numpy_support.vtk_to_numpy(LPV_s.GetCellData().GetArray('Global_ids'))
-        
-        #RPV_ids = vtk.util.numpy_support.vtk_to_numpy(RPV_s.GetCellData().GetArray('Global_ids'))
-        
         # tagging endo-layer
         
         tag_endo[MV_ids] = mitral_valve_endo
         ab_grad[MV_ids] = r_grad[MV_ids]
         
         tag_endo[LAA_ids] = left_atrial_appendage_endo
-        
-        #tag_endo[LPV_ids] = inferior_left_pulmonary_vein_endo
-        #ab_grad[LPV_ids] = v_grad[LPV_ids]
-        
-        #tag_endo[RPV_ids] = inferior_right_pulmonary_vein_endo
-        #ab_grad[RPV_ids] = v_grad[RPV_ids]
         
         tag_endo[PVs["RIPV"]] = inferior_right_pulmonary_vein_endo
         tag_endo[PVs["LIPV"]] = inferior_left_pulmonary_vein_endo
@@ -629,11 +427,7 @@ def la_generate_fiber(model, args, job):
         tag_epi[MV_ids] = mitral_valve_epi
         
         tag_epi[LAA_ids] = left_atrial_appendage_epi
-        
-        #tag_epi[LPV_ids] = inferior_left_pulmonary_vein_epi
-        
-        #tag_epi[RPV_ids] = inferior_right_pulmonary_vein_epi
-        
+
         tag_epi[PVs["RIPV"]] = inferior_right_pulmonary_vein_epi
         tag_epi[PVs["LIPV"]] = inferior_left_pulmonary_vein_epi
         
@@ -712,21 +506,10 @@ def la_generate_fiber(model, args, job):
         meshNew = dsa.WrapDataObject(model)
         meshNew.CellData.append(tag_endo, "elemTag")
         endo = meshNew.VTKObject
-        # writer = vtk.vtkUnstructuredGridWriter()
-        # writer.SetFileName("gradient/LA_endo_with_tags.vtk")
-        # writer.SetInputData(meshNew.VTKObject)
-        # writer.Write()
         
         meshNew = dsa.WrapDataObject(epi)
         meshNew.CellData.append(tag_epi, "elemTag")
         epi = meshNew.VTKObject
-        
-        # meshNew = dsa.WrapDataObject(epi)
-        # meshNew.CellData.append(tag_epi, "elemTag")
-        # writer = vtk.vtkUnstructuredGridWriter()
-        # writer.SetFileName("gradient/LA_epi_with_tags.vtk")
-        # writer.SetInputData(meshNew.VTKObject)
-        # writer.Write()
         
         # normlize the gradient phie
         phie_grad_norm = phie_grad
@@ -837,16 +620,6 @@ def la_generate_fiber(model, args, job):
                 f.write("{} {} {} {} {} {}\n".format(el_endo[i][0], el_endo[i][1], el_endo[i][2], sheet_endo[i][0], sheet_endo[i][1], sheet_endo[i][2]))
             
         running_time = end_time - start_time
-        
-        # writer = vtk.vtkUnstructuredGridWriter()
-        # writer.SetFileName("gradient/LA_endo_with_fiber.vtk")
-        # writer.SetInputData(endo)
-        # writer.Write()
-        
-        # writer = vtk.vtkUnstructuredGridWriter()
-        # writer.SetFileName("gradient/LA_epi_with_fiber.vtk")
-        # writer.SetInputData(epi)
-        # writer.Write()
         
         print('Calculating fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
     

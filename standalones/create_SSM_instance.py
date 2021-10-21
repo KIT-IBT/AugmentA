@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Apr 19 14:55:02 2021
+
+@author: Luca Azzolin
+"""
+
 import h5py
 import argparse
 import pyvista as pv

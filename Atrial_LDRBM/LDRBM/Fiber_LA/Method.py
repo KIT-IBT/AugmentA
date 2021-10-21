@@ -3,8 +3,6 @@ import numpy as np
 from vtk.numpy_interface import dataset_adapter as dsa
 from vtk.numpy_interface import algorithms as algs
 from scipy.spatial import cKDTree
-#from scipy.signal import savgol_filter
-#from scipy import interpolate
 from vtk.util import numpy_support
 from scipy.spatial.distance import cosine
 import collections

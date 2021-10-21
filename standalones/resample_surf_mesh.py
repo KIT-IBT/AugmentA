@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Apr 19 14:55:02 2021
+
+@author: Luca Azzolin
+"""
 import pymeshlab
 import pymeshfix
 import pyvista as pv
@@ -62,7 +69,7 @@ def find_elements_around_path_within_radius(mesh, points_data, radius):
 
     return id_set
 
-def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30):
+def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1):
 
     mesh_data = dict()
 
@@ -73,6 +80,9 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     ms.select_self_intersecting_faces()
 
     m = ms.current_mesh()
+
+    if apex_id>-1:
+        apex = m.vertex_matrix()[apex_id,:]
 
     self_intersecting_faces = m.selected_face_number()
 
@@ -196,7 +206,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
     meshin = pv.read('{}_res.obj'.format(meshname))
 
-    if find_apex_with_curv:
+    if find_apex_with_curv and apex_id==-1:
         if self_intersecting_faces:
             os.system("meshtool query curvature -msh={}_cleaned.obj -size={}".format(meshname, size*scale))
             curv = np.loadtxt('{}_cleaned.curv.dat'.format(meshname))
@@ -219,19 +229,21 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         p.show()
 
-    else:
+        if p.picked_point is None:
+            print("Please pick a point as apex")
+        else:
+            apex = p.picked_point
+            print("Apex coordinates: ",apex)
+
+    elif find_apex_with_curv==0 and apex_id==-1:
 
         p = pv.Plotter(notebook=False)
 
-        point_cloud = pv.PolyData(apex)
-
         p.add_mesh(meshin,color='r')
-        p.add_mesh(point_cloud, color='w', point_size=30.*scale, render_points_as_spheres=True)
         p.enable_point_picking(meshin, use_mesh=True)
         p.add_text('Select the appendage apex and close the window',position='lower_left')
 
         p.show()
-
         if p.picked_point is None:
             print("Please pick a point as apex")
         else:
@@ -243,7 +255,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
     mesh_data["LAA_id"] = [apex_id]
 
-    fname = '{}_mesh_data.csv'.format(meshname)
+    fname = '{}_res_mesh_data.csv'.format(meshname)
     df = pd.DataFrame(mesh_data)
     df.to_csv(fname, float_format="%.2f", index=False)
 

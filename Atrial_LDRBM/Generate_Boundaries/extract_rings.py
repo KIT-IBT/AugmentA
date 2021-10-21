@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-'''
+"""
+Created on Mon Apr 19 14:55:02 2021
+
+@author: Luca Azzolin
+
 Extract the feature edges from extracted endo surface
 Then generate the rings
 
 Input: extracted endo surface
 Output: rings in vtk form; Ring points Id list
-'''
+
+"""
 import os
 import numpy as np
 from glob import glob

@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Nov 22 15:37:47 2020
+Created on Mon Apr 19 14:55:02 2021
 
-@author: tz205
+@author: Luca Azzolin
 """
 import os
 import sys
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
-
-#os.environ['CARPUTILS_SETTINGS'] = '/home/luca/carputils/settings.yaml'
-#os.environ['PATH'] = '/home/luca/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/luca/openCARP/_build/bin:/home/luca/carputils/bin:/home/luca/meshtool:/home/luca/meshalyzer:/home/luca/openCARP/_build/bin:/home/luca/carputils/bin:/home/luca/meshtool:/home/luca/meshalyzer'
 
 from carputils.carpio import igb
 from carputils import tools
@@ -39,11 +36,6 @@ def la_laplace(args, job, model):
     
         # Run simulation
         job.carp(cmd)
-    #elif args.mesh_type == 'bilayer':
-     #   n_pts = mesh.Mesh(meshdir).n_pts()
-      #  phi = np.zeros((n_pts,1))
-       # phi[np.loadtxt(surfdir + 'ids_epi.vtx', skiprows=2)] = 1
-        #igb.IGBFile(simid + "/phie.igb").write(phi)
 
     #####################################
     # Solver for the ab laplace solution
@@ -126,10 +118,11 @@ def la_laplace(args, job, model):
         else:
             print ("Successfully created the directory %s " % simid)
         if args.mesh_type == "vol":
-            writer = vtk.vtkUnstructuredGridWriter()
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(simid+"/LA_with_laplace.vtu")
         else:
-            writer = vtk.vtkPolyDataWriter()
-        writer.SetFileName(simid+"/LA_with_laplace.vtk")
+            writer = vtk.vtkXMLPolyDataWriter()
+            writer.SetFileName(simid+"/LA_with_laplace.vtp")
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
     """
@@ -180,25 +173,9 @@ def laplace_0_1(args, job, model, name1,name2, outname):
         else:
             print ("Successfully created the directory %s " % simid)
 
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(simid+"/LA_with_laplace.vtk")
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName(simid+"/LA_with_laplace.vtu")
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
-    # if args.debug == 1:
-
-    #     simid = job.ID+"/Laplace_Result"
-    #     try:
-    #         os.makedirs(simid)
-    #     except OSError:
-    #         print ("Creation of the directory %s failed" % simid)
-    #     else:
-    #         print ("Successfully created the directory %s " % simid)
-    #     if args.mesh_type == "vol":
-    #         writer = vtk.vtkUnstructuredGridWriter()
-    #     else:
-    #         writer = vtk.vtkUnstructuredGridWriter()
-    #     writer.SetFileName(simid+"/LA_with_LAA_bb.vtk")
-    #     writer.SetInputData(meshNew.VTKObject)
-    #     writer.Write()
     
     return meshNew.VTKObject

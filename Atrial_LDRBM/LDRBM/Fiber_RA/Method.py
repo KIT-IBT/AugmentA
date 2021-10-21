@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Apr 19 14:55:02 2021
+
+@author: Luca Azzolin
+"""
 import vtk
 import numpy as np
 from vtk.util import numpy_support
@@ -45,14 +52,6 @@ def move_surf_along_normals(mesh, eps, direction):
     extract_surf = vtk.vtkGeometryFilter()
     extract_surf.SetInputData(mesh)
     extract_surf.Update()
-    
-    # reverse = vtk.vtkReverseSense()
-    # reverse.ReverseCellsOn()
-    # reverse.ReverseNormalsOn()
-    # reverse.SetInputConnection(extract_surf.GetOutputPort())
-    # reverse.Update()
-    
-    # polydata = reverse.GetOutput()
     polydata = extract_surf.GetOutput()
     
     normalGenerator = vtk.vtkPolyDataNormals()
@@ -60,7 +59,6 @@ def move_surf_along_normals(mesh, eps, direction):
     normalGenerator.ComputeCellNormalsOff()
     normalGenerator.ComputePointNormalsOn()
     normalGenerator.ConsistencyOn()
-    #normalGenerator.AutoOrientNormalsOn()
     normalGenerator.SplittingOff() 
     normalGenerator.Update()
     
@@ -140,11 +138,15 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
     
     return bilayer
 
-def write_bilayer(bilayer, job):
+def write_bilayer(bilayer, args, job):
     
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtk")
-    writer.SetFileTypeToBinary()
+    if args.ofmt == 'vtk':
+        writer = vtk.vtkUnstructuredGridWriter()
+        writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtk")
+        writer.SetFileTypeToBinary()
+    else:
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtu")
     writer.SetInputData(bilayer)
     writer.Write()
     

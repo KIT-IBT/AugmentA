@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Nov 29 14:44:39 2020
+Created on Mon Apr 19 14:55:02 2021
 
-@author: tz205
-
-test 1
+@author: Luca Azzolin
 """
-#from mayavi import mlab
 import numpy as np
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
@@ -52,11 +49,6 @@ def la_calculate_gradient(args, model, job):
             
         print('Calculating the gradient of ' + str(var) + '... Done!')
     
-    # # delete the phie solution
-    # for var in name_list:
-    #     LA_gradient.GetCellData().RemoveArray('phie_'+str(var))
-    
-    #meshNew = dsa.WrapDataObject(LA_gradient)
     output = vtk.vtkUnstructuredGrid()
     output.DeepCopy(LA_gradient)
     if args.debug == 1:

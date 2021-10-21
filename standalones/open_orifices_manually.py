@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed May 26 14:50:34 2021
+Created on Mon Apr 19 14:55:02 2021
 
-@author: luca
+@author: Luca Azzolin
 """
 import os,sys
 import numpy as np
@@ -174,11 +174,13 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     meshpath = "{}/{}_cutted".format(full_path, atrium)
     extract_rings.run(["--mesh",meshpath,"--LAA",str(LAA),"--RAA",str(RAA)])
 
+    return apex_id
+
 def run():
 
     args = parser().parse_args()
     
-    open_orifices_manually(args.mesh, args.atrium, args.MRI, args.scale, args.size, args.min_cutting_radius, args.max_cutting_radius, args.LAA, args.RAA, args.debug)
+    apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, args.scale, args.size, args.min_cutting_radius, args.max_cutting_radius, args.LAA, args.RAA, args.debug)
         
 def smart_reader(path):
 

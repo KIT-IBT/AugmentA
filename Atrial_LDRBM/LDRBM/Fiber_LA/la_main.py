@@ -1,4 +1,10 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Created on Mon Apr 19 14:55:02 2021
+
+@author: Luca Azzolin
+"""
 import os
 import subprocess as sp
 import datetime
@@ -11,11 +17,6 @@ from carputils import mesh
 from la_laplace import la_laplace
 from la_generate_fiber import la_generate_fiber
 import Method
-
-# from la_laplace import laplace_0_1
-
-#os.environ['CARPUTILS_SETTINGS'] = '/howe/luca/carputils/settings.yaml'
-#os.environ['PATH'] = '/home/luca/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/luca/openCARP/_build/bin:/home/luca/carputils/bin:/home/luca/meshtool:/home/luca/meshalyzer:/home/luca/openCARP/_build/bin:/home/luca/carputils/bin:/home/luca/meshtool:/home/luca/meshalyzer'
 
 def parser():
     # Generate the standard command line parser
@@ -54,7 +55,6 @@ def parser():
     return parser
 
 def jobID(args):
-    #ID = '{}_fibers'.format(args.mesh.split('/')[-1])
     ID = '{}_fibers'.format(args.mesh)
     return ID
 
@@ -68,7 +68,6 @@ def run(args, job):
     reader.Update()
     LA = reader.GetOutput()
     
-    # Warning: set -1 if pts normals are pointing outside
     if args.normals_outside:
         reverse = vtk.vtkReverseSense()
         reverse.ReverseCellsOn()
@@ -77,17 +76,7 @@ def run(args, job):
         reverse.Update()
 
         LA = reverse.GetOutput()
-    
-    # LA2 = laplace_0_1(args, job, LA, "MV", "RPV_LPV", "phie_mv_roof")
-    # LA2 = laplace_0_1(args, job, LA, "MV_LPV", "MV_RPV", "phie_lr")
-    # LA2 = laplace_0_1(args, job, LA, "MV_ant", "MV_post", "phie_ant_post")
-    # LA2 = laplace_0_1(args, job, LA, "4", "4", "phie_ant_post_PVs")
-    
-    # writer = vtk.vtkPolyDataWriter()
-    # writer.SetFileName("./Laplace_Result/LA_with_laplace_UAC.vtk")
-    # writer.SetInputData(LA2)
-    # writer.Write()
-    
+
     pts = numpy_support.vtk_to_numpy(LA.GetPoints().GetData())
     
     with open(LA_mesh+'.pts',"w") as f:
@@ -115,10 +104,6 @@ def run(args, job):
         for i in range(len(fibers)):
             f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3],fibers[i][4],fibers[i][5]))
             
-    #if args.ifmt == "vtk" and os.path.isfile(LA_mesh+'.pts') == False:
-    #    os.system("meshtool convert -imsh={}.vtk -omsh={}".format(LA_mesh,LA_mesh))
-    #elif args.ifmt == "carp_txt"  and os.path.isfile(LA_mesh+'.vtk') == False:
-    #    os.system("meshtool convert -imsh={} -omsh={} -ofmt={}".format(LA_mesh,LA_mesh,"vtk"))
     
     start_time = datetime.datetime.now()
     init_start_time = datetime.datetime.now()

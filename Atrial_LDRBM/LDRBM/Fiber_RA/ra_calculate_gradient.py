@@ -1,13 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Nov 29 14:44:39 2020
+Created on Mon Apr 19 14:55:02 2021
 
-@author: tz205
-
-test 1
+@author: Luca Azzolin
 """
-#from mayavi import mlab
 import numpy as np
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
@@ -64,8 +61,8 @@ def ra_calculate_gradient(args, model, job):
         else:
             print ("Successfully created the directory %s " % simid)
         # write the file as vtk 
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(simid+"/RA_with_lp_res_gradient.vtk")
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName(simid+"/RA_with_lp_res_gradient.vtu")
         writer.SetInputData(output)
         writer.Write()
     
