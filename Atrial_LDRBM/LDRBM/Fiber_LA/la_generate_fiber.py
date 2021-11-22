@@ -81,10 +81,8 @@ def la_generate_fiber(model, args, job):
     left_septum_wall_endo = int(tag_dict['left_septum_wall_endo'])
     left_atrial_roof_endo = int(tag_dict['left_atrial_roof_endo'])
     bachmann_bundel_left = int(tag_dict['bachmann_bundel_left'])
-    # Zygote or Riunet
+
     tao_mv = 0.85
-    tao_lpv = 0.85
-    tao_rpv = 0.2
 
     # ab
     ab = model.GetCellData().GetArray('phie_ab')
@@ -107,7 +105,6 @@ def la_generate_fiber(model, args, job):
     # r2
     r2 = model.GetCellData().GetArray('phie_r2')
     r2 = vtk.util.numpy_support.vtk_to_numpy(r2)
-
 
     # phie
     if args.mesh_type == "vol":

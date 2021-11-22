@@ -44,7 +44,7 @@ def la_laplace(args, job, model):
 
     if args.mesh_type == 'vol':
         ####################################
-        # Solver for the phi laplace soluton
+        # Solver for the phi laplace solution
         ####################################
         cmd = tools.carp_cmd(parfdir + '/la_lps_phi.par')
         simid = job.ID+'/Lp_phi'
