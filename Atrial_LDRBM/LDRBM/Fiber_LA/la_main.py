@@ -35,7 +35,7 @@ from carputils import tools
 from carputils import mesh
 from la_laplace import la_laplace
 from la_generate_fiber import la_generate_fiber
-import Method
+import Methods_LA
 
 def parser():
     # Generate the standard command line parser
@@ -82,7 +82,10 @@ def run(args, job):
     
     LA_mesh = args.mesh+'_surf/LA'
     
-    reader = vtk.vtkPolyDataReader()
+    if args.mesh_type == "bilayer":
+        reader = vtk.vtkPolyDataReader()
+    else:
+        reader = vtk.vtkUnstructuredGridReader()
     reader.SetFileName(LA_mesh+'.vtk')
     reader.Update()
     LA = reader.GetOutput()
@@ -123,7 +126,6 @@ def run(args, job):
         for i in range(len(fibers)):
             f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3],fibers[i][4],fibers[i][5]))
             
-    
     start_time = datetime.datetime.now()
     init_start_time = datetime.datetime.now()
     print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))

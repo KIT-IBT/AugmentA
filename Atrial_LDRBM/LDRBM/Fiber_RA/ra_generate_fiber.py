@@ -30,7 +30,7 @@ import pandas as pd
 from vtk.numpy_interface import dataset_adapter as dsa
 from vtk.util.numpy_support import vtk_to_numpy
 import datetime
-import Method
+import Methods_RA as Method
 import csv
 import pickle
 import os
@@ -80,7 +80,7 @@ def ra_generate_fiber(model, args, job):
     inferior_vena_cava_epi = int(tag_dict['inferior_vena_cava_epi'])
     crista_terminalis = int(tag_dict['crista_terminalis'])
     inter_caval_bundle_epi = int(tag_dict['inter_caval_bundle_epi'])
-    right_atrial_lateral_wall_epi = int(tag_dict['right_atrial_lateral_wall_epi'])
+    right_atrial_lateral_wall_epi = int(tag_dict['right_atrial_wall_epi'])
     isthmus_epi = int(tag_dict['isthmus_epi'])
     right_atrial_septum_epi = int(tag_dict['right_atrial_septum_epi'])
     pectinate_muscle = int(tag_dict['pectinate_muscle'])
@@ -91,7 +91,7 @@ def ra_generate_fiber(model, args, job):
     superior_vena_cava_endo = int(tag_dict['superior_vena_cava_endo'])
     inferior_vena_cava_endo = int(tag_dict['inferior_vena_cava_endo'])
     inter_caval_bundle_endo = int(tag_dict['inter_caval_bundle_endo'])
-    right_atrial_lateral_wall_endo = int(tag_dict['right_atrial_lateral_wall_endo'])
+    right_atrial_lateral_wall_endo = int(tag_dict['right_atrial_wall_endo'])
     isthmus_endo = int(tag_dict['isthmus_endo'])
     right_atrial_septum_endo = int(tag_dict['right_atrial_septum_endo'])
     coronary_sinus = int(tag_dict['coronary_sinus'])
@@ -100,6 +100,9 @@ def ra_generate_fiber(model, args, job):
     bachmann_bundel_right = int(tag_dict['bachmann_bundel_right'])
     bachmann_bundel_internal = int(tag_dict['bachmann_bundel_internal'])
     
+    # load left atrial wall epi
+    left_atrial_wall_epi = int(tag_dict['left_atrial_wall_epi'])
+
     # load sinus node
     sinus_node = int(tag_dict['sinus_node'])
 
@@ -341,7 +344,7 @@ def ra_generate_fiber(model, args, job):
     
     k[TV_ids] = r_grad[TV_ids]
     
-    CT_plus = Method.vtk_thr(RAW_s, 0,"CELLS","phie_w", tao_ct_plus) 
+    CT_plus = Method.vtk_thr(RAW_s, 0,"CELLS","phie_w", tao_ct_plus)
     
     RAW_S = Method.vtk_thr(CT_plus, 2,"CELLS","phie_v", tao_scv, tao_icv) # IB_S grad_v
     
@@ -379,9 +382,9 @@ def ra_generate_fiber(model, args, job):
     meshExtractFilter.SetImplicitFunction(plane)
     meshExtractFilter.Update()
     septal_surf = meshExtractFilter.GetOutput()
-    
+
     RAS_S = Method.vtk_thr(septal_surf, 0,"CELLS","phie_w", tao_ct_plus)
-    
+
     RAS_S = Method.vtk_thr(RAS_S, 0,"CELLS","phie_r", 0.05)  # grad_r or w
     
     RAS_S_ids = vtk.util.numpy_support.vtk_to_numpy(RAS_S.GetCellData().GetArray('Global_ids'))
@@ -699,48 +702,89 @@ def ra_generate_fiber(model, args, job):
     # print(el)
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
-    print('Calculating fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
+    print('Calculating epicardial fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
     
-    sheet = np.cross(el, et)
-    
-    for i in range(model.GetPointData().GetNumberOfArrays()-1, -1, -1):
-        model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
-    
-    for i in range(model.GetCellData().GetNumberOfArrays()-1, -1, -1):
-        model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
-            
-    meshNew = dsa.WrapDataObject(model)
-    meshNew.CellData.append(tag, "elemTag")
-    meshNew.CellData.append(el, "fiber")
-    meshNew.CellData.append(sheet, "sheet")
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtk")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
-    
-    """
-    PM and CT
-    """
+    if args.mesh_type == "bilayer":
+        sheet = np.cross(el, et)
+        
+        for i in range(model.GetPointData().GetNumberOfArrays()-1, -1, -1):
+            model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
+        
+        for i in range(model.GetCellData().GetNumberOfArrays()-1, -1, -1):
+            model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
+                
+        meshNew = dsa.WrapDataObject(model)
+        meshNew.CellData.append(tag, "elemTag")
+        meshNew.CellData.append(el, "fiber")
+        meshNew.CellData.append(sheet, "sheet")
 
-    cellid = vtk.vtkIdFilter()
-    cellid.CellIdsOn()
-    cellid.SetInputData(meshNew.VTKObject) # vtkPolyData()
-    cellid.PointIdsOn()
-    if int(vtk_version) >= 9:
-        cellid.SetPointIdsArrayName('Global_ids')
-        cellid.SetCellIdsArrayName('Global_ids')
-    else:
-        cellid.SetIdsArrayName('Global_ids')
-    cellid.Update()
-    
-    model = cellid.GetOutput()
-    
-    endo = vtk.vtkUnstructuredGrid()
-    endo.DeepCopy(model)
-    
-    CT = Method.vtk_thr(model, 2,"CELLS","elemTag", crista_terminalis, crista_terminalis)
-    
-    CT_ids = vtk.util.numpy_support.vtk_to_numpy(CT.GetCellData().GetArray('Global_ids'))
+        writer = vtk.vtkUnstructuredGridWriter()
+        if args.ofmt == 'vtk':
+            writer = vtk.vtkUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtk")
+            writer.SetFileTypeToBinary()
+        else:
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtu")
+        writer.SetInputData(meshNew.VTKObject)
+        writer.Write()
+        
+        """
+        PM and CT
+        """
+
+        cellid = vtk.vtkIdFilter()
+        cellid.CellIdsOn()
+        cellid.SetInputData(meshNew.VTKObject) # vtkPolyData()
+        cellid.PointIdsOn()
+        if int(vtk_version) >= 9:
+            cellid.SetPointIdsArrayName('Global_ids')
+            cellid.SetCellIdsArrayName('Global_ids')
+        else:
+            cellid.SetIdsArrayName('Global_ids')
+        cellid.Update()
+        
+        model = cellid.GetOutput()
+        
+        endo = vtk.vtkUnstructuredGrid()
+        endo.DeepCopy(model)
+        
+        CT = Method.vtk_thr(model, 2,"CELLS","elemTag", crista_terminalis, crista_terminalis)
+        
+        CT_ids = vtk.util.numpy_support.vtk_to_numpy(CT.GetCellData().GetArray('Global_ids'))
+
+    elif args.mesh_type == "vol":
+
+        CT_id_list = vtk.vtkIdList()
+        for var in CT_ids:
+            CT_id_list.InsertNextId(var)
+        for var in CT_SEPT_ids:
+            CT_id_list.InsertNextId(var)
+
+        extract = vtk.vtkExtractCells()
+        extract.SetInputData(model)
+        extract.SetCellList(CT_id_list)
+        extract.Update()
+        CT = extract.GetOutput()
+
+        CT_ids = vtk.util.numpy_support.vtk_to_numpy(CT.GetCellData().GetArray('Global_ids'))
+
+        if args.debug:
+            
+            meshNew = dsa.WrapDataObject(model)
+            meshNew.CellData.append(tag, "elemTag")
+            meshNew.CellData.append(el, "fiber")
+
+            writer = vtk.vtkUnstructuredGridWriter()
+            if args.ofmt == 'vtk':
+                writer = vtk.vtkUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtk")
+                writer.SetFileTypeToBinary()
+            else:
+                writer = vtk.vtkXMLUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtu")
+            writer.SetInputData(meshNew.VTKObject)
+            writer.Write()
     
     center = np.asarray((np.array(df["SVC"])+np.array(df["IVC"]))/2)
     
@@ -814,8 +858,40 @@ def ra_generate_fiber(model, args, job):
     # np.savetxt("point3_id_new.txt", TV_lat.GetPoint(point3_id), fmt='%.4f')
     # np.savetxt("point4_id_new.txt", TV_lat.GetPoint(point4_id), fmt='%.4f')
     
+    print("Creating Pectinate muscle...")
+
+    if args.mesh_type == "vol":
+
+        # Copy current tags and fibers, they will be overwritten by the PMs
+        tag_old = np.array(tag, dtype=int)
+        el_old = np.array(el)
+
+        geo_filter = vtk.vtkGeometryFilter()
+        geo_filter.SetInputData(model)
+        geo_filter.Update()
+        surface = geo_filter.GetOutput()
+
+        epi = Method.vtk_thr(surface, 0,"POINTS","phie_phi", 0.5)
+
+        endo = Method.vtk_thr(surface, 1,"POINTS","phie_phi", 0.5)
+
+        geo_filter = vtk.vtkGeometryFilter()
+        geo_filter.SetInputData(endo)
+        geo_filter.Update()
+        surface = geo_filter.GetOutput()
+
+    elif args.mesh_type == "bilayer":
+
+        fiber_endo = el.copy()
+        tag_endo = np.copy(tag)
+        
+        geo_filter = vtk.vtkGeometryFilter()
+        geo_filter.SetInputData(endo)
+        geo_filter.Update()
+        surface = geo_filter.GetOutput()
+
     loc = vtk.vtkPointLocator()
-    loc.SetDataSet(endo)
+    loc.SetDataSet(surface)
     loc.BuildLocator()
     point_apx_id = loc.FindClosestPoint(np.array(df["RAA"]))
     pm_ct_id_list = []
@@ -829,12 +905,6 @@ def ra_generate_fiber(model, args, job):
     pm_ct_dis = int(len(ct_points_data) / pm_num)
     pm_tv_dis = int(len(tv_points_data) / pm_num)
     
-    fiber_endo = el.copy()
-    
-    if args.mesh_type == "vol":
-    
-        # Pectinate muscle
-        print("Creating Pectinate muscle...")
         # the first PM is the one to the appendage
         
         # pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
@@ -1011,43 +1081,68 @@ def ra_generate_fiber(model, args, job):
         # end_time = datetime.datetime.now()
         # running_time = end_time - start_time
         # print('Writing as RA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
-    
-    elif args.mesh_type == "bilayer":
-        tag_endo = np.copy(tag)
         
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(endo)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
-        
-        # Pectinate muscle
-        print("Creating Pectinate muscle...")
-        # the first PM is the one to the appendage
-        #pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
-        loc = vtk.vtkPointLocator()
-        loc.SetDataSet(surface)
-        loc.BuildLocator()
-        RAA_CT_id = loc.FindClosestPoint(RAA_CT_pt)
+    # Pectinate muscle
+    print("Creating Pectinate muscle 1")
+    # the first PM is the one to the appendage
+    #pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
+    loc = vtk.vtkPointLocator()
+    loc.SetDataSet(surface)
+    loc.BuildLocator()
+    RAA_CT_id = loc.FindClosestPoint(RAA_CT_pt)
 
-        pm = Method.dijkstra_path(surface, RAA_CT_id, point_apx_id)
-        pm = Method.downsample_path(pm, int(len(pm)*0.1))
+    # Pectinate muscle going from the septum spurius to the RAA apex
+    pm = Method.dijkstra_path(surface, RAA_CT_id, point_apx_id)
+    pm = Method.downsample_path(pm, int(len(pm)*0.1))
+
+    if args.mesh_type == "bilayer":
+    
         tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
         fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
+    
+    elif args.mesh_type == "vol":
 
-        for i in range(pm_num):
-            pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
-            pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
-            pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
-            #skip first 3% of the points since they will be on the roof of the RA
-            pm = pm[int(len(pm)*0.03):,:]
+        filter_cell_centers = vtk.vtkCellCenters()
+        filter_cell_centers.SetInputData(model)
+        filter_cell_centers.Update()
+        centroids_array = vtk.util.numpy_support.vtk_to_numpy(filter_cell_centers.GetOutput().GetPoints().GetData())
 
-            pm = Method.downsample_path(pm, int(len(pm)*0.065))
-            print("The ", i + 1, "th pm done")
+        tree = cKDTree(centroids_array)
+
+        ii = tree.query_ball_point(pm, r = w_pm, n_jobs=-1)
+
+        ii = list(set([item for sublist in ii for item in sublist]))
+
+        tag[ii] = pectinate_muscle
+
+        el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
+
+    for i in range(pm_num):
+        pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
+        pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
+        pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
+        #skip first 3% of the points since they will be on the roof of the RA
+        pm = pm[int(len(pm)*0.03):,:]
+
+        pm = Method.downsample_path(pm, int(len(pm)*0.065))
+        print("The ", i + 1, "th pm done")
+        if args.mesh_type == "bilayer":
+
             tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
             print("The ", i + 1, "th pm's tag is done")
             fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
             print("The ", i + 1, "th pm's fiber is done")
 
+        elif args.mesh_type == "vol":
+
+            ii = tree.query_ball_point(pm, r = w_pm, n_jobs=-1)
+
+            ii = list(set([item for sublist in ii for item in sublist]))
+
+            tag[ii] = pectinate_muscle
+
+            el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
+        
         # pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
         
         # tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
@@ -1062,7 +1157,9 @@ def ra_generate_fiber(model, args, job):
         #     print("The ", i + 1, "th pm done")
         #     tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
         #     fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=True)
-        
+    
+    if args.mesh_type == "bilayer":
+
         print("Creating Pectinate muscle... done!")
         
         # Crista Terminalis
@@ -1080,7 +1177,7 @@ def ra_generate_fiber(model, args, job):
         tag_endo[IVC_ids] = tag[IVC_ids]
         fiber_endo[IVC_ids] = el[IVC_ids]
         
-        tag_endo[SN_ids] = crista_terminalis
+        tag_endo[SN_ids] = sinus_node
 
         tag_endo[IVC_ids] = tag[IVC_ids]
         
@@ -1101,19 +1198,87 @@ def ra_generate_fiber(model, args, job):
         endo = meshNew.VTKObject
         
         writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/RA_endo_with_fiber.vtk")
+        if args.ofmt == 'vtk':
+            writer = vtk.vtkUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_RA/RA_endo_with_fiber.vtk")
+            writer.SetFileTypeToBinary()
+        else:
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_RA/RA_endo_with_fiber.vtu")
         writer.SetInputData(endo)
         writer.Write()
         
         CT_PMs = Method.vtk_thr(endo,2,"CELLS","elemTag",pectinate_muscle, crista_terminalis)
         
         writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/RA_CT_PMs.vtk")
+        if args.ofmt == 'vtk':
+            writer = vtk.vtkUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_RA/RA_CT_PMs.vtk")
+            writer.SetFileTypeToBinary()
+        else:
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(job.ID+"/result_RA/RA_CT_PMs.vtu")
         writer.SetInputData(CT_PMs)
         writer.Write()
+
+    elif args.mesh_type == "vol":
+        
+        print("Creating Pectinate muscle... done!")
+        
+        # Crista Terminalis
+        print("Creating Crista Terminalis...")
+        tag[CT_ids] = tag_old[CT_ids]
+        el[CT_ids] = el_old[CT_ids]
+        print("Creating Crista Terminalis... done!")
+        
+        """
+        overwrite the pm on the TV
+        """
+        tag[TV_ids] = tag_old[TV_ids]
+        el[TV_ids] = el_old[TV_ids]
+        
+        tag[IVC_ids] = tag_old[IVC_ids]
+        el[IVC_ids] = el_old[IVC_ids]
+        
+        tag[SN_ids] = sinus_node
+
+        tag[IVC_ids] = tag_old[IVC_ids]
+        
+        if args.debug:
+
+            for i in range(model.GetPointData().GetNumberOfArrays()-1, -1, -1):
+                model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
+            
+            for i in range(model.GetCellData().GetNumberOfArrays()-1, -1, -1):
+                model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
+            
+            el = np.where(el == [0,0,0], [1,0,0], el).astype("float32")
+            sheet = np.cross(el, et)
+            sheet = np.where(sheet == [0,0,0], [1,0,0], sheet).astype("float32")
+            meshNew = dsa.WrapDataObject(model)
+            meshNew.CellData.append(tag, "elemTag")
+            meshNew.CellData.append(el, "fiber")
+            meshNew.CellData.append(sheet, "sheet")
+            
+            writer = vtk.vtkUnstructuredGridWriter()
+            if args.ofmt == 'vtk':
+                writer = vtk.vtkUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_endo_with_fiber.vtk")
+                writer.SetFileTypeToBinary()
+            else:
+                writer = vtk.vtkXMLUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_endo_with_fiber.vtu")
+            writer.SetInputData(meshNew.VTKObject)
+            writer.Write()
         
         # Bachmann-Bundle
-        
+        if args.mesh_type =="vol":
+
+            geo_filter = vtk.vtkGeometryFilter()
+            geo_filter.SetInputData(epi)
+            geo_filter.Update()
+            surface = geo_filter.GetOutput()
+
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(RAS_S)
         loc.BuildLocator()
@@ -1128,13 +1293,15 @@ def ra_generate_fiber(model, args, job):
         bb_1_id = loc.FindClosestPoint(SVC_CT_pt)
         bb_2_id = loc.FindClosestPoint(TV_lat.GetPoint(point4_id))
         bb_c_id = loc.FindClosestPoint(RAS_S.GetPoint(bb_c_id))
-        
+
         bachmann_bundle_points_data_1 = Method.dijkstra_path(surface, bb_1_id, bb_c_id)
         
         bachmann_bundle_points_data_2 = Method.dijkstra_path(surface, bb_c_id, bb_2_id)
         
         bachmann_bundle_points_data = np.concatenate((bachmann_bundle_points_data_1, bachmann_bundle_points_data_2), axis=0)
         
+        np.savetxt('bb.txt',bachmann_bundle_points_data,fmt='%.5f')
+
         bb_step = int(len(bachmann_bundle_points_data)*0.1)
         bb_path = np.asarray([bachmann_bundle_points_data[i] for i in range(len(bachmann_bundle_points_data)) if i % bb_step == 0 or i == len(bachmann_bundle_points_data)-1])
         spline_points = vtk.vtkPoints()
@@ -1170,151 +1337,117 @@ def ra_generate_fiber(model, args, job):
         meshNew.CellData.append(el, "fiber")
         meshNew.CellData.append(sheet, "sheet")
         writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtk")
+        if args.mesh_type == "bilayer":
+            if args.ofmt == 'vtk':
+                writer = vtk.vtkUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtk")
+                writer.SetFileTypeToBinary()
+            else:
+                writer = vtk.vtkXMLUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtu")
+        else:
+            if args.ofmt == 'vtk':
+                writer = vtk.vtkUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_vol_with_fiber.vtk")
+                writer.SetFileTypeToBinary()
+            else:
+                writer = vtk.vtkXMLUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/result_RA/RA_vol_with_fiber.vtu")
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
         
         model = meshNew.VTKObject
-        # Bachmann_Bundle internal connection
-        la_epi = Method.smart_reader(job.ID+"/result_LA/LA_epi_with_fiber.vtk")
-        # superior_right_pulmonary_vein_epi = int(tag_dict['superior_right_pulmonary_vein_epi'])
-        # mitral_valve_epi = int(tag_dict['mitral_valve_epi'])
-        # la_mv_surface = Method.vtk_thr(la_epi, 2,"CELLS", "elemTag", mitral_valve_epi, mitral_valve_epi)
-        # la_rpv_inf_surface = Method.vtk_thr(la_epi, 2,"CELLS", "elemTag", superior_right_pulmonary_vein_epi, superior_right_pulmonary_vein_epi)
-        la_epi_surface = la_epi
-        ra_epi_surface = model
-    
-        # la_connect_point, ra_connect_point = Method.get_connection_point_la_and_ra_surface(df["LAA"], la_mv_surface, la_rpv_inf_surface, la_epi_surface, ra_epi_surface)
-        # la_connect_point = np.asarray(la_connect_point)
-        # ra_connect_point = np.asarray(ra_connect_point)
-        
-        la_appendage_basis_point = np.asarray(df["LAA_basis_inf"])
-        length = len(bachmann_bundle_points_data)
-        ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
-        
-        # # TODO PLAN D
-        geo_filter_la_epi = vtk.vtkGeometryFilter()
-        geo_filter_la_epi.SetInputData(la_epi)
-        geo_filter_la_epi.Update()
-        la_epi = geo_filter_la_epi.GetOutput()
-    
-        geo_filter_ra_epi = vtk.vtkGeometryFilter()
-        geo_filter_ra_epi.SetInputData(model)
-        geo_filter_ra_epi.Update()
-        ra_epi = geo_filter_ra_epi.GetOutput()
-    
-        loc_la_epi = vtk.vtkPointLocator()
-        loc_la_epi.SetDataSet(la_epi)
-        loc_la_epi.BuildLocator()
-    
-        loc_ra_epi = vtk.vtkPointLocator()
-        loc_ra_epi.SetDataSet(ra_epi)
-        loc_ra_epi.BuildLocator()
-    
-        # ra_a_id = loc_ra_epi.FindClosestPoint(ra_bb_center)
-        # ra_b_id = loc_ra_epi.FindClosestPoint(la_connect_point)
-        # la_c_id = loc_la_epi.FindClosestPoint(la_connect_point)
-        # la_d_id = loc_la_epi.FindClosestPoint(la_appendage_basis_point)
-        
-        ra_a_id = loc_ra_epi.FindClosestPoint(ra_bb_center)
-        la_c_id = loc_la_epi.FindClosestPoint(ra_bb_center)
-        ra_b_id = loc_ra_epi.FindClosestPoint(la_epi.GetPoint(la_c_id))
-        la_d_id = loc_la_epi.FindClosestPoint(la_appendage_basis_point)
-        
-        
-        path_1 = Method.dijkstra_path(ra_epi, ra_a_id, ra_b_id)
-        path_2 = Method.dijkstra_path(la_epi, la_c_id, la_d_id)
-        path_all_temp = np.vstack((path_1, path_2))
-        # down sampling to smooth the path
-        step = 20
-        #step = int(len(path_all_temp)*0.1)
-        path_all = np.asarray([path_all_temp[i] for i in range(len(path_all_temp)) if i % step == 0 or i == len(path_all_temp)-1])
-        
-        # save points for bb fiber
-        filename = job.ID+'/bridges/bb_fiber.dat'
-        f = open(filename, 'wb')
-        pickle.dump(path_all, f)
-        f.close()
-        
-        # BB tube
-        
-        bb_tube = Method.creat_tube_around_spline(path_all, 2*args.scale)
-        sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * 1.02*args.scale)
-        sphere_b = Method.creat_sphere(ra_bb_center, 2 * 1.02*args.scale)
-        Method.smart_bridge_writer(bb_tube, sphere_a, sphere_b, "BB_intern_bridges", job)
-    
-    
-        # tag = Method.assign_element_tag_around_path_within_radius(mesh, path_bb_ra, w_bb, tag, bachmann_bundel_right)
-        # fiber_endo = Method.assign_element_fiber_around_path_within_radius(mesh, path_bb_ra, w_bb, fiber_endo,
-        #                                                                  smooth=True)
-    
-        # tag_data = vtk.util.numpy_support.numpy_to_vtk(tag, deep=True, array_type=vtk.VTK_INT)
-        # tag_data.SetNumberOfComponents(1)
-        # tag_data.SetName("elemTag")
-        # model.GetCellData().RemoveArray("elemTag")
-        # model.GetCellData().SetScalars(tag_data)
-    
-        #model.GetCellData().AddArray(tag_data)
-        # abs_el = np.linalg.norm(fiber_endo, axis=1, keepdims=True)
-        # interpolate_arr = np.asarray([0, 0, 1])
-        # index = np.argwhere(abs_el == 0)
-        # print('There is',len(index),'zero vector(s).')
-        # for var in index:
-        #     fiber_endo[var[0]] = interpolate_arr
-    
-        # fiber_data = vtk.util.numpy_support.numpy_to_vtk(fiber_endo, deep=True, array_type=vtk.VTK_DOUBLE)
-        # fiber_data.SetNumberOfComponents(3)
-        # fiber_data.SetName("fiber")
-        # model.GetCellData().SetVectors(fiber_data)
-    
-    
-        # start_time = datetime.datetime.now()
-        # print('Writing as RA_with_fiber... ' + str(start_time))
-        # meshNew = dsa.WrapDataObject(epi)
-        # meshNew.CellData.append(tag, "elemTag")
-        # meshNew.CellData.append(el_epi, "fiber")
-        # meshNew.CellData.append(sheet_epi, "sheet")
-        # writer = vtk.vtkUnstructuredGridWriter()
-        # writer.SetFileName(job.ID+"/result_RA/RA_with_fiber.vtk")
-        # writer.SetInputData(meshNew.VTKObject)
-        # writer.Write()
-        # end_time = datetime.datetime.now()
-        # running_time = end_time - start_time
-        # print('Writing as RA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
-        
-        try:
-            CS_p = np.array(df["CS"])
-        except KeyError:
-            CS_p = IVC_SEPT_CT_pt
-            print("No CS found, use last CT point instead")
-            
-        add_free_bridge(args, la_epi, model, CS_p, df, job)
-    
-    # ##### show the result #####
-    # print("Visualizing in mayavi...")
-    # vtkCenters = vtk.vtkCellCenters()
-    # vtkCenters.SetInputData(model)
-    # vtkCenters.Update()
-    # centersOutput = vtkCenters.GetOutput().GetPoints().GetData()
-    # center_points = vtk.util.numpy_support.vtk_to_numpy(centersOutput)
-    
-    # global mesh, cursor3d
-    # fig = mlab.figure('Rush B, blyat!')
-    # mlab.clf()
-    # vector = mlab.quiver3d(center_points[:, 0], center_points[:, 1], center_points[:, 2], el[:, 0], el[:, 1], el[:, 2])
-    # source = mlab.pipeline.open('Mesh/RA_mesh.vtk')  # Open the source
-    # surf = mlab.pipeline.surface(source, color=(0.0, 0.0, 0.9))
-    # mlab.show()
 
-# en = k-(k*et)*et
-# abs_en = np.linalg.norm(en, axis=1, keepdims=True)
-# for i in range(len(abs_en)):
-#     if abs_en[i] == 0:
-#         abs_en[i] =1
-# en_norm = en/abs_en
-# el =
-# print(type(phie_grad))
-# print(abs_phie_grad)
-# phie_grad = r_grad.tolist()
-# print(len(ab_grad))
-# print(ab_grad[2])
+        if args.add_bridges:
+            # Bachmann_Bundle internal connection
+
+            if args.mesh_type == "bilayer":
+
+                if args.ofmt == 'vtk':
+                    la_epi = Method.smart_reader(job.ID+"/result_LA/LA_epi_with_fiber.vtk")
+                else:
+                    la_epi = Method.smart_reader(job.ID+"/result_LA/LA_epi_with_fiber.vtu")
+
+            elif args.mesh_type == "vol":
+
+                # extension = args.mesh.split('_RA_vol')[-1]
+                meshname = args.mesh[:-7]
+
+                if args.ofmt == 'vtk':
+                    la = Method.smart_reader(meshname+"_LA_vol_fibers/result_LA/LA_vol_with_fiber.vtk")
+                else:
+                    la = Method.smart_reader(meshname+"_LA_vol_fibers/result_LA/LA_vol_with_fiber.vtu")
+
+                geo_filter = vtk.vtkGeometryFilter()
+                geo_filter.SetInputData(la)
+                geo_filter.Update()
+                la_surf = geo_filter.GetOutput()
+
+                la_epi = Method.vtk_thr(la_surf,2,"CELLS","elemTag",left_atrial_wall_epi, 99)
+            
+                df = pd.read_csv(meshname+"_LA_vol_surf/rings_centroids.csv")
+
+            la_appendage_basis_point = np.asarray(df["LAA_basis_inf"])
+            length = len(bachmann_bundle_points_data)
+            ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
+            
+            geo_filter_la_epi = vtk.vtkGeometryFilter()
+            geo_filter_la_epi.SetInputData(la_epi)
+            geo_filter_la_epi.Update()
+            la_epi = geo_filter_la_epi.GetOutput()
+            
+            if args.mesh_type == "bilayer":
+                geo_filter_ra_epi = vtk.vtkGeometryFilter()
+                geo_filter_ra_epi.SetInputData(model)
+                geo_filter_ra_epi.Update()
+                ra_epi = geo_filter_ra_epi.GetOutput()
+            else:
+                ra_epi = surface
+        
+            loc_la_epi = vtk.vtkPointLocator()
+            loc_la_epi.SetDataSet(la_epi)
+            loc_la_epi.BuildLocator()
+        
+            loc_ra_epi = vtk.vtkPointLocator()
+            loc_ra_epi.SetDataSet(ra_epi)
+            loc_ra_epi.BuildLocator()
+            
+            ra_a_id = loc_ra_epi.FindClosestPoint(ra_bb_center)
+            la_c_id = loc_la_epi.FindClosestPoint(ra_bb_center)
+            ra_b_id = loc_ra_epi.FindClosestPoint(la_epi.GetPoint(la_c_id))
+            la_d_id = loc_la_epi.FindClosestPoint(la_appendage_basis_point)
+            
+            
+            path_1 = Method.dijkstra_path(ra_epi, ra_a_id, ra_b_id)
+            path_2 = Method.dijkstra_path(la_epi, la_c_id, la_d_id)
+            path_all_temp = np.vstack((path_1, path_2))
+            # down sampling to smooth the path
+            step = 20
+            #step = int(len(path_all_temp)*0.1)
+            path_all = np.asarray([path_all_temp[i] for i in range(len(path_all_temp)) if i % step == 0 or i == len(path_all_temp)-1])
+            
+            # save points for bb fiber
+            filename = job.ID+'/bridges/bb_fiber.dat'
+            f = open(filename, 'wb')
+            pickle.dump(path_all, f)
+            f.close()
+            
+            # BB tube
+            
+            bb_tube = Method.creat_tube_around_spline(path_all, 2*args.scale)
+            sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * 1.02*args.scale)
+            sphere_b = Method.creat_sphere(ra_bb_center, 2 * 1.02*args.scale)
+            Method.smart_bridge_writer(bb_tube, sphere_a, sphere_b, "BB_intern_bridges", job)
+            
+            df = pd.read_csv(args.mesh+"_surf/rings_centroids.csv")
+
+            try:
+                CS_p = np.array(df["CS"])
+            except KeyError:
+                CS_p = IVC_SEPT_CT_pt
+                print("No CS found, use last CT point instead")
+            
+            if args.mesh_type == "bilayer":    
+                add_free_bridge(args, la_epi, model, CS_p, df, job)
+            elif args.mesh_type == "vol":    
+                add_free_bridge(args, la, model, CS_p, df, job)

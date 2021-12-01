@@ -31,7 +31,7 @@ import vtk
 from carputils.carpio import igb
 from vtk.numpy_interface import dataset_adapter as dsa
 
-EXAMPLE_DIR = os.path.dirname(__file__)
+EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def ra_laplace(args, job, model):
     meshdir = args.mesh+'_surf/RA'
@@ -46,8 +46,8 @@ def ra_laplace(args, job, model):
         simid = job.ID+'/Lp_phi'
         cmd += [ '-simID', simid,
                   '-meshname', meshdir,
-                  '-stimulus[0].vtx_file', surfdir+'ids_endo',
-                  '-stimulus[1].vtx_file', surfdir+'ids_epi']
+                  '-stimulus[0].vtx_file', surfdir+'ids_ENDO',
+                  '-stimulus[1].vtx_file', surfdir+'ids_EPI']
         
         #Run simulation
         job.carp(cmd)
@@ -105,7 +105,7 @@ def ra_laplace(args, job, model):
         cmd += [ '-simID', simid,
                   '-meshname', meshdir,
                   '-stimulus[0].vtx_file', surfdir+'ids_TOP_ENDO',
-                  '-stimulus[1].vtx_file', surfdir+'ids_top_epi',
+                  '-stimulus[1].vtx_file', surfdir+'ids_TOP_EPI',
                   '-stimulus[2].vtx_file', surfdir+'ids_TV_F',
                   '-stimulus[3].vtx_file', surfdir+'ids_TV_S']
             
@@ -160,10 +160,11 @@ def ra_laplace(args, job, model):
         else:
             print ("Successfully created the directory %s " % simid)
         if args.mesh_type == "vol":
-            writer = vtk.vtkUnstructuredGridWriter()
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(simid+"/RA_with_laplace.vtu")
         else:
-            writer = vtk.vtkPolyDataWriter()
-        writer.SetFileName(simid+"/RA_with_laplace.vtk")
+            writer = vtk.vtkXMLPolyDataWriter()
+            writer.SetFileName(simid+"/RA_with_laplace.vtp")
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
     """

@@ -179,7 +179,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         
         LA = idFilter.GetOutput()
     
-        vtkWrite(LA, outdir+'/LA.vtk')
+        vtkWrite(LA, outdir+'/LA.vtp')
         
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(LA)
@@ -199,7 +199,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtp'.format(mesh))
 
         thr.ThresholdBetween(RA_tag,RA_tag)
         thr.Update()
@@ -229,7 +229,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
             loc.BuildLocator()
             RAA_base_id = loc.FindClosestPoint(RA_bs_point)
         
-        vtkWrite(RA, outdir+'/RA.vtk')
+        vtkWrite(RA, outdir+'/RA.vtp')
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
         b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
@@ -238,10 +238,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtp'.format(mesh))
     
     elif RAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir+'/LA.vtk'.format(mesh))
+        vtkWrite(geo_filter.GetOutput(), outdir+'/LA.vtp'.format(mesh))
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         centroids["LAA"] = LA_ap_point
         idFilter = vtk.vtkIdFilter()
@@ -260,10 +260,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtp'.format(mesh))
 
     elif LAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir+'/RA.vtk'.format(mesh))
+        vtkWrite(geo_filter.GetOutput(), outdir+'/RA.vtp'.format(mesh))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
         idFilter = vtk.vtkIdFilter()
         idFilter.SetInputConnection(geo_filter.GetOutputPort())
@@ -277,13 +277,13 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         RA = idFilter.GetOutput()
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
-        b_tag, centroids = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
+        b_tag, centroids, RA_rings  = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
         cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir)
 
-        dataSet = dsa.WrapDataObject(LA)
+        dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtp'.format(mesh))
     
     df = pd.DataFrame(centroids)
     df.to_csv(outdir+"/rings_centroids.csv", float_format="%.2f", index=False)
@@ -509,10 +509,9 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
 
 def vtkWrite(input_data, name):
     
-    writer = vtk.vtkPolyDataWriter()
+    writer = vtk.vtkXMLPolyDataWriter()
     writer.SetInputData(input_data)
     writer.SetFileName(name)
-    writer.SetFileTypeToBinary()
     writer.Write()
 
 def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
@@ -744,7 +743,6 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     boundaryEdges.ManifoldEdgesOff()
     boundaryEdges.NonManifoldEdgesOff()
     boundaryEdges.Update()
-    # points = boundaryEdges.GetOutput().GetPoints().GetData()
     
     gamma_top = boundaryEdges.GetOutput()
     
@@ -756,7 +754,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     v2 = ivc_center - tv_center
     norm = np.cross(v2, v1)
     
-    #normlize norm
+    #normalize norm
     n = np.linalg.norm([norm], axis=1, keepdims=True)
     norm_1 = norm/n
     norm_2 = - norm_1

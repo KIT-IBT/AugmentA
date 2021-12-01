@@ -50,8 +50,8 @@ def la_laplace(args, job, model):
         simid = job.ID+'/Lp_phi'
         cmd += ['-simID', simid,
                 '-meshname', meshdir,
-                '-stimulus[0].vtx_file', surfdir + 'ids_endo',
-                '-stimulus[1].vtx_file', surfdir + 'ids_epi']
+                '-stimulus[0].vtx_file', surfdir + 'ids_ENDO',
+                '-stimulus[1].vtx_file', surfdir + 'ids_EPI']
     
         # Run simulation
         job.carp(cmd)

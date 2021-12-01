@@ -23,7 +23,7 @@ stimulus[0].stimtype = 3
 # should be top_endo
 
 stimulus[1].stimtype = 3
-# should be top_endo
+# should be top_epi
 
 stimulus[2].start = 0
 stimulus[2].duration = 1

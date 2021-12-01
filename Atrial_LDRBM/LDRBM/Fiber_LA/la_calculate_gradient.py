@@ -34,6 +34,7 @@ def la_calculate_gradient(args, model, job):
 
     # change the result of Laplace from points data to cell data
     pointDataToCellData = vtk.vtkPointDataToCellData()
+    pointDataToCellData.PassPointDataOn()
     pointDataToCellData.SetInputData(model)
     pointDataToCellData.Update()
 

@@ -23,7 +23,7 @@ tricuspid_valve_endo,51
 superior_vena_cava_endo,52
 inferior_vena_cava_endo,53
 inter_caval_bundle_endo,54
-right_atrial_lateral_wall_endo,55
+right_atrial_wall_endo,55
 isthmus_endo,56
 right_atrial_appendage_endo,57
 right_atrial_septum_endo,58
@@ -32,9 +32,8 @@ crista_terminalis,60
 tricuspid_valve_epi,61
 superior_vena_cava_epi,62
 inferior_vena_cava_epi,63
-crista_terminalis_epi,64
-inter_caval_bundle_epi,65
-right_atrial_lateral_wall_epi,66
+inter_caval_bundle_epi,64
+right_atrial_wall_epi,65
 isthmus_epi,66
 right_atrial_appendage_epi,67
 right_atrial_septum_epi,68

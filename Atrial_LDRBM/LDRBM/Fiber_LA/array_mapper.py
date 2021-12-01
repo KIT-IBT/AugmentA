@@ -25,7 +25,7 @@ specific language governing permissions and limitations
 under the License.  
 """
 import vtk
-import Method
+import Methods_LA as Method
 from carputils import tools
 from vtk.numpy_interface import dataset_adapter as dsa
 
