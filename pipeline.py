@@ -108,6 +108,7 @@ def AugmentA(args):
                     apex = p.picked_point
                 else:
                     raise ValueError("Please select the appendage apex")
+                p.close()
 
                 tree = cKDTree(mesh_from_vtk.points.astype(np.double))
                 dd, apex_id = tree.query(apex)
@@ -180,7 +181,7 @@ def AugmentA(args):
 
             if not args.closed_surface:
                 #Convert mesh from vtk to obj
-                meshin = pv.read('{}.vtp'.format(meshname))
+                meshin = pv.read('{}.vtk'.format(meshname))
                 pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
             else:
                 meshin = pv.read('{}.obj'.format(meshname))
@@ -209,7 +210,7 @@ def AugmentA(args):
                 apex = p.picked_point
             
             print("Apex coordinates: ", apex)
-            
+            p.close()
             mesh_data = dict()
             tree = cKDTree(meshin.points.astype(np.double))
             dist, apex_id = tree.query(apex)
@@ -248,19 +249,21 @@ def AugmentA(args):
                 ra_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
 
     if args.debug:
-        geom = pv.Line()
         if args.closed_surface:
             bil = pv.read('{}_fibers/result_{}/{}_vol_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium, args.ofmt))
         else:
             bil = pv.read('{}_fibers/result_{}/{}_bilayer_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium, args.ofmt))
+            geom = pv.Line()
         mask = bil['elemTag'] >99
         bil['elemTag'][mask] = 0
         mask = bil['elemTag'] >80
         bil['elemTag'][mask] = 20
         mask = bil['elemTag'] >10
         bil['elemTag'][mask] = bil['elemTag'][mask]-10
-        fibers = bil.glyph(orient="fiber",factor=0.5,geom=geom, scale="elemTag")
         p = pv.Plotter(notebook=False)
+        if not args.closed_surface:
+            fibers = bil.glyph(orient="fiber",factor=0.5,geom=geom, scale="elemTag")
+            p.add_mesh(fibers,show_scalar_bar=False,cmap='tab20',line_width=10,render_lines_as_tubes=True)
         p.add_mesh(bil, scalars="elemTag",show_scalar_bar=False,cmap='tab20')
-        p.add_mesh(fibers,show_scalar_bar=False,cmap='tab20',line_width=10,render_lines_as_tubes=True)
-        p.show()        
+        p.show()
+        p.close() 

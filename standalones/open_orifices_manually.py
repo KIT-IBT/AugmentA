@@ -133,7 +133,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
             p.show()
 
             picked_pt = p.picked_point
-
+            p.close()
         if r == 'mitral valve' or r == 'tricuspid valve':
             el_to_del_tot = find_elements_within_radius(mesh, picked_pt, max_cutting_radius)
         else:
@@ -163,10 +163,9 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
 
     model = extract_largest_region(mesh)
 
-    writer = vtk.vtkPolyDataWriter()
+    writer = vtk.vtkXMLPolyDataWriter()
     writer.SetFileName("{}/{}_cutted.vtk".format(full_path, atrium))
     writer.SetInputData(model)
-    writer.SetFileTypeToBinary()
     writer.Write()
     
     p = pv.Plotter(notebook=False)
@@ -180,6 +179,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     if p.picked_point is not None:
         apex = p.picked_point
 
+    p.close()
     model = smart_reader("{}/{}_cutted.vtk".format(full_path, atrium))
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(model)

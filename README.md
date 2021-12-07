@@ -32,13 +32,24 @@ pip install -r requirements.txt
 Remember to source to myEnv before using the pipeline:
 ```
 source ~/myEnv/bin/activate
-python main.py --MRI 1 --mesh mesh/LA_map.vtk
 ```
 Show all options:
 ```
-source ~/myEnv/bin/activate
 python main.py --help
 ```
+Example using an MRI segmentation to produce a bilayer atrial model:
+```
+python main.py --mesh mesh/LA_MRI.vtp --closed_surface 0 --use_curvature_to_open 1 --atrium LA --open_orifices 1 --MRI 1
+```
+Example using a closed surface derived from a MRI segmentation to produce a volumetric atrial model:
+```
+python main.py --mesh mesh/mwk05_bi.vtp --closed_surface 1 --use_curvature_to_open 0 --atrium LA_RA
+```
+## Q&A
+
+- Selection of appendage apex: the selected point will be used as boundary condition for a Laplacian problem. Therefore, the point at the center of the appendage is the most suitable to identify the whole appendage body
+- Fiber_LA: LAA labeling (check LPVs identification functions distinguish_Pvs and optimize_PVs in la_generate_fiber.py)
+- Fiber_RA: PMs (check step in function Method.downsample_path in ra_generate_fiber.py), bridges (boolean operations and normal directions of original mesh)
 
 ## License
 

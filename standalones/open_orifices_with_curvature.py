@@ -278,7 +278,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         p.show()
 
         apex = p.picked_point
-    
+        p.close()
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(model)
         loc.BuildLocator()
@@ -303,6 +303,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             loc.SetDataSet(model)
             loc.BuildLocator()
             transeptal_punture_id = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('Ids'))[loc.FindClosestPoint(p.picked_point)]
+        p.close()
 
     for i in range(num):
         connect.AddSpecifiedRegion(i)
@@ -434,7 +435,6 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     writer = vtk.vtkPolyDataWriter()
     writer.SetFileName("{}/{}_cutted.vtk".format(full_path, atrium))
     writer.SetInputData(model)
-    writer.SetFileTypeToBinary()
     writer.Write()
     
     if debug:
@@ -451,6 +451,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
             if p.picked_point is not None:
                 apex = p.picked_point
+            p.close()
         else:
             p = pv.Plotter(notebook=False)
             mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
@@ -461,6 +462,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
             if p.picked_point is not None:
                 apex = p.picked_point
+            p.close()
 
     model = smart_reader("{}/{}_cutted.vtk".format(full_path, atrium))
     loc = vtk.vtkPointLocator()

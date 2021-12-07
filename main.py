@@ -42,10 +42,6 @@ def parser():
                         type=str,
                         default="",
                         help='full path to mesh with extension')
-    parser.add_argument('--mesh_la',
-                        type=str,
-                        default="",
-                        help='full path to LA mesh with extension, required for ')
     parser.add_argument('--closed_surface',
                         type=int,
                         default=0,

@@ -179,7 +179,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         
         LA = idFilter.GetOutput()
     
-        vtkWrite(LA, outdir+'/LA.vtp')
+        vtkWrite(LA, outdir+'/LA.vtk')
         
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(LA)
@@ -199,7 +199,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtp'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(mesh))
 
         thr.ThresholdBetween(RA_tag,RA_tag)
         thr.Update()
@@ -229,7 +229,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
             loc.BuildLocator()
             RAA_base_id = loc.FindClosestPoint(RA_bs_point)
         
-        vtkWrite(RA, outdir+'/RA.vtp')
+        vtkWrite(RA, outdir+'/RA.vtk')
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
         b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
@@ -238,10 +238,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtp'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(mesh))
     
     elif RAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir+'/LA.vtp'.format(mesh))
+        vtkWrite(geo_filter.GetOutput(), outdir+'/LA.vtk'.format(mesh))
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         centroids["LAA"] = LA_ap_point
         idFilter = vtk.vtkIdFilter()
@@ -260,10 +260,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtp'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/LA_boundaries_tagged.vtk'.format(mesh))
 
     elif LAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir+'/RA.vtp'.format(mesh))
+        vtkWrite(geo_filter.GetOutput(), outdir+'/RA.vtk'.format(mesh))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
         idFilter = vtk.vtkIdFilter()
         idFilter.SetInputConnection(geo_filter.GetOutputPort())
@@ -283,7 +283,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
         
-        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtp'.format(mesh))
+        vtkWrite(dataSet.VTKObject, outdir+'/RA_boundaries_tagged.vtk'.format(mesh))
     
     df = pd.DataFrame(centroids)
     df.to_csv(outdir+"/rings_centroids.csv", float_format="%.2f", index=False)
@@ -509,7 +509,7 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
 
 def vtkWrite(input_data, name):
     
-    writer = vtk.vtkXMLPolyDataWriter()
+    writer = vtk.vtkPolyDataWriter()
     writer.SetInputData(input_data)
     writer.SetFileName(name)
     writer.Write()
