@@ -113,14 +113,15 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
     extract_surf.SetInputData(endo)
     extract_surf.Update()
     
-    reverse = vtk.vtkReverseSense()
-    reverse.ReverseCellsOn()
-    reverse.ReverseNormalsOn()
-    reverse.SetInputConnection(extract_surf.GetOutputPort())
-    reverse.Update()
+    # reverse = vtk.vtkReverseSense()
+    # reverse.ReverseCellsOn()
+    # reverse.ReverseNormalsOn()
+    # reverse.SetInputConnection(extract_surf.GetOutputPort())
+    # reverse.Update()
     
     endo = vtk.vtkUnstructuredGrid()
-    endo.DeepCopy(reverse.GetOutput())
+    #endo.DeepCopy(reverse.GetOutput())
+    endo.DeepCopy(extract_surf.GetOutputPort())
             
     endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
     epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
@@ -166,6 +167,8 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
     appendFilter.Update()
     
     bilayer = appendFilter.GetOutput()
+
+    args.ofmt = 'vtk'
     
     return bilayer
 
@@ -1096,4 +1099,25 @@ def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
     writer = vtk.vtkOBJWriter()
     writer.SetFileName(job.ID+"/bridges/" + str(name) + "_sphere_2.obj")
     writer.SetInputData(meshNew.VTKObject)
+    writer.Write()
+
+
+def create_pts(array_points,array_name,mesh_dir):
+    f = open("{}{}.pts".format(mesh_dir,array_name), "w")
+    f.write("0 0 0\n")
+    for i in range(len(array_points)):
+        f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
+    f.close()
+
+def to_polydata(mesh):
+    geo_filter = vtk.vtkGeometryFilter()
+    geo_filter.SetInputData(mesh)
+    geo_filter.Update()
+    polydata = geo_filter.GetOutput()
+    return polydata
+
+def writer_vtk(mesh,filename):
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(filename)
+    writer.SetInputData(to_polydata(mesh))
     writer.Write()

@@ -85,7 +85,8 @@ def run(args, job):
     if args.mesh_type == "bilayer":
         reader = vtk.vtkPolyDataReader()
     else:
-        reader = vtk.vtkUnstructuredGridReader()
+        reader = vtk.vtkPolyDataReader()
+        #reader = vtk.vtkUnstructuredGridReader()
     reader.SetFileName(LA_mesh+'.vtk')
     reader.Update()
     LA = reader.GetOutput()

@@ -84,7 +84,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     
     ra_septum = Method.vtk_thr(ra_epi, 2, "CELLS", "elemTag", right_atrial_septum_epi,right_atrial_septum_epi)
     la_wall = Method.vtk_thr(la_epi, 2, "CELLS", "elemTag", left_atrial_wall_epi,left_atrial_wall_epi)
-    #mv_la = Method.vtk_thr(la_epi, 2, "CELLS", "elemTag", mitral_valve_epi,mitral_valve_epi)
+    mv_la = Method.vtk_thr(la_epi, 2, "CELLS", "elemTag", mitral_valve_epi,mitral_valve_epi)
     tv_ra = Method.vtk_thr(ra_epi, 2, "CELLS", "elemTag", tricuspid_valve_epi,tricuspid_valve_epi)
     
     # Find middle and upper posterior bridges points
@@ -109,15 +109,15 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     # Coronary sinus bridge point
 
-    # loc = vtk.vtkPointLocator()  it happened that the point is too close to the edge and the heart is not found
-    # loc.SetDataSet(mv_la)
-    # loc.BuildLocator()
-    # point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
-
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(la_wall)
+    loc = vtk.vtkPointLocator() # it happened that the point is too close to the edge and the heart is not found
+    loc.SetDataSet(mv_la)
     loc.BuildLocator()
-    point_CS_on_MV = la_wall.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
+    point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
+
+    #loc = vtk.vtkPointLocator()
+    #loc.SetDataSet(la_wall)
+    #loc.BuildLocator()
+    #point_CS_on_MV = la_wall.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
     
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(ra_septum)
@@ -546,8 +546,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter.AddInputData(la_endo)
         append_filter.AddInputData(ra_endo)
         append_filter.Update()
+
+        if args.debug:
+            Method.writer_vtk(append_filter.GetOutput(), job.ID+"/result_RA/append_LA_endo_RA_endo.vtk")
+
         
-        endo = Method.move_surf_along_normals(append_filter.GetOutput(), 0.1*args.scale, 1) # # Warning: set -1 if pts normals are pointing outside
+        endo = Method.move_surf_along_normals(append_filter.GetOutput(), 0.1*args.scale, -1) # # Warning: set -1 if pts normals are pointing outside
         
         writer = vtk.vtkUnstructuredGridWriter()
         writer.SetFileName(job.ID+"/result_RA/la_ra_endo.vtu")
