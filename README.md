@@ -20,8 +20,9 @@ Create a python virtual environment to install the current requirements after in
 python -m venv ~/myEnv
 source ~/myEnv/bin/activate
 pip install -r requirements.txt
-
 ```
+Install [PyMesh](https://pymesh.readthedocs.io/en/latest/installation.html)
+
 Go to the carputils folder and re-install carputils' requirements (assuming that carputils was installed in the home folder):
 ```
 cd ~/carputils
