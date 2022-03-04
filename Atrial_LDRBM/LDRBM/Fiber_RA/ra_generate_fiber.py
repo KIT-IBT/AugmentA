@@ -1117,7 +1117,7 @@ def ra_generate_fiber(model, args, job):
 
         el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
 
-    for i in range(pm_num):
+    for i in range(pm_num-1):
         pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
         pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
         pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
