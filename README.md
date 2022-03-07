@@ -52,9 +52,17 @@ python main.py --mesh mesh/mwk05_bi.vtp --closed_surface 1 --use_curvature_to_op
 - Fiber_LA: LAA labeling (check LPVs identification functions distinguish_Pvs and optimize_PVs in la_generate_fiber.py)
 - Fiber_RA: PMs (check step in function Method.downsample_path in ra_generate_fiber.py), bridges (boolean operations and normal directions of original mesh)
 
+## Citation
+When using this work, please cite
+> *AugmentA: Patient-specific Augmented Atrial model Generation Tool*
+>
+> Luca Azzolin, Martin Eichenlaub, Claudia Nagel, Deborah Nairn, Jorge Sánchez, Laura Unger, Olaf Dössel, Amir Jadidi, Axel Loewe
+> [doi:10.1101/2022.02.13.22270835](https://doi.org/10.1101/2022.02.13.22270835)
+
+
 ## License
 
-All source code is subject to the terms of the Apache License 2.0.  
+All source code is subject to the terms of the Academic Public License.
 Copyright 2021 Luca Azzolin, Karlsruhe Institute of Technology.
 
 ## Contact
