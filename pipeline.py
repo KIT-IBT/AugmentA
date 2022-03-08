@@ -186,9 +186,10 @@ def AugmentA(args):
             else:
                 meshin = pv.read('{}.obj'.format(meshname))
 
-            p = pv.Plotter(notebook=False)
+            
 
             if args.use_curvature_to_open:
+                p = pv.Plotter(notebook=False)
                 print("Propose appendage apex location using surface curvature")
                 os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, 30*args.scale))
                 curv = np.loadtxt('{}.curv.dat'.format(meshname))
@@ -200,17 +201,27 @@ def AugmentA(args):
 
                 p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
             
-            p.add_mesh(meshin,color='r')
-            p.enable_point_picking(meshin, use_mesh=True)
-            p.add_text('Select the appendage apex and close the window',position='lower_left')
+            if args.automatedLM:
+                coordinates = np.genfromtxt('{}_coordinates.dat'.format(args.mesh[0:len(args.mesh)-4]), delimiter = ' ')
+                if args.atrium == 'LA':
+                    apex = coordinates[0]
+                else:
+                    apex = coordinates[1]
 
-            p.show()
+            else:
+                p = pv.Plotter(notebook=False)
+                p.add_mesh(meshin,color='r')
+                p.enable_point_picking(meshin, use_mesh=True)
+                p.add_text('Select the appendage apex and close the window',position='lower_left')
 
-            if p.picked_point is not None:
-                apex = p.picked_point
+                p.show()
+
+                if p.picked_point is not None:
+                    apex = p.picked_point
+
+                p.close()
             
             print("Apex coordinates: ", apex)
-            p.close()
             mesh_data = dict()
             tree = cKDTree(meshin.points.astype(np.double))
             dist, apex_id = tree.query(apex)

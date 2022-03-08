@@ -102,6 +102,10 @@ def parser():
                         type=int,
                         default=0,
                         help='set to 1 to debug step by step, 0 otherwise')
+    parser.add_argument('--automatedLM', # automated landmark definition for both appendages apexes
+                        type=int,
+                        default=0,
+                        help='set to 1 if a coordinate.dat file containing the appendage apex locations is available, 0 otherwise')
     return parser
 
 def run():
