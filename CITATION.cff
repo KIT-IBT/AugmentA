@@ -14,6 +14,10 @@ authors:
     affiliation: Karlsruhe Institute of Technology (KIT)
     orcid: https://orcid.org/0000-0002-2487-4744
 license: "Academic Public License"
+identifiers:
+  - description: "Description of AugmentA"
+    type: doi
+    value: 10.1101/2022.02.13.22270835
 repository-code: https://github.com/KIT-IBT/AugmentA
 preferred-citation:
   type: article
