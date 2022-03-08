@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: AugmentA: Patient-specific Augmented Atrial model Generation Tool
+title: "AugmentA: Patient-specific Augmented Atrial model Generation Tool"
 message: "Please cite this software using the metadata from 'preferred-citation'."
 type: software
 authors:
@@ -13,7 +13,7 @@ authors:
     email: axel.loewe@kit.edu
     affiliation: Karlsruhe Institute of Technology (KIT)
     orcid: https://orcid.org/0000-0002-2487-4744
-license: "Academic Public License"
+license: APL-1.0
 identifiers:
   - description: "Description of AugmentA"
     type: doi
