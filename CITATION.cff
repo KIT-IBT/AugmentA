@@ -13,7 +13,7 @@ authors:
     email: axel.loewe@kit.edu
     affiliation: Karlsruhe Institute of Technology (KIT)
     orcid: https://orcid.org/0000-0002-2487-4744
-license: APL-1.0
+license: "Academic Public License"
 repository-code: https://github.com/KIT-IBT/AugmentA
 preferred-citation:
   type: article
