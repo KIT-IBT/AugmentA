@@ -19,7 +19,6 @@ preferred-citation:
   type: article
   title: "AugmentA: Patient-specific Augmented Atrial model Generation Tool" 
   authors:
-  Martin Eichenlaub, Claudia Nagel, Deborah Nairn, Jorge Sánchez, Laura Unger, Olaf Dössel, Amir Jadidi
     - family-names: Azzolin
       given-names: Luca
     - family-names: Eichenlaub
