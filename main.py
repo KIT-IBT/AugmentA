@@ -30,6 +30,7 @@ EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
 import sys
 import os
+import shutil
 import argparse
 from pipeline import AugmentA
 
@@ -111,6 +112,20 @@ def parser():
 def run():
 
     args = parser().parse_args()
+    # delete all files and subfolders with the mesh prefix to avoid that previously generated bridges/surfaces are accidently used in the pipeline
+    
+    mesh_basename = args.mesh.split('.')[0].split('/')[-1]
+    # list all folders
+    folderlist = [ f for f in os.listdir(os.path.abspath('')+'/mesh') if not '.' in f and f.startswith(mesh_basename)]
+    # list all files
+    filelist = [ f for f in os.listdir(os.path.abspath('')+'/mesh') if '.' in f and f.startswith(mesh_basename) and not f == args.mesh.split('/')[-1] and not f.endswith('.dat')]
+
+    for f in filelist:
+        os.remove(os.path.join(os.path.abspath('')+'/mesh', f))
+
+    for f in folderlist:
+        shutil.rmtree(os.path.join(os.path.abspath('')+'/mesh', f))
+
 
     # In case both atria are given process LA first and RA later
     if args.atrium == 'LA_RA':
