@@ -37,6 +37,8 @@ import pymesh
 import pymeshlab
 import pickle
 from numpy.linalg import norm
+import pymeshfix
+
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -90,13 +92,14 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     # Find middle and upper posterior bridges points
     
     loc = vtk.vtkPointLocator()
-    loc.SetDataSet(ra_septum)
+    loc.SetDataSet(ra_epi_surface)
     loc.BuildLocator()
-    point_septum_SVC = ra_septum.GetPoint(loc.FindClosestPoint(SVC_p))
-    point_septum_IVC = ra_septum.GetPoint(loc.FindClosestPoint(IVC_p))
+    point_septum_SVC_id = loc.FindClosestPoint(SVC_p)
+    point_septum_IVC_id = loc.FindClosestPoint(IVC_p)
     
-    SVC_IVC_septum_path = Method.dijkstra_path_coord(ra_epi_surface, point_septum_SVC, point_septum_IVC)
-    
+
+    SVC_IVC_septum_path = Method.dijkstra_path(ra_epi_surface, point_septum_SVC_id, point_septum_IVC_id)
+
     middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.6),:]
     
     upper_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.4),:]
@@ -452,10 +455,45 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         
         ms = pymeshlab.MeshSet()
         ms.load_new_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-        ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4*args.scale, adaptive=True)
-        ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_union.obj",\
-        save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
-    
+        ms.remeshing_isotropic_explicit_remeshing(iterations=10, targetlen=0.4*args.scale, adaptive=True)
+        # ms.apply_filter("select_self_intersecting_faces")
+        # ms.delete_selected_faces()
+        ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_union.obj",save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
+        
+        subprocess.run(["meshtool", 
+                        "convert", 
+                        "-ifmt=obj",
+                        "-ofmt=vtk",
+                        "-imsh="+job.ID+"/bridges/"+str(var)+"_union",
+                        "-omsh="+job.ID+"/bridges/"+str(var)+"_union"])
+
+        reader = vtk.vtkUnstructuredGridReader()
+        reader.SetFileName(job.ID+"/bridges/"+str(var)+"_union.vtk")
+        reader.Update() 
+        bridge_current = reader.GetOutput()
+
+        geo_filter = vtk.vtkGeometryFilter()
+        geo_filter.SetInputData(bridge_current)
+        geo_filter.Update()
+        bridge_current_poly = geo_filter.GetOutput()
+
+        cleaner = vtk.vtkCleanPolyData()
+        cleaner.SetInputData(bridge_current_poly)
+        cleaner.SetAbsoluteTolerance(0.2)
+        cleaner.SetToleranceIsAbsolute(1)
+        cleaner.Update()
+        bridge_clean = cleaner.GetOutput()
+
+        writer = vtk.vtkSTLWriter()
+        writer.SetFileName(job.ID+"/bridges/"+str(var)+"_union.stl")
+        writer.SetInputData(bridge_clean)
+        writer.Write()
+
+        tin = pymeshfix.PyTMesh()
+        tin.load_file(job.ID+"/bridges/"+str(var)+"_union.stl")
+        tin.clean(max_iters=10, inner_loops=3)
+        tin.save_file(job.ID+"/bridges/"+str(var)+"_union.obj")
+
         if args.mesh_type == "vol":
             subprocess.run(["meshtool", 
                         "generate", 
@@ -470,6 +508,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
             reader.SetFileName(job.ID+"/bridges/"+str(var)+"_union_mesh.vtk")
             reader.Update()
             bridge_union = reader.GetOutput()
+
         elif args.mesh_type == "bilayer":
 
             reader = vtk.vtkOBJReader()
