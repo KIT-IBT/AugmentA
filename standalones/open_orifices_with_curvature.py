@@ -44,7 +44,7 @@ import pyvista as pv
 import collections
 pv.set_plot_theme('dark')
 
-sys.path.append('Atrial_LDRBM/Generate_Boundaries')
+sys.path.append('../Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import label_atrial_orifices
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -125,6 +125,12 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     model = model.VTKObject
 
+    if debug:
+        writer = vtk.vtkPolyDataWriter()
+        writer.SetFileName("{}/{}_clean_with_curv.vtk".format(full_path, atrium))
+        writer.SetInputData(model)
+        writer.Write()
+
     apex = None
     if not MRI:
 
@@ -171,8 +177,11 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         model = cleaner.GetOutput()
 
     else:
-        valve = vtk_thr(model,0,"POINTS","valve",0.5)
+        valve = vtk_thr(model,0,"POINTS","curv",0.05)
         valve = extract_largest_region(valve)
+
+        if debug and atrium =='RA':
+            writer_vtk(valve, "{}/{}_clean_with_curv_".format(full_path, atrium) + "valve.vtk")
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
         centerOfMassFilter.SetInputData(valve)
@@ -611,6 +620,26 @@ def point_array_mapper(mesh1, mesh2, idat):
         meshNew.PointData.append(data2, idat)
     
     return meshNew.VTKObject
+
+def create_pts(array_points,array_name,mesh_dir):
+    f = open("{}{}.pts".format(mesh_dir,array_name), "w")
+    f.write("0 0 0\n")
+    for i in range(len(array_points)):
+        f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
+    f.close()
+
+def to_polydata(mesh):
+    geo_filter = vtk.vtkGeometryFilter()
+    geo_filter.SetInputData(mesh)
+    geo_filter.Update()
+    polydata = geo_filter.GetOutput()
+    return polydata
+
+def writer_vtk(mesh,filename):
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(filename)
+    writer.SetInputData(to_polydata(mesh))
+    writer.Write()
 
 if __name__ == '__main__':
     run()

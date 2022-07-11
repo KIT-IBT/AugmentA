@@ -62,7 +62,7 @@ def ra_generate_fiber(model, args, job):
         
     # Riunet
     tao_tv = 0.9
-    tao_icv = 0.95
+    tao_icv = 0.95 #0.05 # dk01 biatrial fit_both
     tao_scv = 0.10
     tao_ct_plus = -0.10
     tao_ct_minus = -0.13
@@ -216,6 +216,7 @@ def ra_generate_fiber(model, args, job):
 
     no_TV_s = extract.GetOutput()
 
+    # To check if TV was correctly identified
     if args.debug:
         Method.writer_vtk(TV_s, '{}_surf/'.format(args.mesh) + "tv_s.vtk")
         Method.writer_vtk(no_TV_s, '{}_surf/'.format(args.mesh) + "no_tv_s.vtk")
@@ -226,27 +227,27 @@ def ra_generate_fiber(model, args, job):
     
     k[TV_ids] = r_grad[TV_ids]
 
-    tao_icv = 0.05 # dk01 biatrial fit_both
 
-    IVC_s = Method.vtk_thr(no_TV_s, 1,"CELLS","phie_v",tao_icv) # Changed 0-1 because ICV and SVC are inverted
-    no_IVC_s = Method.vtk_thr(no_TV_s, 0,"CELLS","phie_v",tao_icv) #Changed 1-0
+    IVC_s = Method.vtk_thr(no_TV_s, 0,"CELLS","phie_v",tao_icv) # Changed 0-1 because ICV and SVC are inverted
+    no_IVC_s = Method.vtk_thr(no_TV_s, 1,"CELLS","phie_v",tao_icv) #Changed 1-0
 
     IVC_s = Method.extract_largest_region(IVC_s) # Added
 
-    if args.debug:
-        Method.writer_vtk(IVC_s, '{}_surf/'.format(args.mesh) + "ivc_s.vtk")
-        Method.writer_vtk(no_IVC_s, '{}_surf/'.format(args.mesh) + "no_ivc_s.vtk")
 
     max_phie_r_ivc = np.max(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r')))
 
-    RAW_s = Method.vtk_thr(no_TV_s, 1,"CELLS","phie_r", max_phie_r_ivc+0.03) # Changed +0.03
-    
-    tao_scv = 0.95 #dk01 biatrial fit_both
+    RAW_s = Method.vtk_thr(no_TV_s, 1,"CELLS","phie_r", max_phie_r_ivc) # Added +0.03 fro dk01
 
-    SVC_s = Method.vtk_thr(RAW_s, 0,"CELLS","phie_v",tao_scv) # Changed 1->0
-    no_SVC_s = Method.vtk_thr(RAW_s, 1,"CELLS","phie_v",tao_scv) #Changed 0->1
+    SVC_s = Method.vtk_thr(RAW_s, 1,"CELLS","phie_v",tao_scv) # Changed 1->0
+    no_SVC_s = Method.vtk_thr(RAW_s, 0,"CELLS","phie_v",tao_scv) #Changed 0->1
     
     SVC_s = Method.extract_largest_region(SVC_s)
+
+    if args.debug:  # CHECK
+        Method.writer_vtk(IVC_s, '{}_surf/'.format(args.mesh) + "ivc_s.vtk")
+        Method.writer_vtk(no_IVC_s, '{}_surf/'.format(args.mesh) + "no_ivc_s.vtk")
+        Method.writer_vtk(SVC_s, '{}_surf/'.format(args.mesh) + "svc_s.vtk")
+        Method.writer_vtk(no_SVC_s, '{}_surf/'.format(args.mesh) + "no_svc_s.vtk")
     
     tao_ct_plus = np.min(vtk.util.numpy_support.vtk_to_numpy(SVC_s.GetCellData().GetArray('phie_w')))
     
@@ -258,10 +259,10 @@ def ra_generate_fiber(model, args, job):
     
     IVC_SEPT_CT_pt = IVC_s.GetPoint(np.argmax(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetPointData().GetArray('phie_w'))))
     
-    IVC_max_r_CT_pt = IVC_s.GetPoint(np.argmax(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetPointData().GetArray('phie_r'))))
+    IVC_max_r_CT_pt = IVC_s.GetPoint(np.argmax(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetPointData().GetArray('phie_r')))) # not always the best choice for pm1
 
-    thr_min = 0.150038
-    thr_max = 0.38518
+    #thr_min = 0.150038
+    #thr_max = 0.38518
 
     #CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", thr_min, thr_max) # dk01 fit_both
     CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_minus-0.01, tao_ct_plus) # grad_w
@@ -271,8 +272,6 @@ def ra_generate_fiber(model, args, job):
     CT_ub = Method.extract_largest_region(CT_ub)
 
     if args.debug:
-        Method.writer_vtk(SVC_s, '{}_surf/'.format(args.mesh) + "svc_s.vtk")
-        Method.writer_vtk(no_SVC_s, '{}_surf/'.format(args.mesh) + "no_svc_s.vtk")
         Method.writer_vtk(RAW_s, '{}_surf/'.format(args.mesh) + "raw_s.vtk")
         Method.writer_vtk(CT_band, '{}_surf/'.format(args.mesh) + "ct_band.vtk")
         Method.writer_vtk(CT_ub, '{}_surf/'.format(args.mesh) + "ct_ub.vtk")
@@ -313,6 +312,8 @@ def ra_generate_fiber(model, args, job):
     extract.Update()
     
     CT_band = extract.GetOutput()
+
+    #IVC_max_r_CT_pt = CT_band.GetPoint(np.argmax(vtk.util.numpy_support.vtk_to_numpy(CT_band.GetPointData().GetArray('phie_r'))))  # optional choice for pm, be careful as it overwrites
 
     if args.debug:
         Method.writer_vtk(CT_band, '{}_surf/'.format(args.mesh) + "ct_band_2.vtk")
@@ -375,7 +376,7 @@ def ra_generate_fiber(model, args, job):
     
     CT_plus = Method.vtk_thr(RAW_s, 0,"CELLS","phie_w", tao_ct_plus)
     
-    RAW_S = Method.vtk_thr(CT_plus, 2,"CELLS","phie_v",  tao_icv, tao_scv) # IB_S grad_v #  Changed order
+    RAW_S = Method.vtk_thr(CT_plus, 2,"CELLS","phie_v",  tao_scv, tao_icv) # IB_S grad_v Changed order tao_scv, tao_icv
     
     RAW_S_ids = vtk.util.numpy_support.vtk_to_numpy(RAW_S.GetCellData().GetArray('Global_ids'))
     
@@ -406,7 +407,7 @@ def ra_generate_fiber(model, args, job):
     
     #normalize norm
     n = np.linalg.norm(norm)
-    norm_1 = -norm/n # Changed
+    norm_1 = norm/n # Changed sign
 
     plane = vtk.vtkPlane()
     plane.SetNormal(norm_1[0], norm_1[1], norm_1[2]) # changed
@@ -474,6 +475,9 @@ def ra_generate_fiber(model, args, job):
     meshExtractFilter.SetImplicitFunction(plane)
     meshExtractFilter.Update()
     septal_surf = meshExtractFilter.GetOutput()
+
+    if args.debug:
+        Method.writer_vtk(septal_surf, '{}_surf/'.format(args.mesh) + "septal_surf_2.vtk")
     
     CS_ids = vtk.util.numpy_support.vtk_to_numpy(septal_surf.GetCellData().GetArray('Global_ids'))
 
@@ -485,7 +489,6 @@ def ra_generate_fiber(model, args, job):
     CS_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4*args.scale)
     
     tag[CS_ids] = coronary_sinus
-    
     k[CS_ids] = ab_grad[CS_ids]
     
     #tag = Method.assign_ra_appendage(model, SVC_s, np.array(df["RAA"]), tag, right_atrial_appendage_epi)
@@ -493,7 +496,7 @@ def ra_generate_fiber(model, args, job):
 
     if args.debug:
         Method.writer_vtk(RAS_low, '{}_surf/'.format(args.mesh) + "ras_low.vtk")
-        Method.writer_vtk(RAA_s, '{}_surf/'.format(args.mesh) + "raa_s.vtk")
+        Method.writer_vtk(RAA_s, '{}_surf/'.format(args.mesh) + "raa_s.vtk") # Check here if RAA is correctly tagged
         Method.writer_vtk(RAW_low, '{}_surf/'.format(args.mesh) + "raw_low.vtk")
 
     
@@ -880,6 +883,9 @@ def ra_generate_fiber(model, args, job):
     cln.SetInputData(TV_lat)
     cln.Update()
     TV_lat = cln.GetOutput()
+
+    if args.debug:
+        Method.writer_vtk(TV_lat, '{}_surf/'.format(args.mesh) + "TV_lat.vtk")
     
     # writer = vtk.vtkPolyDataWriter()
     # writer.SetFileName("TV_lat.vtk")
@@ -889,6 +895,9 @@ def ra_generate_fiber(model, args, job):
     ct_points_data = Method.dijkstra_path(CT, point1_id, point2_id)
     
     # np.savetxt("ct_points_data.txt", ct_points_data, fmt='%.4f')
+
+    if args.debug:
+        Method.create_pts(ct_points_data, 'ct_points_data', '{}_surf/'.format(args.mesh))
     
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(TV_lat)
@@ -898,6 +907,9 @@ def ra_generate_fiber(model, args, job):
     point4_id = loc.FindClosestPoint(TV_s.GetPoint(point4_id))  # this is also the id for Bachmann-Bundle on the right atrium
     
     tv_points_data = Method.dijkstra_path(TV_lat, point3_id, point4_id)
+
+    if args.debug:
+        Method.create_pts(tv_points_data, 'tv_points_data', '{}_surf/'.format(args.mesh))
     # np.savetxt("tv_points_data.txt", tv_points_data, fmt='%.4f')
     
     # np.savetxt("point3_id_new.txt", TV_lat.GetPoint(point3_id), fmt='%.4f')
@@ -1132,13 +1144,18 @@ def ra_generate_fiber(model, args, job):
     # the first PM is the one to the appendage
     #pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
     loc = vtk.vtkPointLocator()
+
     loc.SetDataSet(surface)
     loc.BuildLocator()
     RAA_CT_id = loc.FindClosestPoint(RAA_CT_pt)
 
     # Pectinate muscle going from the septum spurius to the RAA apex
     pm = Method.dijkstra_path(surface, RAA_CT_id, point_apx_id)
+
     pm = Method.downsample_path(pm, int(len(pm)*0.1))
+    if args.debug:
+        Method.create_pts(pm, 'pm_0_downsampled', '{}_surf/'.format(args.mesh))
+
 
     if args.mesh_type == "bilayer":
     
@@ -1162,14 +1179,21 @@ def ra_generate_fiber(model, args, job):
 
         el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
 
-    for i in range(pm_num):
+    for i in range(4,pm_num-1): # skip the first 3 pm as they will be in the IVC side
         pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
         pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
         pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
+
         #skip first 3% of the points since they will be on the roof of the RA
-        pm = pm[int(len(pm)*0.03):,:]
+        pm = pm[int(len(pm)*0.03):,:] #
+
 
         pm = Method.downsample_path(pm, int(len(pm)*0.065))
+
+        if args.debug:
+            Method.create_pts(pm, 'pm_'+ str(i+1) +'_downsampled', '{}_surf/'.format(args.mesh))
+
+
         print("The ", i + 1, "th pm done")
         if args.mesh_type == "bilayer":
 
@@ -1243,6 +1267,7 @@ def ra_generate_fiber(model, args, job):
         endo = meshNew.VTKObject
         
         writer = vtk.vtkUnstructuredGridWriter()
+
         if args.ofmt == 'vtk':
             writer = vtk.vtkUnstructuredGridWriter()
             writer.SetFileName(job.ID+"/result_RA/RA_endo_with_fiber.vtk")
@@ -1345,7 +1370,7 @@ def ra_generate_fiber(model, args, job):
     
     bachmann_bundle_points_data = np.concatenate((bachmann_bundle_points_data_1, bachmann_bundle_points_data_2), axis=0)
     
-    np.savetxt('bb.txt',bachmann_bundle_points_data,fmt='%.5f')
+    np.savetxt('bb.txt',bachmann_bundle_points_data,fmt='%.5f') # Change directory
 
     bb_step = int(len(bachmann_bundle_points_data)*0.1)
     bb_path = np.asarray([bachmann_bundle_points_data[i] for i in range(len(bachmann_bundle_points_data)) if i % bb_step == 0 or i == len(bachmann_bundle_points_data)-1])
@@ -1382,6 +1407,7 @@ def ra_generate_fiber(model, args, job):
     meshNew.CellData.append(el, "fiber")
     meshNew.CellData.append(sheet, "sheet")
     writer = vtk.vtkUnstructuredGridWriter()
+
     if args.mesh_type == "bilayer":
         if args.ofmt == 'vtk':
             writer = vtk.vtkUnstructuredGridWriter()

@@ -70,6 +70,7 @@ def ra_calculate_gradient(args, model, job):
 
     output = vtk.vtkUnstructuredGrid()
     output.DeepCopy(RA_gradient)
+
     if args.debug == 1:
         # write
         simid = job.ID+"/gradient"

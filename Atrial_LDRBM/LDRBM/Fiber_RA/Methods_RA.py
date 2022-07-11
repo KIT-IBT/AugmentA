@@ -107,21 +107,21 @@ def move_surf_along_normals(mesh, eps, direction):
     
     return mesh
     
-def generate_bilayer(endo, epi, max_dist=np.inf):
+def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     
     extract_surf = vtk.vtkGeometryFilter()
     extract_surf.SetInputData(endo)
     extract_surf.Update()
     
-    # reverse = vtk.vtkReverseSense()
-    # reverse.ReverseCellsOn()
-    # reverse.ReverseNormalsOn()
-    # reverse.SetInputConnection(extract_surf.GetOutputPort())
-    # reverse.Update()
+    reverse = vtk.vtkReverseSense()
+    reverse.ReverseCellsOn()
+    reverse.ReverseNormalsOn()
+    reverse.SetInputConnection(extract_surf.GetOutputPort())
+    reverse.Update()
     
     endo = vtk.vtkUnstructuredGrid()
-    #endo.DeepCopy(reverse.GetOutput())
-    endo.DeepCopy(extract_surf.GetOutputPort())
+    endo.DeepCopy(reverse.GetOutput())
+    #endo.DeepCopy(extract_surf.GetOutputPort())
             
     endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
     epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
@@ -158,32 +158,63 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
     fibers = np.zeros((len(endo_ids),3),dtype="float32")
     fibers[:,1] = 1
     meshNew.CellData.append(fibers, "sheet")
-    
+    bilayer_1=meshNew.VTKObject
+
+    if args.debug:
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName(job.ID + "/result_RA/test_LA_RA_bilayer.vtu") # Has three arrays :)
+        #writer.SetFileTypeToBinary() # 'vtkmodules.vtkIOXML.vtkXMLUnstructuredGridWriter' object has no attribute 'SetFileTypeToBinary'
+        writer.SetInputData(bilayer_1)
+        writer.Write()
+
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/result_RA/test_LA_RA_bilayer.vtu")  #
+    reader.Update()
+    test = reader.GetOutput()
+
     appendFilter = vtk.vtkAppendFilter()
     appendFilter.AddInputData(endo)
     appendFilter.AddInputData(epi)
-    appendFilter.AddInputData(meshNew.VTKObject)
+    appendFilter.AddInputData(test)
     appendFilter.MergePointsOn()
     appendFilter.Update()
     
     bilayer = appendFilter.GetOutput()
 
-    args.ofmt = 'vtk'
-    
-    return bilayer
-
-def write_bilayer(bilayer, args, job):
-    
     if args.ofmt == 'vtk':
         writer = vtk.vtkUnstructuredGridWriter()
         writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtk")
         writer.SetFileTypeToBinary()
     else:
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtu")
+        writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtu") # Has elemTag! :)
     writer.SetInputData(bilayer)
     writer.Write()
+
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  # Has elemTag! :)
+    reader.Update()
+    bilayer = reader.GetOutput()
+
+    return bilayer
+
+def write_bilayer( args, job):
     
+    # if args.ofmt == 'vtk':
+    #     writer = vtk.vtkUnstructuredGridWriter()
+    #     writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtk")
+    #     writer.SetFileTypeToBinary()
+    # else:
+    #     writer = vtk.vtkXMLUnstructuredGridWriter()
+    #     writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtu")
+    # writer.SetInputData(bilayer)
+    # writer.Write()
+
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  #
+    reader.Update()
+    bilayer = reader.GetOutput()
+
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
     with open(job.ID+'/result_RA/LA_RA_bilayer_with_fiber.pts',"w") as f:
         f.write("{}\n".format(len(pts)))
@@ -479,11 +510,16 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     cln.SetInputData(geo_filter.GetOutput())
     cln.Update()
     band = cln.GetOutput()
+
+    if args.debug:
+        writer_vtk(band, '{}_surf/'.format(args.mesh) + "band_"+ str(StartVertex)+ "_" + str(EndVertex) + ".vtk")
+
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(band)
     loc.BuildLocator()
     StartVertex = loc.FindClosestPoint(point_start)
     EndVertex = loc.FindClosestPoint(point_end)
+
 
     points_data = dijkstra_path(band, StartVertex, EndVertex)
     return points_data

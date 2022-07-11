@@ -27,12 +27,15 @@ under the License.
 import os
 import numpy as np
 import vtk
+import pandas as pd
 from vtk.util import numpy_support
 import subprocess as sp
 import datetime
 from carputils import tools
 from ra_laplace import ra_laplace
 from ra_generate_fiber import ra_generate_fiber
+import Methods_RA as Method
+from create_bridges import add_free_bridge
 
 def parser():
     # Generate the standard command line parser
@@ -71,6 +74,14 @@ def parser():
                     type=int,
                     default=1,
                     help='set to 1 to compute and add interatrial bridges, 0 otherwise')
+    parser.add_argument('--just_bridges',
+                        type=int,
+                        default=0,
+                        help='set to 1 to only check bridges')
+    parser.add_argument('--laplace',
+                        type=int,
+                        default=1,
+                        help='set to 1 to run laplace solutions')
 
     return parser
 
@@ -90,16 +101,16 @@ def run(args, job):
     reader.SetFileName(RA_mesh+'.vtk')
     reader.Update()
     RA = reader.GetOutput()
-
+    
     if args.normals_outside:
         reverse = vtk.vtkReverseSense()
         reverse.ReverseCellsOn()
         reverse.ReverseNormalsOn()
         reverse.SetInputConnection(reader.GetOutputPort())
         reverse.Update()
-
+    
         RA = reverse.GetOutput()
-
+    
     pts = numpy_support.vtk_to_numpy(RA.GetPoints().GetData())
     # cells = numpy_support.vtk_to_numpy(RA.GetPolys().GetData())
     # cells = cells.reshape(int(len(cells)/4),4)[:,1:]
@@ -128,17 +139,31 @@ def run(args, job):
         f.write("2\n")
         for i in range(len(fibers)):
             f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3],fibers[i][4],fibers[i][5]))
-            
+    
     start_time = datetime.datetime.now()
-    print('[Step 1] Solving laplace-ddirichlet... ' + str(start_time))
-    output_laplace = ra_laplace(args, job, RA)
+    print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
+    if args.laplace:
+        output_laplace = ra_laplace(args, job, RA)
+    else:
+        output_laplace = Method.smart_reader(job.ID + "/gradient/RA_with_lp_res_gradient.vtu")
+        print("Reading Laplace: " + job.ID + "/gradient/RA_with_lp_res_gradient.vtu")
+
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
-    print('[Step 1] Solving laplace-ddirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
-
+    print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    
     start_time = datetime.datetime.now()
     print('[Step 2] Generating fibers... ' + str(start_time))
+
     ra_generate_fiber(output_laplace, args, job)
+
+    if args.just_bridges:
+        la_epi = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
+        model = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
+        df = pd.read_csv(args.mesh + "_surf/rings_centroids.csv")
+        CS_p = np.array(df["CS"])
+        add_free_bridge(args, la_epi, model, CS_p, df, job)
+
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
     print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')

@@ -44,7 +44,7 @@ import pyvista as pv
 import collections
 pv.set_plot_theme('dark')
 
-sys.path.append('Atrial_LDRBM/Generate_Boundaries')
+sys.path.append('../Atrial_LDRBM/Generate_Boundaries')
 import extract_rings
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]

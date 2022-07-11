@@ -70,6 +70,10 @@ def parser():
                         type=str,
                         default="",
                         help='RAA basis point index, leave empty if no RA')
+    parser.add_argument('--debug',
+                        type=int,
+                        default=0,
+                        help='Set to 1 for debbuging the code')
     return parser
 
 def smart_reader(path):
@@ -101,7 +105,7 @@ def smart_reader(path):
 
     return output
 
-def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_id=""):
+def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_id="", debug=0):
 
     """Extrating Rings"""
     print('Extracting rings...')
@@ -233,7 +237,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
         b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
-        cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir)
+        cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir,debug)
 
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
@@ -278,7 +282,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         b_tag, centroids, RA_rings  = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
-        cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir)
+        cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir,debug)
 
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
@@ -292,7 +296,7 @@ def run():
 
     args = parser().parse_args()
 
-    label_atrial_orifices(args.mesh, args.LAA, args.RAA, args.LAA_base, args.RAA_base)
+    label_atrial_orifices(args.mesh, args.LAA, args.RAA, args.LAA_base, args.RAA_base, args.debug)
     
 def detect_and_mark_rings(surf, ap_point):
     
@@ -454,6 +458,7 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
     return b_tag, centroids
 
 def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
+    # It can happen that the TV is not the biggest ring!
     rings[np.argmax([r.np for r in rings])].name = "TV"
     other = [i for i in range(len(rings)) if rings[i].name!="TV"]
     
@@ -507,12 +512,6 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
     
     return b_tag, centroids, rings
 
-def vtkWrite(input_data, name):
-    
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetInputData(input_data)
-    writer.SetFileName(name)
-    writer.Write()
 
 def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
     LPVs_c = np.array([r.center for r in [rings[i] for i in LPVs]])
@@ -692,7 +691,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     f.close()
     
 
-def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
+def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir,debug):
     
     for r in rings:
         if r.name == "TV":
@@ -732,6 +731,9 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     geo_filter.SetInputData(meshExtractFilter.GetOutput())
     geo_filter.Update()
     surface = geo_filter.GetOutput()
+
+    if debug:
+        vtkWrite(surface,outdir+'/cutted_RA.vtk')
     
     """
     here we will extract the feature edge 
@@ -745,6 +747,13 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     boundaryEdges.Update()
     
     gamma_top = boundaryEdges.GetOutput()
+
+    if debug:
+        geo_filter = vtk.vtkGeometryFilter()
+        geo_filter.SetInputData(gamma_top)
+        geo_filter.Update()
+        surface = geo_filter.GetOutput()
+        vtkWrite(surface, outdir+'/gamma_top.vtk')
     
     """
     separate the tv into tv tv-f and tv-f
@@ -809,7 +818,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     svc_points = svc.GetPoints().GetData()
     svc_points = vtk.util.numpy_support.vtk_to_numpy(svc_points)
     
-    ivc_points = svc.GetPoints().GetData()
+    ivc_points = svc.GetPoints().GetData() # Changed
     ivc_points = vtk.util.numpy_support.vtk_to_numpy(ivc_points)
     
     connect = vtk.vtkConnectivityFilter()
@@ -817,10 +826,15 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     connect.SetExtractionModeToSpecifiedRegions()
     connect.Update()
     num = connect.GetNumberOfExtractedRegions()
+
     for i in range(num):
         connect.AddSpecifiedRegion(i)
         connect.Update()
         surface = connect.GetOutput()
+
+        if debug:
+            vtkWrite(surface, outdir + '/gamma_top_{}.vtk'.format(str(i)))
+
         # Clean unused points
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
@@ -829,6 +843,9 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
         points = surface.GetPoints().GetData()
         points = vtk.util.numpy_support.vtk_to_numpy(points)
         points = points.tolist()
+
+        if debug:
+            create_pts(points,'/border_points_{}'.format(str(i)),outdir)
     
         in_ivc = False
         in_svc = False
@@ -843,6 +860,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
                 top_endo_id = i
                 break
             else:
+                #top_endo_id = i
                 break
     
         # delete added region id
@@ -852,13 +870,16 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     connect.AddSpecifiedRegion(top_endo_id)
     connect.Update()
     surface = connect.GetOutput()
-    
+
     # Clean unused points
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
     cln.Update()
     
     top_cut = cln.GetOutput()
+
+    if debug:
+        vtkWrite(top_cut, outdir + '/top_endo_epi.vtk')
     
     pts_in_top = vtk.util.numpy_support.vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))
     pts_in_svc = vtk.util.numpy_support.vtk_to_numpy(svc.GetPointData().GetArray("Ids"))
@@ -889,6 +910,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     connect.SetInputData(geo_filter.GetOutput())
     connect.SetExtractionModeToSpecifiedRegions()
     connect.Update()
+
     num = connect.GetNumberOfExtractedRegions()
     
     for i in range(num):
@@ -928,6 +950,27 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir):
     for i in top_endo:
         f.write('{}\n'.format(i))
     f.close()
+
+def create_pts(array_points,array_name,mesh_dir):
+    f = open("{}{}.pts".format(mesh_dir,array_name), "w")
+    f.write("0 0 0\n")
+    for i in range(len(array_points)):
+        f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
+    f.close()
+
+
+def to_polydata(mesh):
+    geo_filter = vtk.vtkGeometryFilter()
+    geo_filter.SetInputData(mesh)
+    geo_filter.Update()
+    polydata = geo_filter.GetOutput()
+    return polydata
+
+def vtkWrite(input_data, name):
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetInputData(input_data)
+    writer.SetFileName(name)
+    writer.Write()
 
 if __name__ == '__main__':
     run()
