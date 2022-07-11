@@ -20,8 +20,9 @@ Create a python virtual environment to install the current requirements after in
 python -m venv ~/myEnv
 source ~/myEnv/bin/activate
 pip install -r requirements.txt
-
 ```
+Install [PyMesh](https://pymesh.readthedocs.io/en/latest/installation.html)
+
 Go to the carputils folder and re-install carputils' requirements (assuming that carputils was installed in the home folder):
 ```
 cd ~/carputils
@@ -52,9 +53,17 @@ python main.py --mesh mesh/mwk05_bi.vtp --closed_surface 1 --use_curvature_to_op
 - Fiber_RA: PMs (check step in function Method.downsample_path in ra_generate_fiber.py), bridges (boolean operations and normal directions of original mesh)
 - If facing problems with PyMesh install it from https://github.com/PyMesh/PyMesh and follow the instructions
 
+## Citation
+When using this work, please cite
+> *AugmentA: Patient-specific Augmented Atrial model Generation Tool*
+>
+> Luca Azzolin, Martin Eichenlaub, Claudia Nagel, Deborah Nairn, Jorge Sánchez, Laura Unger, Olaf Dössel, Amir Jadidi, Axel Loewe
+> [doi:10.1101/2022.02.13.22270835](https://doi.org/10.1101/2022.02.13.22270835)
+
+
 ## License
 
-All source code is subject to the terms of the Apache License 2.0.  
+All source code is subject to the terms of the Academic Public License.
 Copyright 2021 Luca Azzolin, Karlsruhe Institute of Technology.
 
 ## Contact

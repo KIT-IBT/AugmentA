@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+title: "AugmentA: Patient-specific Augmented Atrial model Generation Tool"
+message: "Please cite this software using the metadata from 'preferred-citation'."
+type: software
+authors:
+  - given-names: Luca
+    family-names: Azzolin
+    email: luca.azzolin@kit.edu
+    affiliation: Karlsruhe Institute of Technology (KIT)
+    orcid: https://orcid.org/0000-0002-2919-4617
+  - given-names: Axel
+    family-names: Loewe
+    email: axel.loewe@kit.edu
+    affiliation: Karlsruhe Institute of Technology (KIT)
+    orcid: https://orcid.org/0000-0002-2487-4744
+license: APL-1.0
+identifiers:
+  - description: "Description of AugmentA"
+    type: doi
+    value: 10.1101/2022.02.13.22270835
+repository-code: https://github.com/KIT-IBT/AugmentA
+preferred-citation:
+  type: article
+  title: "AugmentA: Patient-specific Augmented Atrial model Generation Tool" 
+  authors:
+    - family-names: Azzolin
+      given-names: Luca
+    - family-names: Eichenlaub
+      given-names: Martin
+    - family-names: Nagel
+      given-names: Claudia
+    - family-names: Nairn
+      given-names: Deborah
+    - family-names: Sánchez
+      given-names: Jorge
+    - family-names: Unger
+      given-names: Laura
+    - family-names: Dössel
+      given-names: Olaf 
+    - family-names: Jadidi
+      given-names: Amir
+    - family-names: Loewe
+      given-names: Axel
+  doi: 10.1101/2022.02.13.22270835
+  journal: "medRxiv preprint"
+  year: 2022
