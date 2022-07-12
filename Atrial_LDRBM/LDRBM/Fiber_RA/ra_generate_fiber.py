@@ -1352,13 +1352,13 @@ def ra_generate_fiber(model, args, job):
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(RAS_S)
     loc.BuildLocator()
-    
+        
     bb_c_id = loc.FindClosestPoint((np.array(df["TV"])+np.array(df["SVC"]))/2)
-    
+        
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(surface)
     loc.BuildLocator()
-    
+        
     # Bachmann-Bundle starting point
     bb_1_id = loc.FindClosestPoint(SVC_CT_pt)
     bb_2_id = loc.FindClosestPoint(TV_lat.GetPoint(point4_id))
@@ -1385,20 +1385,20 @@ def ra_generate_fiber(model, args, job):
     functionSource.SetParametricFunction(spline)
     functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
     functionSource.Update()
-    
+        
     bb_points = vtk.util.numpy_support.vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
-    
+        
     tag = Method.assign_element_tag_around_path_within_radius(model, bb_points, w_bb, tag, bachmann_bundel_right)
     el = Method.assign_element_fiber_around_path_within_radius(model, bb_points, w_bb, el, smooth=True)
-    
+        
     tag[SN_ids] = sinus_node
-    
+        
     for i in range(model.GetPointData().GetNumberOfArrays()-1, -1, -1):
         model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
-    
+        
     for i in range(model.GetCellData().GetNumberOfArrays()-1, -1, -1):
         model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
-    
+        
     el = np.where(el == [0,0,0], [1,0,0], el).astype("float32")
     sheet = np.cross(el, et)
     sheet = np.where(sheet == [0,0,0], [1,0,0], sheet).astype("float32")
@@ -1407,7 +1407,7 @@ def ra_generate_fiber(model, args, job):
     meshNew.CellData.append(el, "fiber")
     meshNew.CellData.append(sheet, "sheet")
     writer = vtk.vtkUnstructuredGridWriter()
-
+    
     if args.mesh_type == "bilayer":
         if args.ofmt == 'vtk':
             writer = vtk.vtkUnstructuredGridWriter()
@@ -1433,14 +1433,12 @@ def ra_generate_fiber(model, args, job):
         # Bachmann_Bundle internal connection
 
         if args.mesh_type == "bilayer":
-
             if args.ofmt == 'vtk':
                 la_epi = Method.smart_reader(job.ID+"/result_LA/LA_epi_with_fiber.vtk")
             else:
                 la_epi = Method.smart_reader(job.ID+"/result_LA/LA_epi_with_fiber.vtu")
 
         elif args.mesh_type == "vol":
-
             # extension = args.mesh.split('_RA_vol')[-1]
             meshname = args.mesh[:-7]
 
@@ -1461,12 +1459,12 @@ def ra_generate_fiber(model, args, job):
         la_appendage_basis_point = np.asarray(df["LAA_basis_inf"])
         length = len(bachmann_bundle_points_data)
         ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
-        
+            
         geo_filter_la_epi = vtk.vtkGeometryFilter()
         geo_filter_la_epi.SetInputData(la_epi)
         geo_filter_la_epi.Update()
         la_epi = geo_filter_la_epi.GetOutput()
-        
+            
         if args.mesh_type == "bilayer":
             geo_filter_ra_epi = vtk.vtkGeometryFilter()
             geo_filter_ra_epi.SetInputData(model)
@@ -1474,15 +1472,15 @@ def ra_generate_fiber(model, args, job):
             ra_epi = geo_filter_ra_epi.GetOutput()
         else:
             ra_epi = surface
-    
+        
         loc_la_epi = vtk.vtkPointLocator()
         loc_la_epi.SetDataSet(la_epi)
         loc_la_epi.BuildLocator()
-    
+        
         loc_ra_epi = vtk.vtkPointLocator()
         loc_ra_epi.SetDataSet(ra_epi)
         loc_ra_epi.BuildLocator()
-        
+            
         ra_a_id = loc_ra_epi.FindClosestPoint(ra_bb_center)
         la_c_id = loc_la_epi.FindClosestPoint(ra_bb_center)
         ra_b_id = loc_ra_epi.FindClosestPoint(la_epi.GetPoint(la_c_id))
@@ -1502,9 +1500,9 @@ def ra_generate_fiber(model, args, job):
         f = open(filename, 'wb')
         pickle.dump(path_all, f)
         f.close()
-        
+            
         # BB tube
-        
+            
         bb_tube = Method.creat_tube_around_spline(path_all, 2*args.scale)
         sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * 1.02*args.scale)
         sphere_b = Method.creat_sphere(ra_bb_center, 2 * 1.02*args.scale)
@@ -1517,7 +1515,7 @@ def ra_generate_fiber(model, args, job):
         except KeyError:
             CS_p = IVC_SEPT_CT_pt
             print("No CS found, use last CT point instead")
-        
+            
         if args.mesh_type == "bilayer":    
             add_free_bridge(args, la_epi, model, CS_p, df, job)
         elif args.mesh_type == "vol":    
