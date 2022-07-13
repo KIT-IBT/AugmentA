@@ -44,7 +44,7 @@ import pyvista as pv
 import collections
 pv.set_plot_theme('dark')
 
-sys.path.append('../Atrial_LDRBM/Generate_Boundaries')
+sys.path.append('./Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import label_atrial_orifices
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -109,6 +109,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     # Compute surface curvature
     os.system("meshtool query curvature -msh={}/{}_clean.obj -size={}".format(full_path, atrium, size*scale))
+
+    # Verify if the mesh curvature is not nan
 
     mesh_with_data = smart_reader(meshpath)
     

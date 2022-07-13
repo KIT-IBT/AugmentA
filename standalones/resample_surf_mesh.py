@@ -220,8 +220,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     
     mesh_data["surf"]=[out_dict['surface_area']]
 
-    ms.save_current_mesh('{}_res.obj'.format(meshname),\
-     save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
+    ms.save_current_mesh('{}_res.obj'.format(meshname), save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
 
     meshin = pv.read('{}_res.obj'.format(meshname))
 

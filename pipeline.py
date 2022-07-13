@@ -47,12 +47,17 @@ from getmarks import get_landmarks
 from create_SSM_instance import create_SSM_instance
 from resample_surf_mesh import resample_surf_mesh
 
+import vtk
+from vtk.util import numpy_support
+from vtk.numpy_interface import dataset_adapter as dsa
+
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 sys.path.append('Atrial_LDRBM/LDRBM/Fiber_LA')
 sys.path.append('Atrial_LDRBM/LDRBM/Fiber_RA')
 import la_main
 import ra_main
 from extract_rings import label_atrial_orifices
+from extract_rings import smart_reader
 from extract_rings_TOP_epi_endo import label_atrial_orifices_TOP_epi_endo
 from separate_epi_endo import separate_epi_endo
 from generate_mesh import generate_mesh
@@ -93,37 +98,43 @@ def AugmentA(args):
                 apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
             meshname = mesh_dir + args.atrium+"_cutted"
         else:
-            if args.SSM_fitting:
-                # Manually select the appendage apex and extract rings, these are going to be used to compute the landmarks for the fitting
-                print("Manually select the appendage apex and extract rings")
-                
-                p = pv.Plotter(notebook=False)
-                mesh_from_vtk = pv.PolyData(args.mesh)
-                p.add_mesh(mesh_from_vtk, 'r')
-                p.add_text('Select the appendage apex and close the window',position='lower_left')
-                p.enable_point_picking(mesh_from_vtk, use_mesh=True)
-                p.show()
+            # Manually select the appendage apex and extract rings, these are going to be used to compute the landmarks for the fitting if SSM is selected
+            print("Manually select the appendage apex and extract rings")
 
-                if p.picked_point is not None:
-                    apex = p.picked_point
-                else:
-                    raise ValueError("Please select the appendage apex")
-                p.close()
+            #Make sure that the mesh is a Polydata
+            geo_filter = vtk.vtkGeometryFilter()
+            geo_filter.SetInputData(smart_reader(args.mesh))
+            geo_filter.Update()
+            polydata = geo_filter.GetOutput()
 
-                tree = cKDTree(mesh_from_vtk.points.astype(np.double))
-                dd, apex_id = tree.query(apex)
+            mesh_from_vtk = pv.PolyData(polydata)
+            p = pv.Plotter(notebook=False)
+            p.add_mesh(mesh_from_vtk, 'r')
+            p.add_text('Select the appendage apex and close the window',position='lower_left')
+            p.enable_point_picking(mesh_from_vtk, use_mesh=True)
+            p.show()
 
-                LAA = ""
-                RAA = ""
-                if args.atrium == "LA":
-                    LAA = apex_id
-                elif args.atrium == "RA":
-                    RAA = apex_id
-                print("Labelling atrial orifices")
-                label_atrial_orifices(args.mesh,LAA,RAA)
+            if p.picked_point is not None:
+                apex = p.picked_point
             else:
-                # Atrial orifices already open
-                print("Atrial orifices already open")
+                raise ValueError("Please select the appendage apex")
+            p.close()
+
+
+            tree = cKDTree(mesh_from_vtk.points.astype(np.double))
+            dd, apex_id = tree.query(apex)
+
+            LAA = ""
+            RAA = ""
+            if args.atrium == "LA":
+                LAA = apex_id
+            elif args.atrium == "RA":
+                RAA = apex_id
+            print("Labelling atrial orifices")
+            label_atrial_orifices(args.mesh,LAA,RAA)
+
+            # Atrial orifices already open
+            print("Atrial orifices already open")
 
     if args.SSM_fitting and not args.closed_surface:
 
@@ -175,6 +186,12 @@ def AugmentA(args):
 
         if args.resample_input:
             print("Resample surface mesh with given target average edge length")
+            # Make sure there is an .obj mesh file
+
+            # Convert mesh from vtk to obj
+            meshin = pv.read('{}.vtk'.format(meshname))
+            pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
+
             resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id)
             processed_mesh = '{}_res'.format(meshname)
         else:

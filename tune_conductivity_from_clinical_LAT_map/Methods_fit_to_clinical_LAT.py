@@ -37,7 +37,8 @@ vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 def low_vol_LAT(args, path):
 
     # Read mesh
-    model = smart_reader('/home/kit/ibt/yx5140/meshes/Jadidi/{}/LA_bilayer_with_fiber.vtk'.format(args.mesh))
+    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber'.format(args.mesh)
+    model = smart_reader('{}.vtk'.format(meshname))
 
     bilayer_n_cells = model.GetNumberOfCells()
 

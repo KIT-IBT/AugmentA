@@ -42,7 +42,7 @@ from scipy.spatial import cKDTree
 import csv
 import random
 from vtk.numpy_interface import dataset_adapter as dsa
-import Methods_converge_to_lat
+import Methods_fit_to_clinical_LAT
 
 from sklearn.metrics import mean_squared_error
 
@@ -94,7 +94,15 @@ def parser():
                         help='LAT band steps in ms')
     parser.add_argument('--mesh',
                         type=str, default='',
-                        help='meshname')
+                        help='meshname directory. Example: ../meshes/mesh_name/mesh_name')
+    parser.add_argument('--results_dir',
+                        type=str,
+                        default='../results',
+                        help='path to results folder')
+    parser.add_argument('--init_state_dir',
+                        type=str,
+                        default='../data',
+                        help='path to initialization state folder')
     parser.add_argument('--fibrotic_tissue',
                         type=int, 
                         default=1,
@@ -131,7 +139,8 @@ def parser():
 
 def jobID(args):
     today = date.today()
-    ID = '/pfs/work7/workspace/scratch/yx5140-result-0/converge_band_{}_prebeats_{}_bcl_{}_fib_{}_max_LAT_pt_{}_voltage_{}_CV_{}_meth_{}_fib_p_{}_step_{}_thr_{}'.format(args.mesh, 
+    mesh= args.mesh.split('/')[-1]
+    ID = '{}/converge_band_{}_prebeats_{}_bcl_{}_fib_{}_max_LAT_pt_{}_voltage_{}_CV_{}_meth_{}_fib_p_{}_step_{}_thr_{}'.format(args.results_dir,mesh,
         args.prebeats, args.bcl, args.fibrotic_tissue, args.max_LAT_pt, args.low_vol_thr, args.low_CV_thr, args.meth, args.fib_perc, args.step, args.thr)
     return ID
 
@@ -239,13 +248,13 @@ def run(args, job):
 
     # p = np.poly1d([0.67278584, 0.17556362, 0.01718574])
 
-    meshname = '/home/kit/ibt/yx5140/meshes/Jadidi/{}/LA_bilayer_with_fiber'.format(args.mesh)
+    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber'.format(args.mesh)
 
-    meshfold = '/home/kit/ibt/yx5140/meshes/Jadidi/{}'.format(args.mesh)
+    meshfold = '{}'.format(args.mesh)
 
-    meshbasename = meshname.split('/')[-1]
+    meshbasename = meshname.split('/')[-4]
     
-    steady_state_dir = '/home/kit/ibt/yx5140/cell_state'
+    steady_state_dir = '{}/{}/cell_state'.format(args.init_state_dir, meshbasename)
 
     try:
         os.makedirs(steady_state_dir)
@@ -268,7 +277,7 @@ def run(args, job):
     else:
         print ("Successfully created the directory %s " % simid)
 
-    bilayer_n_cells, elements_in_fibrotic_reg, endo, endo_ids, centroids, LAT_map, min_LAT, el_to_clean, el_border, stim_pt, fit_LAT, healthy_endo = Methods_converge_to_lat.low_vol_LAT(args, meshname+'_with_data.vtk')
+    bilayer_n_cells, elements_in_fibrotic_reg, endo, endo_ids, centroids, LAT_map, min_LAT, el_to_clean, el_border, stim_pt, fit_LAT, healthy_endo = Methods_fit_to_clinical_LAT.low_vol_LAT(args, meshname+'_with_data.vtk')
     
     with open(meshfold+"/clinical_stim_pt.txt","w") as f:
         f.write("{} {} {}".format(stim_pt[0],stim_pt[1],stim_pt[2]))
