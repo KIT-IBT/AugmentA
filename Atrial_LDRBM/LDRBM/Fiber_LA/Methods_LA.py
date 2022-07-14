@@ -868,7 +868,7 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
         meshNew.PointData.append(data2, idat)
     
     writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName("{}_with_data.vtk".format(mesh2_name.split('.')[0]))
+    writer.SetFileName("{}_with_data.vtk".format(mesh2_name.split('.vtk')[0]))# It can happen that the relative directory is given
     writer.SetFileTypeToBinary()
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
