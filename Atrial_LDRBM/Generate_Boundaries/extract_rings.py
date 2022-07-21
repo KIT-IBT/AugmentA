@@ -405,6 +405,7 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
         id_vec = numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
         fname = outdir+'/ids_{}.vtx'.format(r.name)
         if os.path.exists(fname):
+            id_vec= id_vec[0:len(id_vec) - 1]
             f = open(fname, 'a')
         else:
             f = open(fname, 'w')
