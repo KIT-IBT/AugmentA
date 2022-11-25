@@ -88,7 +88,7 @@ def find_elements_around_path_within_radius(mesh, points_data, radius):
 
     return id_set
 
-def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1):
+def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1, atrium='LA'):
 
     mesh_data = dict()
 
@@ -219,10 +219,10 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         it += 1
     
     mesh_data["surf"]=[out_dict['surface_area']]
+    # Better to save as .ply
+    ms.save_current_mesh('{}_res.ply'.format(meshname), save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
 
-    ms.save_current_mesh('{}_res.obj'.format(meshname), save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
-
-    meshin = pv.read('{}_res.obj'.format(meshname))
+    meshin = pv.read('{}_res.ply'.format(meshname))
 
     if find_apex_with_curv and apex_id==-1:
         if self_intersecting_faces:
@@ -271,7 +271,31 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     tree = cKDTree(meshin.points.astype(np.double))
     dist, apex_id = tree.query(apex)
 
-    mesh_data["LAA_id"] = [apex_id]
+    if atrium == 'LA_RA':
+        mesh_data["LAA_id"] = [apex_id] # change accordingly
+    else:
+        mesh_data["{}A_id".format(atrium)] = [apex_id] # change accordingly
+
+    if atrium == 'LA_RA':
+        atrium = 'RA'
+        p = pv.Plotter(notebook=False)
+
+        p.add_mesh(meshin, color='r')
+        p.enable_point_picking(meshin, use_mesh=True)
+        p.add_text('Select the RA appendage apex and close the window', position='lower_left')
+
+        p.show()
+        if p.picked_point is None:
+            print("Please pick a point as apex")
+        else:
+            apex = p.picked_point
+            print("Apex coordinates: ", apex)
+
+        tree = cKDTree(meshin.points.astype(np.double))
+        dist, apex_id = tree.query(apex)
+
+        mesh_data["{}A_id".format(atrium)] = [apex_id]  # change accordingly
+
 
     fname = '{}_res_mesh_data.csv'.format(meshname)
     df = pd.DataFrame(mesh_data)
