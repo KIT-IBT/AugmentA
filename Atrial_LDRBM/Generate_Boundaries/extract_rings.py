@@ -34,7 +34,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 import datetime
 from sklearn.cluster import KMeans
 import argparse
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -591,7 +591,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     boundaryEdges.NonManifoldEdgesOff()
     boundaryEdges.Update()
     
-    tree = cKDTree(vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData()))
+    tree = KDTree(vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData()))
     ids = vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPointData().GetArray('Ids'))
     MV_ring = [r for r in rings if r.name == "MV"]
     

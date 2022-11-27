@@ -29,7 +29,7 @@ import pymeshfix
 import pyvista as pv
 import vtk
 import argparse
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 from vtk.util import numpy_support
 import os
 import numpy as np
@@ -269,7 +269,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
             apex = p.picked_point
             print("Apex coordinates: ",apex)
 
-    tree = cKDTree(meshin.points.astype(np.double))
+    tree = KDTree(meshin.points.astype(np.double))
     dist, apex_id = tree.query(apex)
 
     mesh_data["LAA_id"] = [apex_id]

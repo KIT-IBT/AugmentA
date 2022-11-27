@@ -34,7 +34,7 @@ import Methods_RA as Method
 import csv
 import pickle
 import os
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -272,9 +272,9 @@ def ra_generate_fiber(model, args, job):
     centroids = filter_cell_centers.GetOutput().GetPoints()
     centroids_array = vtk.util.numpy_support.vtk_to_numpy(centroids.GetData())
 
-    tree = cKDTree(centroids_array)
+    tree = KDTree(centroids_array)
 
-    ii = tree.query_ball_point(CT_ub_pts, r = 7*args.scale, n_jobs=-1)
+    ii = tree.query_ball_point(CT_ub_pts, r = 7*args.scale, workers=-1)
     
     ii = set([item for sublist in ii for item in sublist])
 
@@ -1107,9 +1107,9 @@ def ra_generate_fiber(model, args, job):
         filter_cell_centers.Update()
         centroids_array = vtk.util.numpy_support.vtk_to_numpy(filter_cell_centers.GetOutput().GetPoints().GetData())
 
-        tree = cKDTree(centroids_array)
+        tree = KDTree(centroids_array)
 
-        ii = tree.query_ball_point(pm, r = w_pm, n_jobs=-1)
+        ii = tree.query_ball_point(pm, r = w_pm, workers=-1)
 
         ii = list(set([item for sublist in ii for item in sublist]))
 
@@ -1135,7 +1135,7 @@ def ra_generate_fiber(model, args, job):
 
         elif args.mesh_type == "vol":
 
-            ii = tree.query_ball_point(pm, r = w_pm, n_jobs=-1)
+            ii = tree.query_ball_point(pm, r = w_pm, workers=-1)
 
             ii = list(set([item for sublist in ii for item in sublist]))
 

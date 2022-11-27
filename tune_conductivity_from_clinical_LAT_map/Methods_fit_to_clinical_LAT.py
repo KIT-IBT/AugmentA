@@ -28,7 +28,7 @@ under the License.
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 from vtk.util.numpy_support import vtk_to_numpy
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 import numpy as np
 from sklearn.metrics import mean_squared_error
 
@@ -111,7 +111,7 @@ def low_vol_LAT(args, path):
 
     LA_fit_wall_pts = vtk.util.numpy_support.vtk_to_numpy(LA_fit.GetPoints().GetData())[LA_wall_pt_ids,:]*1000
 
-    tree = cKDTree(not_low_volt_endo_pts)
+    tree = KDTree(not_low_volt_endo_pts)
 
     dd, ii = tree.query(LA_fit_wall_pts)
 
@@ -230,7 +230,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
             centroids2 = filter_cell_centers.GetOutput().GetPoints()
             pts = vtk.util.numpy_support.vtk_to_numpy(centroids2.GetData())
             
-            tree = cKDTree(pts)
+            tree = KDTree(pts)
             
             connect = vtk.vtkConnectivityFilter()
             connect.SetInputData(el_removed)
@@ -256,7 +256,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
                 centroids1 = filter_cell_centers.GetOutput().GetPoints()
                 centroids1_array = vtk.util.numpy_support.vtk_to_numpy(centroids1.GetData())
             
-                dd, ii = tree.query(centroids1_array, n_jobs=-1)
+                dd, ii = tree.query(centroids1_array, workers=-1)
                 
                 # Set as elements to clean only if they are at least 1 um away from the biggest band
                 if np.min(dd) > 1:
@@ -286,7 +286,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
     centroids2 = filter_cell_centers.GetOutput().GetPoints()
     pts = vtk.util.numpy_support.vtk_to_numpy(centroids2.GetData())
     
-    tree = cKDTree(pts)
+    tree = KDTree(pts)
     
     # Find elements at the boundary of the areas to clean, which are gonna be used for the fitting of the conductivities
     connect = vtk.vtkConnectivityFilter()
@@ -317,7 +317,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         centroids1 = filter_cell_centers.GetOutput().GetPoints()
         centroids1_array = vtk.util.numpy_support.vtk_to_numpy(centroids1.GetData())
         
-        dd, ii = tree.query(centroids1_array, n_jobs=-1)
+        dd, ii = tree.query(centroids1_array, workers=-1)
                     
         el_border.append(np.unique(el_cleaned[ii]))
 

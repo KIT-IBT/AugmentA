@@ -71,17 +71,17 @@ def get_closest_point(vtk_points_1, vtk_points_2):
     center_1 = get_mean_point(points_array_1)
     center_2 = get_mean_point(points_array_2)
 
-    kDTree = vtk.vtkKdTree()
-    kDTree.BuildLocatorFromPoints(vtk_points_1)
+    KDTree = vtk.vtkKDTree()
+    KDTree.BuildLocatorFromPoints(vtk_points_1)
     id_list = vtk.vtkIdList()
-    kDTree.FindClosestNPoints(1, center_2, id_list)
+    KDTree.FindClosestNPoints(1, center_2, id_list)
     index = id_list.GetId(0)
     res_1 = points_array_1[index]
 
-    kDTree = vtk.vtkKdTree()
-    kDTree.BuildLocatorFromPoints(vtk_points_2)
+    KDTree = vtk.vtkKDTree()
+    KDTree.BuildLocatorFromPoints(vtk_points_2)
     id_list = vtk.vtkIdList()
-    kDTree.FindClosestNPoints(1, center_1, id_list)
+    KDTree.FindClosestNPoints(1, center_1, id_list)
     index = id_list.GetId(0)
     res_2 = points_array_2[index]
 
@@ -90,10 +90,10 @@ def get_closest_point(vtk_points_1, vtk_points_2):
 
 def find_points_on_mv(mv_points, center_lpv):
     mv_points_array_1 = vtk.util.numpy_support.vtk_to_numpy(mv_points.GetData())
-    kDTree = vtk.vtkKdTree()
-    kDTree.BuildLocatorFromPoints(mv_points)
+    KDTree = vtk.vtkKDTree()
+    KDTree.BuildLocatorFromPoints(mv_points)
     id_list = vtk.vtkIdList()
-    kDTree.FindClosestNPoints(1, center_lpv, id_list)
+    KDTree.FindClosestNPoints(1, center_lpv, id_list)
     index = id_list.GetId(0)
     res_1 = mv_points_array_1[index]
     distance = []

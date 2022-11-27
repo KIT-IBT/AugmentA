@@ -29,7 +29,7 @@ from vtk.util.numpy_support import vtk_to_numpy
 import shutil
 import os, sys
 from glob import glob
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 import numpy as np
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
@@ -56,7 +56,7 @@ def generate_surf_id(meshname, atrium):
     vol = smart_reader(meshname+"_{}_vol.vtk".format(atrium))
     whole_model_points_coordinate = vtk.util.numpy_support.vtk_to_numpy(vol.GetPoints().GetData())
 
-    tree = cKDTree(whole_model_points_coordinate)
+    tree = KDTree(whole_model_points_coordinate)
     epi_pts = vtk.util.numpy_support.vtk_to_numpy(smart_reader(meshname+'_{}_epi.obj'.format(atrium)).GetPoints().GetData())
     dd, ii = tree.query(epi_pts)
 

@@ -28,7 +28,7 @@ import vtk
 import numpy as np
 from vtk.util import numpy_support
 from vtk.numpy_interface import dataset_adapter as dsa
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -125,8 +125,8 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
     endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
     epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
     
-    tree = cKDTree(epi_pts)
-    dd, ii = tree.query(endo_pts, distance_upper_bound = max_dist, n_jobs=-1)
+    tree = KDTree(epi_pts)
+    dd, ii = tree.query(endo_pts, distance_upper_bound = max_dist, workers=-1)
     
     endo_ids = np.where(dd!=np.inf)[0]
     epi_ids = ii[endo_ids]
@@ -281,12 +281,12 @@ def generate_sheet_dir(args, model, job):
         Mapping
         '''
         normals = np.ones([len(center_volume), 3], dtype = float)
-        kDTree = vtk.vtkKdTree()
-        kDTree.BuildLocatorFromPoints(center_surface)
+        KDTree = vtk.vtkKDTree()
+        KDTree.BuildLocatorFromPoints(center_surface)
         
         for i in range(len(center_volume)):
             id_list = vtk.vtkIdList()
-            kDTree.FindClosestNPoints(1, center_volume[i], id_list)
+            KDTree.FindClosestNPoints(1, center_volume[i], id_list)
             index = id_list.GetId(0)
             normals[i] = normal_vectors[index]
         

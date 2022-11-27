@@ -38,7 +38,7 @@ import argparse
 
 import numpy as np
 import pyvista as pv
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 sys.path.append('standalones')
 from open_orifices_with_curvature import open_orifices_with_curvature
 from open_orifices_manually import open_orifices_manually
@@ -110,7 +110,7 @@ def AugmentA(args):
                     raise ValueError("Please select the appendage apex")
                 p.close()
 
-                tree = cKDTree(mesh_from_vtk.points.astype(np.double))
+                tree = KDTree(mesh_from_vtk.points.astype(np.double))
                 dd, apex_id = tree.query(apex)
 
                 LAA = ""
@@ -212,7 +212,7 @@ def AugmentA(args):
             print("Apex coordinates: ", apex)
             p.close()
             mesh_data = dict()
-            tree = cKDTree(meshin.points.astype(np.double))
+            tree = KDTree(meshin.points.astype(np.double))
             dist, apex_id = tree.query(apex)
 
             mesh_data[args.atrium+"A_id"] = [apex_id]

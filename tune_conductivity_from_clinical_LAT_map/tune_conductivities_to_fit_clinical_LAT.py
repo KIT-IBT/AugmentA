@@ -38,7 +38,7 @@ from carputils import tools
 
 import numpy as np
 from carputils.carpio import igb
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 import csv
 import random
 from vtk.numpy_interface import dataset_adapter as dsa

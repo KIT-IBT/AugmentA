@@ -34,7 +34,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 import datetime
 from sklearn.cluster import KMeans
 import argparse
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -591,7 +591,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     boundaryEdges.NonManifoldEdgesOff()
     boundaryEdges.Update()
     
-    tree = cKDTree(vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData()))
+    tree = KDTree(vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData()))
     ids = vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPointData().GetArray('Ids'))
     MV_ring = [r for r in rings if r.name == "MV"]
     
@@ -965,7 +965,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     # pts_in_ivc = vtk.util.numpy_support.vtk_to_numpy(ivc.GetPoints().GetData())
     
     endo_ids = vtk.util.numpy_support.vtk_to_numpy(endo.GetPointData().GetArray("Ids"))
-    tree = cKDTree(vtk.util.numpy_support.vtk_to_numpy(endo.GetPoints().GetData()))
+    tree = KDTree(vtk.util.numpy_support.vtk_to_numpy(endo.GetPoints().GetData()))
     dd, ii = tree.query(svc_points)
     pts_in_svc_endo = endo_ids[ii]
     dd, ii = tree.query(ivc_points)
@@ -977,7 +977,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     to_delete = np.zeros((len(pts_in_top_epi),), dtype=int)
     
-    # tree = cKDTree(pts_in_top_epi)
+    # tree = KDTree(pts_in_top_epi)
 
     for i in range(len(pts_in_top_epi)):
         if pts_in_top_epi[i] in pts_in_svc_epi or pts_in_top_epi[i] in pts_in_ivc_epi:

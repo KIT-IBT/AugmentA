@@ -28,7 +28,7 @@ import vtk
 import numpy as np
 from vtk.numpy_interface import dataset_adapter as dsa
 from vtk.numpy_interface import algorithms as algs
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 from vtk.util import numpy_support
 from scipy.spatial.distance import cosine
 import collections
@@ -189,7 +189,7 @@ def generate_bilayer(endo, epi):
     endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
     epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
     
-    tree = cKDTree(endo_pts)
+    tree = KDTree(endo_pts)
     dd, ii = tree.query(epi_pts)
     
     lines = vtk.vtkCellArray()
@@ -837,9 +837,9 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
     pts1 = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPoints().GetData())
     pts2 = vtk.util.numpy_support.vtk_to_numpy(mesh2.GetPoints().GetData())
     
-    tree = cKDTree(pts1)
+    tree = KDTree(pts1)
 
-    dd, ii = tree.query(pts2, n_jobs=-1)
+    dd, ii = tree.query(pts2, workers=-1)
     
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
@@ -888,9 +888,9 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
     centroids2 = filter_cell_centers.GetOutput().GetPoints()
     pts2 = vtk.util.numpy_support.vtk_to_numpy(centroids2.GetData())
     
-    tree = cKDTree(centroids1_array)
+    tree = KDTree(centroids1_array)
 
-    dd, ii = tree.query(pts2, n_jobs=-1)
+    dd, ii = tree.query(pts2, workers=-1)
     
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
@@ -1020,7 +1020,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     MV = thresh.GetOutput()
     # MV_pts = vtk.util.numpy_support.vtk_to_numpy(MV.GetPoints().GetData())
     
-    # tree = cKDTree(LAA_pts)
+    # tree = KDTree(LAA_pts)
     # max_dist = np.sqrt(np.sum((df["MV"].to_numpy()-df["LAA"].to_numpy())**2, axis=0))
     # dd, ii = tree.query(MV_pts, distance_upper_bound=max_dist)
     
@@ -1137,7 +1137,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     # bb_left = np.array(new)
     # n = bb_left.shape[0]
     # new = []  # change dtype if you need to
-    # tree = cKDTree(bb_left)
+    # tree = KDTree(bb_left)
     # for i in range(n):
     #     neighbors = tree.query_ball_point(bb_left[i], 1000)
     #     temp = [bb_left[k] for k in neighbors]
