@@ -189,7 +189,7 @@ def AugmentA(args):
             p = pv.Plotter(notebook=False)
 
             if args.use_curvature_to_open:
-                print("Propose appendage apex location using surface curvature")
+                print("Proposed appendage apex location using surface curvature")
                 os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, 30*args.scale))
                 curv = np.loadtxt('{}.curv.dat'.format(meshname))
                 mesh_curv = pv.read('{}.obj'.format(meshname))
@@ -198,6 +198,10 @@ def AugmentA(args):
 
                 point_cloud = pv.PolyData(apex)
 
+                p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
+            elif apex_id is not None:
+                apex = meshin.points[apex_id,:]
+                point_cloud = pv.PolyData(apex)
                 p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
             
             p.add_mesh(meshin,color='r')

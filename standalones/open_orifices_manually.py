@@ -45,7 +45,7 @@ import collections
 pv.set_plot_theme('dark')
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
-import extract_rings
+from extract_rings import label_atrial_orifices
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -127,9 +127,9 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         picked_pt = None
         while picked_pt is None:
             p = pv.Plotter(notebook=False)
-            p.add_mesh(meshfix.mesh,'r')
+            p.add_mesh(mesh,'r')
             p.add_text('Select the center of the {} and close the window to cut, otherwise just close'.format(r),position='lower_left')
-            p.enable_point_picking(meshfix.mesh, use_mesh=True)
+            p.enable_point_picking(mesh, use_mesh=True)
             p.show()
 
             picked_pt = p.picked_point
@@ -163,7 +163,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
 
     model = extract_largest_region(mesh)
 
-    writer = vtk.vtkXMLPolyDataWriter()
+    writer = vtk.vtkPolyDataWriter()
     writer.SetFileName("{}/{}_cutted.vtk".format(full_path, atrium))
     writer.SetInputData(model)
     writer.Write()
@@ -172,7 +172,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
     p.add_mesh(mesh_from_vtk, 'r')
     p.add_text('Select the atrial appendage apex', position='lower_left')
-    p.enable_point_picking(meshfix.mesh, use_mesh=True)
+    p.enable_point_picking(mesh_from_vtk, use_mesh=True)
 
     p.show()
 
@@ -190,8 +190,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     elif atrium == "RA":
         RAA = apex_id
 
-    meshpath = "{}/{}_cutted".format(full_path, atrium)
-    extract_rings.run(["--mesh",meshpath,"--LAA",str(LAA),"--RAA",str(RAA)])
+    label_atrial_orifices("{}/{}_cutted.vtk".format(full_path, atrium),LAA,RAA)
 
     return apex_id
 

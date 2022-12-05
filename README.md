@@ -42,6 +42,14 @@ Example using an MRI segmentation to produce a bilayer atrial model:
 ```
 python main.py --mesh mesh/LA_MRI.vtp --closed_surface 0 --use_curvature_to_open 1 --atrium LA --open_orifices 1 --MRI 1
 ```
+Example opening the atrial orifices using the surface curvature to identify the veins of a closed geometry, it expects the valve region to be tagged on the atrial surface with a value > 0.5 (see the scalar "valve" in mesh/LA_EAM.vtp):
+```
+python main.py --mesh mesh/LA_EAM.vtp --open_orifices 1 --MRI 0
+```
+Example manually opening the atrial orifices of a closed geometry:
+```
+python main.py --mesh mesh/LA_EAM.vtp --open_orifices 1 --MRI 0 --use_curvature_to_open 0
+```
 Example using a closed surface derived from a MRI segmentation to produce a volumetric atrial model:
 ```
 python main.py --mesh mesh/mwk05_bi.vtp --closed_surface 1 --use_curvature_to_open 0 --atrium LA_RA

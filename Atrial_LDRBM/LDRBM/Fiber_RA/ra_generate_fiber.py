@@ -840,9 +840,9 @@ def ra_generate_fiber(model, args, job):
     # writer.SetFileName("TV_lat.vtk")
     # writer.SetInputData(TV_lat)
     # writer.Write()
-    
+
     ct_points_data = Method.dijkstra_path(CT, point1_id, point2_id)
-    
+
     # np.savetxt("ct_points_data.txt", ct_points_data, fmt='%.4f')
     
     loc = vtk.vtkPointLocator()
@@ -851,7 +851,7 @@ def ra_generate_fiber(model, args, job):
     
     point3_id = loc.FindClosestPoint(TV_s.GetPoint(point3_id))
     point4_id = loc.FindClosestPoint(TV_s.GetPoint(point4_id))  # this is also the id for Bachmann-Bundle on the right atrium
-    
+
     tv_points_data = Method.dijkstra_path(TV_lat, point3_id, point4_id)
     # np.savetxt("tv_points_data.txt", tv_points_data, fmt='%.4f')
     
@@ -1300,7 +1300,7 @@ def ra_generate_fiber(model, args, job):
         
         bachmann_bundle_points_data = np.concatenate((bachmann_bundle_points_data_1, bachmann_bundle_points_data_2), axis=0)
         
-        np.savetxt('bb.txt',bachmann_bundle_points_data,fmt='%.5f')
+        # np.savetxt('bb.txt',bachmann_bundle_points_data,fmt='%.5f')
 
         bb_step = int(len(bachmann_bundle_points_data)*0.1)
         bb_path = np.asarray([bachmann_bundle_points_data[i] for i in range(len(bachmann_bundle_points_data)) if i % bb_step == 0 or i == len(bachmann_bundle_points_data)-1])
@@ -1422,10 +1422,12 @@ def ra_generate_fiber(model, args, job):
             path_2 = Method.dijkstra_path(la_epi, la_c_id, la_d_id)
             path_all_temp = np.vstack((path_1, path_2))
             # down sampling to smooth the path
-            step = 20
+            step = 10
             #step = int(len(path_all_temp)*0.1)
             path_all = np.asarray([path_all_temp[i] for i in range(len(path_all_temp)) if i % step == 0 or i == len(path_all_temp)-1])
             
+            # np.savetxt("bb_path_all.txt", path_all, fmt='%.4f')
+
             # save points for bb fiber
             filename = job.ID+'/bridges/bb_fiber.dat'
             f = open(filename, 'wb')

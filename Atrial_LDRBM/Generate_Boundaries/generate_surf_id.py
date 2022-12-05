@@ -39,7 +39,7 @@ def write_surf_ids(outdir, name, ii):
 
     fname = outdir+'/ids_{}.vtx'.format(name)
     f = open(fname, 'w')
-    if isinstance(ii, int):
+    if isinstance(ii, (int, np.integer)):
         f.write('1\n')
         f.write('extra\n')
         f.write('{}\n'.format(ii))
