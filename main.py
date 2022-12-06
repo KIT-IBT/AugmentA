@@ -75,8 +75,8 @@ def parser():
                         default="mesh/meanshape",
                         help='statistical shape model basename')
     parser.add_argument('--scale',
-                        type=int,
-                        default=1,
+                        type=float,
+                        default=1.0,
                         help='the pipeline expects an input in mm, use scale to change that')
     parser.add_argument('--resample_input',
                         type=int,
