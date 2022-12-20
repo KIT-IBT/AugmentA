@@ -72,7 +72,7 @@ def parser():
                         help='RAA basis point index, leave empty if no RA')
     parser.add_argument('--debug',
                         type=int,
-                        default=0,
+                        default=1,
                         help='Set to 1 for debbuging the code')
     return parser
 
@@ -105,7 +105,7 @@ def smart_reader(path):
 
     return output
 
-def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_id="", debug=0):
+def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_id="", debug=1):
 
     """Extrating Rings"""
     print('Extracting rings...')
@@ -131,7 +131,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
     fname = glob(outdir+'/ids_*')
     for r in fname:
         os.remove(r)
-    
+    # Biatrial geometry
     if (LAA_id != "" and RAA_id != ""):
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
@@ -160,6 +160,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         loc.SetDataSet(mesh_conn)
         loc.BuildLocator()
         LAA_id = loc.FindClosestPoint(LA_ap_point)
+        RAA_id = loc.FindClosestPoint(RA_ap_point)
 
         LA_tag = id_vec[int(LAA_id)]
         RA_tag = id_vec[int(RAA_id)]
@@ -198,7 +199,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
 
-        LA_rings = detect_and_mark_rings(LA, LA_ap_point)
+        LA_rings = detect_and_mark_rings(LA, LA_ap_point,outdir, debug)
         b_tag, centroids = mark_LA_rings(LAA_id, LA_rings, b_tag, centroids, outdir, LA)
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
@@ -235,7 +236,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         
         vtkWrite(RA, outdir+'/RA.vtk')
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
-        RA_rings = detect_and_mark_rings(RA, RA_ap_point)
+        RA_rings = detect_and_mark_rings(RA, RA_ap_point,outdir,debug)
         b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
         cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir,debug)
 
@@ -257,7 +258,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
             idFilter.SetIdsArrayName('Ids')
         idFilter.Update()
         LA = idFilter.GetOutput()
-        LA_rings = detect_and_mark_rings(LA, LA_ap_point)
+        LA_rings = detect_and_mark_rings(LA, LA_ap_point, outdir,debug)
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
         b_tag, centroids = mark_LA_rings(LAA_id, LA_rings, b_tag, centroids, outdir, LA)
 
@@ -279,9 +280,9 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         idFilter.Update()
         centroids["RAA"] = RA_ap_point
         RA = idFilter.GetOutput()
-        RA_rings = detect_and_mark_rings(RA, RA_ap_point)
+        RA_rings = detect_and_mark_rings(RA, RA_ap_point, outdir,debug)
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
-        b_tag, centroids, RA_rings  = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
+        b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
         cutting_plane_to_identify_tv_f_tv_s(RA, RA_rings, outdir,debug)
 
         dataSet = dsa.WrapDataObject(RA)
@@ -298,7 +299,7 @@ def run():
 
     label_atrial_orifices(args.mesh, args.LAA, args.RAA, args.LAA_base, args.RAA_base, args.debug)
     
-def detect_and_mark_rings(surf, ap_point):
+def detect_and_mark_rings(surf, ap_point,outdir,debug):
     
     boundaryEdges = vtk.vtkFeatureEdges()
     boundaryEdges.SetInputData(surf)
@@ -331,10 +332,15 @@ def detect_and_mark_rings(surf, ap_point):
         geo_filter.Update()
         surface = geo_filter.GetOutput()
 
+
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
         cln.Update()
         surface = cln.GetOutput()
+
+        # be careful overwrite previous rings
+        if debug:
+            vtkWrite(surface, outdir + '/ring_' + str(i) + '.vtk')
         
         ring_surf = vtk.vtkPolyData()
         ring_surf.DeepCopy(surface)
@@ -861,14 +867,14 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir,debug):
                 top_endo_id = i
                 break
             else:
-                #top_endo_id = i
+                top_endo_id = i # comment this line if errors
                 break
     
         # delete added region id
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
 
-    connect.AddSpecifiedRegion(top_endo_id)
+    connect.AddSpecifiedRegion(top_endo_id-1) # Find the id in the points dividing the RA, avoid CS
     connect.Update()
     surface = connect.GetOutput()
 

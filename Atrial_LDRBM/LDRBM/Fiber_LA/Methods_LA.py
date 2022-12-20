@@ -269,7 +269,7 @@ def write_bilayer(bilayer, args, job):
         f.write("2\n")
         for i in range(len(el_epi)):
             f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2], sheet_epi[i][0], sheet_epi[i][1], sheet_epi[i][2]))
-                
+    print('Done..')
                 
 def creat_tube_around_spline(points_data, radius):
     # Creat a points set

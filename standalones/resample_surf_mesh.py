@@ -105,6 +105,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
     self_intersecting_faces = m.selected_face_number()
 
+
     if self_intersecting_faces:
         reader = vtk.vtkOBJReader()
         reader.SetFileName('{}.obj'.format(meshname))
@@ -122,7 +123,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         # Clean the mesh from holes and self intersecting triangles
         meshin = pv.read('{}.obj'.format(meshname))
-        meshfix = pymeshfix.MeshFix(meshin)
+        meshfix = pymeshfix.MeshFix(meshin) # Be careful with biatrial geometries as it might delete one chamber
         meshfix.repair()
         vol = meshfix.mesh.volume
         

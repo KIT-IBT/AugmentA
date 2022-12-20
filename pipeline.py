@@ -98,43 +98,79 @@ def AugmentA(args):
                 apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, scale=args.scale, debug=args.debug)
             meshname = mesh_dir + args.atrium+"_cutted"
         else:
-            # Manually select the appendage apex and extract rings, these are going to be used to compute the landmarks for the fitting if SSM is selected
-            print("Manually select the appendage apex and extract rings")
+            if not args.resample_input and args.find_appendage: # don't open orifices and don´t resample, find appendage
+                # Manually select the appendage apex and extract rings, these are going to be used to compute the landmarks for the fitting if SSM is selected
+                print("Manually select the appendage apex and extract rings")
 
-            #Make sure that the mesh is a Polydata
-            geo_filter = vtk.vtkGeometryFilter()
-            geo_filter.SetInputData(smart_reader(args.mesh))
-            geo_filter.Update()
-            polydata = geo_filter.GetOutput()
+                mesh_data = dict()
 
-            mesh_from_vtk = pv.PolyData(polydata)
-            p = pv.Plotter(notebook=False)
-            p.add_mesh(mesh_from_vtk, 'r')
-            p.add_text('Select the appendage apex and close the window',position='lower_left')
-            p.enable_point_picking(mesh_from_vtk, use_mesh=True)
-            p.show()
+                #Make sure that the mesh is a Polydata
+                geo_filter = vtk.vtkGeometryFilter()
+                geo_filter.SetInputData(smart_reader(args.mesh))
+                geo_filter.Update()
+                polydata = geo_filter.GetOutput()
 
-            if p.picked_point is not None:
-                apex = p.picked_point
-            else:
-                raise ValueError("Please select the appendage apex")
-            p.close()
+                mesh_from_vtk = pv.PolyData(polydata)
+                p = pv.Plotter(notebook=False)
+                p.add_mesh(mesh_from_vtk, 'r')
+                p.add_text('Select the appendage apex and close the window',position='lower_left')
+                p.enable_point_picking(mesh_from_vtk, use_mesh=True)
+                p.show()
 
+                if p.picked_point is not None:
+                    apex = p.picked_point
+                else:
+                    raise ValueError("Please select the appendage apex")
+                p.close()
 
-            tree = cKDTree(mesh_from_vtk.points.astype(np.double))
-            dd, apex_id = tree.query(apex)
+                tree = cKDTree(mesh_from_vtk.points.astype(np.double))
+                dd, apex_id = tree.query(apex)
 
-            LAA = ""
-            RAA = ""
-            if args.atrium == "LA":
-                LAA = apex_id
-            elif args.atrium == "RA":
-                RAA = apex_id
-            print("Labelling atrial orifices")
-            label_atrial_orifices(args.mesh,LAA,RAA)
+                LAA = ""
+                RAA = ""
 
-            # Atrial orifices already open
-            print("Atrial orifices already open")
+                if args.atrium == "LA":
+                    LAA = apex_id
+                    mesh_data[args.atrium + "A_id"] = [apex_id]
+                elif args.atrium == "RA":
+                    RAA = apex_id
+                    mesh_data[args.atrium + "A_id"] = [apex_id]
+                elif args.atrium == "LA_RA":
+                    LAA = apex_id
+                    mesh_data["LAA_id"] = [apex_id]
+
+                    mesh_from_vtk = pv.PolyData(polydata)
+                    p = pv.Plotter(notebook=False)
+                    p.add_mesh(mesh_from_vtk, 'r')
+                    p.add_text('Select the RA appendage apex and close the window', position='lower_left')
+                    p.enable_point_picking(mesh_from_vtk, use_mesh=True)
+                    p.show()
+
+                    if p.picked_point is not None:
+                        apex = p.picked_point
+                    else:
+                        raise ValueError("Please select the appendage apex")
+                    p.close()
+
+                    tree = cKDTree(mesh_from_vtk.points.astype(np.double))
+                    dd, apex_id = tree.query(apex)
+                    RAA = apex_id
+
+                    mesh_data["RAA_id"] = [apex_id]
+
+                fname = '{}_mesh_data.csv'.format(meshname)
+                df = pd.DataFrame(mesh_data)
+                df.to_csv(fname, float_format="%.2f", index=False)
+
+                #print("Labelling atrial orifices")
+                #label_atrial_orifices(args.mesh,LAA,RAA)
+
+                # Label atrial orifices using apex id found in the resampling algorithm
+                #df = pd.read_csv('{}_mesh_data.csv'.format(meshname))
+
+                # Atrial orifices already open
+                print("Atrial orifices already open")
+                processed_mesh = meshname
 
     if args.SSM_fitting and not args.closed_surface:
 
@@ -166,7 +202,7 @@ def AugmentA(args):
 
         if args.resample_input:
             # Resample surface mesh with given target average edge length
-            resample_surf_mesh(mesh_dir+args.atrium+'_cutted_surf/'+args.atrium+'_fit', target_mesh_resolution=0.4, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id)
+            resample_surf_mesh(mesh_dir+args.atrium+'_cutted_surf/'+args.atrium+'_fit', target_mesh_resolution=args.target_mesh_resolution, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id,atrium = args.atrium)
             processed_mesh = mesh_dir+args.atrium+'_cutted_surf/'+args.atrium+'_fit_res'
         else:
             processed_mesh = mesh_dir+args.atrium+'_cutted_surf/'+args.atrium+'_fit'
@@ -181,10 +217,10 @@ def AugmentA(args):
             label_atrial_orifices(processed_mesh+'obj',RAA_id=int(df[args.atrium+"A_id"]))
             # Atrial region annotation and fiber generation using LDRBM
             ra_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
-        
-    else:
 
-        if args.resample_input:
+    elif not args.SSM_fitting:
+
+        if args.resample_input and args.find_appendage:
             print("Resample surface mesh with given target average edge length")
             # Make sure there is an .obj mesh file
 
@@ -192,56 +228,78 @@ def AugmentA(args):
             meshin = pv.read('{}.vtk'.format(meshname))
             pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
 
-            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id)
+            if args.atrium =='LA_RA':
+                apex_id = -1 # Find new location with resampled mesh
+
+            # Here finds the LAA_id and/or RAA_id for the remeshed geometry
+            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=args.target_mesh_resolution, find_apex_with_curv=0, scale=args.scale, apex_id=apex_id, atrium = args.atrium)
             processed_mesh = '{}_res'.format(meshname)
-        else:
 
-            if not args.closed_surface:
-                #Convert mesh from vtk to obj
-                meshin = pv.read('{}.vtk'.format(meshname))
-                pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
-            else:
-                meshin = pv.read('{}.obj'.format(meshname))
+            # Convert mesh from ply to obj
+            meshin = pv.read('{}.ply'.format(processed_mesh))
+            pv.save_meshio('{}.obj'.format(processed_mesh), meshin, "obj")
 
-            p = pv.Plotter(notebook=False)
+            # p = pv.Plotter(notebook=False)
+            #
+            # if args.use_curvature_to_open:
+            #     print("Propose appendage apex location using surface curvature")
+            #     os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, 30*args.scale))
+            #     curv = np.loadtxt('{}.curv.dat'.format(meshname))
+            #     mesh_curv = pv.read('{}.obj'.format(meshname))
+            #
+            #     apex = mesh_curv.points[np.argmax(curv),:]
+            #
+            #     point_cloud = pv.PolyData(apex)
+            #
+            #     p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
+            #
+            # p.add_mesh(meshin,color='r')
+            # p.enable_point_picking(meshin, use_mesh=True)
+            # p.add_text('Select the appendage apex and close the window',position='lower_left')
+            #
+            # p.show()
+            #
+            # if p.picked_point is not None:
+            #     apex = p.picked_point
+            #
+            # print("Apex coordinates: ", apex)
+            # p.close()
+            # mesh_data = dict()
+            # tree = cKDTree(meshin.points.astype(np.double))
+            # dist, apex_id = tree.query(apex)
+            #
+            # mesh_data[args.atrium+"A_id"] = [apex_id]
+            #
+            # fname = '{}_mesh_data.csv'.format(meshname)
+            # df = pd.DataFrame(mesh_data)
+            # df.to_csv(fname, float_format="%.2f", index=False)
 
-            if args.use_curvature_to_open:
-                print("Propose appendage apex location using surface curvature")
-                os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, 30*args.scale))
-                curv = np.loadtxt('{}.curv.dat'.format(meshname))
-                mesh_curv = pv.read('{}.obj'.format(meshname))
+        elif not args.resample_input and not args.find_appendage: # do not resample and do not find appendage
 
-                apex = mesh_curv.points[np.argmax(curv),:]
-
-                point_cloud = pv.PolyData(apex)
-
-                p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
-            
-            p.add_mesh(meshin,color='r')
-            p.enable_point_picking(meshin, use_mesh=True)
-            p.add_text('Select the appendage apex and close the window',position='lower_left')
-
-            p.show()
-
-            if p.picked_point is not None:
-                apex = p.picked_point
-            
-            print("Apex coordinates: ", apex)
-            p.close()
-            mesh_data = dict()
-            tree = cKDTree(meshin.points.astype(np.double))
-            dist, apex_id = tree.query(apex)
-
-            mesh_data[args.atrium+"A_id"] = [apex_id]
-
-            fname = '{}_mesh_data.csv'.format(meshname)
-            df = pd.DataFrame(mesh_data)
-            df.to_csv(fname, float_format="%.2f", index=False)
             processed_mesh = meshname
-        
+
+            # if not args.closed_surface:
+            #     #Convert mesh from vtk to obj
+            #     meshin = pv.read('{}.vtk'.format(meshname))
+            #     pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
+            # else:
+            #     meshin = pv.read('{}.obj'.format(meshname))
+
+
         # Label atrial orifices using apex id found in the resampling algorithm
         df = pd.read_csv('{}_mesh_data.csv'.format(processed_mesh))
 
+        if args.atrium == "LA_RA":
+            label_atrial_orifices(processed_mesh+'.obj', LAA_id=int(df["LAA_id"]), RAA_id=int(df["RAA_id"])) # Label both
+            #Do the LA first
+            la_main.run(
+                 ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",
+                  args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
+            args.atrium = "RA"
+            ra_main.run(
+                ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",
+                 args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
+            args.atrium = "LA_RA"
         if args.atrium == "LA":
             label_atrial_orifices(processed_mesh+'.obj',LAA_id=int(df[args.atrium+"A_id"]))
             # Atrial region annotation and fiber generation using LDRBM
@@ -252,6 +310,7 @@ def AugmentA(args):
                 la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(0), "--mesh_type", "vol", "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
             else:
                 la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
+                os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=carp_txt -scale={}".format('{}_fibers/result_{}/{}_bilayer_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium), '{}_fibers/result_{}/{}_bilayer_with_fiber_um.{}'.format(processed_mesh, args.atrium, args.atrium), 1000 * args.scale))
 
         elif args.atrium == "RA":
             # Atrial region annotation and fiber generation using LDRBM
@@ -262,14 +321,19 @@ def AugmentA(args):
                 processed_mesh = meshname_old+"_{}_vol".format(args.atrium)
                 ra_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(0), "--mesh_type", "vol", "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
             else:
-                label_atrial_orifices(processed_mesh+'.obj',RAA_id=int(df[args.atrium+"A_id"]))               
+                label_atrial_orifices(processed_mesh+'.obj',RAA_id=int(df[args.atrium+"A_id"]))
                 ra_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
 
     if args.debug:
         if args.closed_surface:
             bil = pv.read('{}_fibers/result_{}/{}_vol_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium, args.ofmt))
         else:
-            bil = pv.read('{}_fibers/result_{}/{}_bilayer_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium, args.ofmt))
+            if args.atrium == 'LA_RA':
+                bil = pv.read(
+                    '{}_fibers/result_RA/{}_bilayer_with_fiber.{}'.format(processed_mesh, args.atrium,
+                                                                          args.ofmt))
+            else:
+                bil = pv.read('{}_fibers/result_{}/{}_bilayer_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium, args.ofmt))
             geom = pv.Line()
         mask = bil['elemTag'] >99
         bil['elemTag'][mask] = 0

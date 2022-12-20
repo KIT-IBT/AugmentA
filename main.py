@@ -98,6 +98,10 @@ def parser():
                         default='vtu',
                         choices=['vtu','vtk'],
                         help='Output mesh format')
+    parser.add_argument('--find_appendage',
+                        type=int,
+                        default=1,
+                        help='set to 1 to find the appendage, 0 to read values in csv file otherwise')
     parser.add_argument('--debug',
                         type=int,
                         default=0,
@@ -110,10 +114,10 @@ def run():
 
     # In case both atria are given process LA first and RA later
     if args.atrium == 'LA_RA':
-        args.atrium = 'LA'
+        #args.atrium = 'LA'
         AugmentA(args)
-        args.atrium = 'RA'
-        AugmentA(args)
+        #args.atrium = 'RA'
+        #AugmentA(args)
     else:
         AugmentA(args)
     

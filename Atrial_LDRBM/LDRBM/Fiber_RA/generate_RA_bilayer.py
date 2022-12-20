@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser(description='Create Right Atrium.')
 
 parser.add_argument('--mesh',
                     type=str,
-                    default="/Users/Patymardi/Documents/Promotion/SilverPig/meshes/dk01",
+                    default="../../../data/20220203/20220203_res_fibers/result_RA",
                     help='path to meshname')
 parser.add_argument('--scale',
                     type=float,
@@ -30,15 +30,15 @@ args = parser.parse_args()
 
 def run(args):
 
-    # reader = vtk.vtkUnstructuredGridReader()
-    # reader.SetFileName(args.mesh + "/RA_CT_PMs.vtk")
-    # reader.Update()
-    # ra_endo = reader.GetOutput()
-
     reader = vtk.vtkUnstructuredGridReader()
-    reader.SetFileName(args.mesh + "/RA_endo_with_fiber.vtk")
+    reader.SetFileName(args.mesh + "/RA_CT_PMs.vtk")
     reader.Update()
     ra_endo = reader.GetOutput()
+
+    # reader = vtk.vtkUnstructuredGridReader()
+    # reader.SetFileName(args.mesh + "/RA_endo_with_fiber.vtk")
+    # reader.Update()
+    # ra_endo = reader.GetOutput()
 
 
     reader = vtk.vtkUnstructuredGridReader()

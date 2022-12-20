@@ -321,7 +321,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         reader.SetFileName(job.ID+"/bridges/"+str(var)+'_bridge_resampled.vtk')
         reader.Update()
         bridge_usg = reader.GetOutput()
-        
+
+
         # geo_filter = vtk.vtkGeometryFilter()
         # geo_filter.SetInputData(bridge_usg)
         # geo_filter.Update()
@@ -486,8 +487,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         ms = pymeshlab.MeshSet()
         ms.load_new_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
         ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4*args.scale, adaptive=True)
-        ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_union.obj",\
-        save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
+        ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_union.obj",save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
     
         if args.mesh_type == "vol":
             subprocess.run(["meshtool", 
