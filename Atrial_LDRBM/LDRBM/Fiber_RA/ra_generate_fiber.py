@@ -321,6 +321,7 @@ def ra_generate_fiber(model, args, job):
     CT_band_ids = vtk.util.numpy_support.vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
 
     tao_RAA = np.max(vtk.util.numpy_support.vtk_to_numpy(CT_band.GetCellData().GetArray('phie_v2')))
+    #tao_RAA = 0.45 # for patient 20220203
     
     # CT_ids = vtk.util.numpy_support.vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
     
@@ -388,7 +389,7 @@ def ra_generate_fiber(model, args, job):
     
     IB_ids = vtk.util.numpy_support.vtk_to_numpy(IB.GetCellData().GetArray('Global_ids'))
     
-    tag[IB_ids] = inter_caval_bundle_epi
+    tag[IB_ids] = inter_caval_bundle_epi # Change to 68
 
     if args.debug:
         Method.writer_vtk(IB, '{}_surf/'.format(args.mesh) + "ib.vtk")
@@ -1179,7 +1180,7 @@ def ra_generate_fiber(model, args, job):
 
         el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
 
-    for i in range(4,pm_num-1): # skip the first 3 pm as they will be in the IVC side
+    for i in range(3,pm_num-1): # skip the first 3 pm as they will be in the IVC side
         pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
         pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
         pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
@@ -1370,7 +1371,7 @@ def ra_generate_fiber(model, args, job):
     
     bachmann_bundle_points_data = np.concatenate((bachmann_bundle_points_data_1, bachmann_bundle_points_data_2), axis=0)
     
-    np.savetxt('bb.txt',bachmann_bundle_points_data,fmt='%.5f') # Change directory
+    np.savetxt(job.ID+'/bb.txt',bachmann_bundle_points_data,fmt='%.5f') # Change directory
 
     bb_step = int(len(bachmann_bundle_points_data)*0.1)
     bb_path = np.asarray([bachmann_bundle_points_data[i] for i in range(len(bachmann_bundle_points_data)) if i % bb_step == 0 or i == len(bachmann_bundle_points_data)-1])
