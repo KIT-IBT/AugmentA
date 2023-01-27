@@ -737,7 +737,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         ra_endo = reader.GetOutput()
         
         reader = vtk.vtkXMLUnstructuredGridReader()
-        reader.SetFileName(job.ID+"/result_RA/LA_endo_with_fiber.vtu") # Has elemTag! :)
+        #reader.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtu") # Has elemTag! :)
+        reader.SetFileName(job.ID + "/result_RA/LA_endo_with_holes.vtu")  # Has elemTag! :)
         reader.Update()
         la_endo = reader.GetOutput()
         
