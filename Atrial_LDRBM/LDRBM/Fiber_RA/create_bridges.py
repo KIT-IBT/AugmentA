@@ -310,6 +310,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     #     append_filter.Update()
     la_ra_usg = append_filter.GetOutput() # this has already elemTag
 
+    if args.debug:
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName(job.ID + "/result_RA/la_ra_usg.vtu")
+        writer.SetInputData(la_ra_usg)
+        writer.Write()
+
     print('reading done!')
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
@@ -417,7 +423,85 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
             writer.SetInputData(la_ra_epi)
             writer.Write()
 
+    # Now extract earth from LA_endo as well
 
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/result_LA/LA_endo_with_fiber.vtu")  # Has elemTag! :)
+    reader.Update()
+    la_endo = reader.GetOutput()
+
+    for var in bridge_list:
+        print(var)
+
+        reader = vtk.vtkUnstructuredGridReader()
+        reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
+        reader.Update()
+        bridge_usg = reader.GetOutput()
+
+        locator = vtk.vtkStaticPointLocator()
+        locator.SetDataSet(la_endo)
+        locator.BuildLocator()
+
+        intersection_points = bridge_usg.GetPoints().GetData()
+        intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
+
+        earth_point_ids_temp = vtk.vtkIdList()
+        earth_point_ids = vtk.vtkIdList()
+        for i in range(len(intersection_points)):
+            locator.FindPointsWithinRadius(0.7 * args.scale, intersection_points[i], earth_point_ids_temp)
+            for j in range(earth_point_ids_temp.GetNumberOfIds()):
+                earth_point_ids.InsertNextId(earth_point_ids_temp.GetId(j))
+
+        earth_cell_ids_temp = vtk.vtkIdList()
+        earth_cell_ids = vtk.vtkIdList()
+        for i in range(earth_point_ids.GetNumberOfIds()):
+            la_endo.GetPointCells(earth_point_ids.GetId(i), earth_cell_ids_temp)
+            for j in range(earth_cell_ids_temp.GetNumberOfIds()):
+                earth_cell_ids.InsertNextId(earth_cell_ids_temp.GetId(j))
+                earth_cell_ids_list += [earth_cell_ids_temp.GetId(j)]
+        extract = vtk.vtkExtractCells()
+        extract.SetInputData(la_endo)
+        extract.SetCellList(earth_cell_ids)
+        extract.Update()
+
+        geo_filter = vtk.vtkGeometryFilter()
+        geo_filter.SetInputData(extract.GetOutput())
+        geo_filter.Update()
+        earth = geo_filter.GetOutput()
+
+        cleaner = vtk.vtkCleanPolyData()
+        cleaner.SetInputData(earth)
+        cleaner.Update()
+        earth = cleaner.GetOutput()
+
+        print("Extracted earth")
+        cell_id_all = []
+        for i in range(la_endo.GetNumberOfCells()):
+            cell_id_all.append(i)
+
+        la_diff = list(set(cell_id_all).difference(set(earth_cell_ids_list)))
+        la_endo_new = vtk.vtkIdList()
+        for item in la_diff:
+            la_endo_new.InsertNextId(item)
+
+        extract = vtk.vtkExtractCells()
+        extract.SetInputData(la_endo)
+        extract.SetCellList(la_endo_new)
+        extract.Update()
+
+        append_filter = vtk.vtkAppendFilter()
+        append_filter.MergePointsOn()
+        # append_filter.SetTolerance(0.01*args.scale)
+
+        append_filter.AddInputData(extract.GetOutput())
+        append_filter.Update()  # added
+        la_endo = append_filter.GetOutput()  # we lose this mesh, when defining the append filter later
+
+        if args.debug and var == 'upper_posterior_bridge':
+            writer = vtk.vtkXMLUnstructuredGridWriter()
+            writer.SetFileName(job.ID + "/result_RA/LA_endo_with_holes.vtu")  # Still has element Tag
+            writer.SetInputData(la_endo)
+            writer.Write()
 
     #     append_filter = vtk.vtkAppendFilter()
     #     append_filter.MergePointsOn()
@@ -653,7 +737,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         ra_endo = reader.GetOutput()
         
         reader = vtk.vtkXMLUnstructuredGridReader()
-        reader.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtu") # Has elemTag! :)
+        reader.SetFileName(job.ID+"/result_RA/LA_endo_with_fiber.vtu") # Has elemTag! :)
         reader.Update()
         la_endo = reader.GetOutput()
         

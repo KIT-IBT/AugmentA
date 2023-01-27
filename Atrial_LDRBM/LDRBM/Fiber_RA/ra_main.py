@@ -56,7 +56,7 @@ def parser():
                         help='Mesh type')
     parser.add_argument('--debug',
                     type=int,
-                    default=0,
+                    default=1,
                     help='path to meshname')
     parser.add_argument('--scale',
                     type=int,
@@ -68,15 +68,15 @@ def parser():
                         help='Output mesh format')
     parser.add_argument('--normals_outside',
                     type=int,
-                    default=1,
-                    help='set to 1 if surface normals are pointing outside')
+                    default=0,
+                    help='set to 1 if surface normals are pointing outside') # expects normals to be pointing inside
     parser.add_argument('--add_bridges',
                     type=int,
                     default=1,
                     help='set to 1 to compute and add interatrial bridges, 0 otherwise')
     parser.add_argument('--just_bridges',
                         type=int,
-                        default=0,
+                        default=1,
                         help='set to 1 to only check bridges')
     parser.add_argument('--laplace',
                         type=int,
