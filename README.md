@@ -15,13 +15,16 @@ AugmentA consists firstly of a pre-processing step applied to the input geometry
 
 ## Setup
 
-Create a python virtual environment to install the current requirements after installing the requirements of carputils: 
+Create a python virtual environment to install AugmentA dependencies: 
 ```
 python -m venv ~/myEnv
 source ~/myEnv/bin/activate
 pip install -r requirements.txt
 ```
-Install [PyMesh](https://pymesh.readthedocs.io/en/latest/installation.html)
+
+* Install [PyMesh](https://pymesh.readthedocs.io/en/latest/installation.html)
+* Install [meshtool](https://bitbucket.org/aneic/meshtool/src/master/)
+* Install [carputils](https://opencarp.org/download/installation#installing-carputils)
 
 Go to the carputils folder and re-install carputils' requirements (assuming that carputils was installed in the home folder):
 ```
