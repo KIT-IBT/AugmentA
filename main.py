@@ -85,7 +85,7 @@ def parser():
     parser.add_argument('--target_mesh_resolution',
                         type=float,
                         default=0.4,
-                        help='target mesh resolution in mm')
+                        help='target mesh resolution in mm. Need to set --resample_input to 1 as well to take effect')
     parser.add_argument('--normals_outside',
                         type=int,
                         default=1,
