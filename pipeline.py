@@ -74,6 +74,7 @@ def AugmentA(args):
 
     extension = args.mesh.split('.')[-1]
     meshname = args.mesh[:-(len(extension)+1)]
+    apex_id = None
 
     if args.closed_surface:
         separate_epi_endo(args.mesh, args.atrium)
@@ -175,7 +176,7 @@ def AugmentA(args):
 
         if args.resample_input:
             print("Resample surface mesh with given target average edge length")
-            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=0.4, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id)
+            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=args.target_mesh_resolution, find_apex_with_curv=1, scale=args.scale, apex_id=apex_id)
             processed_mesh = '{}_res'.format(meshname)
         else:
 

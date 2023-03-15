@@ -201,7 +201,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     print("Target resolution: {} mm".format(tgt_edge_length/scale))
     while avg_edge_length > tgt_edge_length*1.05 or avg_edge_length < tgt_edge_length*0.95 or it < 3 :
         
-        ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=AbsoluteValue(loc_tgt_edge_length))
+        ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.AbsoluteValue(loc_tgt_edge_length))
         if it == 1:
             ms.laplacian_smooth()
         out_dict = ms.compute_geometric_measures()
