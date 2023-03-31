@@ -26,6 +26,7 @@ under the License.
 """
 
 import vtk
+import os
 from vtk.numpy_interface import dataset_adapter as dsa
 from vtk.util.numpy_support import vtk_to_numpy
 from scipy.spatial import cKDTree
@@ -37,7 +38,7 @@ vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 def low_vol_LAT(args, path):
 
     # Read mesh
-    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber'.format(args.mesh)
+    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber_with_data'.format(args.mesh)
     model = smart_reader('{}.vtk'.format(meshname))
 
     bilayer_n_cells = model.GetNumberOfCells()
@@ -77,8 +78,23 @@ def low_vol_LAT(args, path):
         
     # Low voltage in the model
     low_vol = vtk_thr(model,1,"CELLS","bi",args.low_vol_thr)
-
     low_vol_ids = vtk.util.numpy_support.vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
+
+    if args.debug:
+
+        meshbasename = args.mesh.split("/")[-1]
+        debug_dir = '{}/{}/debug'.format(args.init_state_dir, meshbasename)
+        try:
+            os.makedirs(debug_dir)
+        except OSError:
+            print("Creation of the directory %s failed" % debug_dir)
+        else:
+            print("Successfully created the directory %s " % debug_dir)
+
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName('{}/low_vol.vtu'.format(debug_dir))
+        writer.SetInputData(low_vol)
+        writer.Write()
 
     # Endo
 
@@ -88,9 +104,16 @@ def low_vol_LAT(args, path):
 
     endo = vtk_thr(geo_filter.GetOutput(),1,"CELLS","elemTag",10)
 
+    if args.debug:
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName('{}/endo.vtu'.format(debug_dir))
+        writer.SetInputData(endo)
+        writer.Write()
+
     # Get point LAT map in endocardium
     LAT_endo = vtk.util.numpy_support.vtk_to_numpy(endo.GetPointData().GetArray('lat'))
     endo_ids = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('Global_ids')).astype(int)
+    endo_pts = vtk.util.numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
 
     # Get elements LAT map in endocardium
     LAT_map = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('lat'))
@@ -101,20 +124,32 @@ def low_vol_LAT(args, path):
     not_low_volt_endo_pts = vtk.util.numpy_support.vtk_to_numpy(not_low_volt_endo.GetPoints().GetData())
     not_low_volt_ids = vtk.util.numpy_support.vtk_to_numpy(not_low_volt_endo.GetPointData().GetArray('Global_ids')).astype(int)
 
+    if args.debug:
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName('{}/not_low_volt_endo.vtu'.format(debug_dir))
+        writer.SetInputData(not_low_volt_endo)
+        writer.Write()
+
     # Extract LA wall from SSM to be sure that no veins or LAA is included when selecting the earliest activated point
-    LA_wall = smart_reader('/home/kit/ibt/yx5140/meshes/meanshape_new/LA_wall.vtk')
-    LA_wall_pt_ids = vtk.util.numpy_support.vtk_to_numpy(LA_wall.GetPointData().GetArray('PointIds'))
+    if args.SSM_fitting:
+        LA_wall = smart_reader(args.SSM_basename + '/LA_wall.vtk')
+        LA_wall_pt_ids = vtk.util.numpy_support.vtk_to_numpy(LA_wall.GetPointData().GetArray('PointIds'))
 
-    reader = vtk.vtkOBJReader()
-    reader.SetFileName('/home/kit/ibt/yx5140/meshes/Jadidi/{}/LA_fit.obj'.format(args.mesh))
-    reader.Update()
-    LA_fit = reader.GetOutput()
+        # See create_SSM_instance standalone to create LA_fit.obj
+        reader = vtk.vtkOBJReader()
+        reader.SetFileName('{}/LA_fit.obj'.format(args.mesh))
+        reader.Update()
+        LA_fit = reader.GetOutput()
 
-    LA_fit_wall_pts = vtk.util.numpy_support.vtk_to_numpy(LA_fit.GetPoints().GetData())[LA_wall_pt_ids,:]*1000
+        LA_fit_wall_pts = vtk.util.numpy_support.vtk_to_numpy(LA_fit.GetPoints().GetData())[LA_wall_pt_ids,:]*1000
 
-    tree = cKDTree(not_low_volt_endo_pts)
+        tree = cKDTree(not_low_volt_endo_pts)
 
-    dd, ii = tree.query(LA_fit_wall_pts)
+        dd, ii = tree.query(LA_fit_wall_pts)
+    else:
+        tree = cKDTree(not_low_volt_endo_pts)
+        dd, ii = tree.query(endo_pts)
+
 
     healthy_endo = not_low_volt_endo# vtk_thr(not_low_volt_endo,0,"POINTS","CV_mag", args.low_CV_thr)
     LAT_healthy = vtk.util.numpy_support.vtk_to_numpy(healthy_endo.GetPointData().GetArray('lat'))
@@ -126,6 +161,7 @@ def low_vol_LAT(args, path):
         # Selecting the location of earliest/latest activation as the very first activated map point 
         # or electrogram point can be error-prone since it can happen that there is a single point which was annotated too early/late
         # Latest activated point is the center of mass of the 97.5 percentile of LAT
+
         perc_975 = np.percentile(LAT_not_low_volt[ii], 97.5)
  
         ids=np.where(LAT_not_low_volt[ii]>=perc_975)[0]
@@ -177,7 +213,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
     tot_el_to_clean = np.array([],dtype=int)
     
     meshNew = dsa.WrapDataObject(endo)
-    
+    print("Starting creation of bands ... ")
     for i in range(1, len(steps)):
 
         # Extract LAT band from min LAT to step i and remove all areas not connected with EAP
@@ -269,7 +305,9 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
                 # delete added region id
                 connect.DeleteSpecifiedRegion(n)
                 connect.Update()
-    
+
+    print("Bands to clean ready ... ")
+
     idss = np.zeros((endo.GetNumberOfCells(),))    
     idss[tot_el_to_clean] = 1
     
@@ -326,7 +364,89 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         connect.DeleteSpecifiedRegion(n)
         connect.Update()
 
+    if args.debug:
+
+        meshbasename = args.mesh.split("/")[-1]
+        debug_dir = '{}/{}/debug'.format(args.init_state_dir, meshbasename)
+        try:
+            os.makedirs(debug_dir)
+        except OSError:
+            print("Creation of the directory %s failed" % debug_dir)
+        else:
+            print("Successfully created the directory %s " % debug_dir)
+        writer = vtk.vtkXMLUnstructuredGridWriter()
+        writer.SetFileName('{}/endo_with_clean_tag.vtu'.format(debug_dir))
+        writer.SetInputData(meshNew.VTKObject)
+        writer.Write()
+
     return el_to_clean, el_border
+
+def create_regele(endo,args):
+    # Read mesh
+    # meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber_with_data'.format(args.mesh)
+    # model = smart_reader('{}.vtk'.format(meshname))
+    #
+    # bilayer_n_cells = model.GetNumberOfCells()
+    #
+    # # Transfer lat and bipolar voltage from points to elements
+    # pt_cell = vtk.vtkPointDataToCellData()
+    # pt_cell.SetInputData(model)
+    # pt_cell.AddPointDataArray("bi")
+    # pt_cell.AddPointDataArray("lat")
+    # pt_cell.PassPointDataOn()
+    # pt_cell.CategoricalDataOff()
+    # pt_cell.ProcessAllArraysOff()
+    # pt_cell.Update()
+    #
+    # model = pt_cell.GetOutput()
+    #
+    # # Create Points and Cells ids
+    # cellid = vtk.vtkIdFilter()
+    # cellid.CellIdsOn()
+    # cellid.SetInputData(model)
+    # cellid.PointIdsOn()
+    # cellid.FieldDataOn()
+    # if int(vtk_version) >= 9:
+    #     cellid.SetPointIdsArrayName('Global_ids')
+    #     cellid.SetCellIdsArrayName('Global_ids')
+    # else:
+    #     cellid.SetIdsArrayName('Global_ids')
+    # cellid.Update()
+    #
+    # model = cellid.GetOutput()
+    #
+    # # Compute elements centroids
+    # filter_cell_centers = vtk.vtkCellCenters()
+    # filter_cell_centers.SetInputData(model)
+    # filter_cell_centers.Update()
+    # centroids = vtk.util.numpy_support.vtk_to_numpy(filter_cell_centers.GetOutput().GetPoints().GetData())
+    #
+    # geo_filter = vtk.vtkGeometryFilter()
+    # geo_filter.SetInputData(model)
+    # geo_filter.Update()
+    #
+    # endo = vtk_thr(geo_filter.GetOutput(),1,"CELLS","elemTag",10)
+
+    # Low voltage in the model
+    low_vol = vtk_thr(endo, 1, "CELLS", "bi", args.low_vol_thr)
+    low_vol_ids = vtk.util.numpy_support.vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
+    not_low_volt_endo = vtk_thr(endo, 0, "POINTS", "bi", 0.5 + 0.01)
+
+    # f_not_conductive = job.ID + '/elems_not_conductive'
+    # file = open(f_not_conductive + '.regele', 'w')
+    # file.write(str(len(elems_not_conductive)) + '\n')
+    # for i in elems_not_conductive:
+    #     file.write(str(i) + '\n')
+    # file.close()
+
+    f_slow_conductive = '{}/{}/elems_slow_conductive'.format(args.init_state_dir, args.mesh.split("/")[-1])
+    file = open(f_slow_conductive + '.regele', 'w')
+    file.write(str(len(low_vol_ids)) + '\n')
+    for i in low_vol_ids:
+        file.write(str(i) + '\n')
+    file.close()
+
+    print('Regele file done ...')
 
 def low_CV(model, low_CV_thr, meshfold):
 
@@ -399,7 +519,7 @@ def get_EAP(path_mod, path_fib):
 
     return stim_pt
 
-def smart_reader(path):
+def smart_reader_old(path):
     data_checker = vtk.vtkDataSetReader()
     data_checker.SetFileName(str(path))
     data_checker.Update()
@@ -408,6 +528,34 @@ def smart_reader(path):
         reader = vtk.vtkPolyDataReader()
     elif data_checker.IsFileUnstructuredGrid():
         reader = vtk.vtkUnstructuredGridReader()
+
+    reader.SetFileName(str(path))
+    reader.Update()
+    output = reader.GetOutput()
+
+    return output
+
+def smart_reader(path):
+    extension = str(path).split(".")[-1]
+
+    if extension == "vtk":
+        data_checker = vtk.vtkDataSetReader()
+        data_checker.SetFileName(str(path))
+        data_checker.Update()
+
+        if data_checker.IsFilePolyData():
+            reader = vtk.vtkPolyDataReader()
+        elif data_checker.IsFileUnstructuredGrid():
+            reader = vtk.vtkUnstructuredGridReader()
+
+    elif extension == "vtp":
+        reader = vtk.vtkXMLPolyDataReader()
+    elif extension == "vtu":
+        reader = vtk.vtkXMLUnstructuredGridReader()
+    elif extension == "obj":
+        reader = vtk.vtkOBJReader()
+    else:
+        print("No polydata or unstructured grid")
 
     reader.SetFileName(str(path))
     reader.Update()

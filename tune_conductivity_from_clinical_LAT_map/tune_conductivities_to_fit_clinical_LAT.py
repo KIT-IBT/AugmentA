@@ -115,6 +115,14 @@ def parser():
                         type=int,
                         default=0,
                         help='0 only low voltage, 1 scale vec, 2 low CV as 0.3 m/s')
+    parser.add_argument('--SSM_fitting',
+                        type=int,
+                        default=0,
+                        help='set to 1 to proceed with the fitting of a given SSM, 0 otherwise')
+    parser.add_argument('--SSM_basename',
+                        type=str,
+                        default="mesh/meanshape",
+                        help='statistical shape model basename')
     #----------------------------------------------------------------------------------------------------------------------------------------
     parser.add_argument('--dt',
                         type=float, default=20.0,
@@ -133,6 +141,10 @@ def parser():
                         type = int,
                         default = 4, 
                         help='Number of beats to prepace the tissue')
+    parser.add_argument('--debug',
+                        type=int,
+                        default=1,
+                        help='set to 1 to debug step by step, 0 otherwise')
 #----------------------------------------------------------------------------------------------------------------------------------------
 
     return parser
@@ -140,7 +152,7 @@ def parser():
 def jobID(args):
     today = date.today()
     mesh= args.mesh.split('/')[-1]
-    ID = '{}/converge_band_{}_prebeats_{}_bcl_{}_fib_{}_max_LAT_pt_{}_voltage_{}_CV_{}_meth_{}_fib_p_{}_step_{}_thr_{}'.format(args.results_dir,mesh,
+    ID = '{}/{}/converge_band_{}_prebeats_{}_bcl_{}_fib_{}_max_LAT_pt_{}_voltage_{}_CV_{}_meth_{}_fib_p_{}_step_{}_thr_{}'.format(args.results_dir,today.isoformat(),mesh,
         args.prebeats, args.bcl, args.fibrotic_tissue, args.max_LAT_pt, args.low_vol_thr, args.low_CV_thr, args.meth, args.fib_perc, args.step, args.thr)
     return ID
 
@@ -249,10 +261,8 @@ def run(args, job):
     # p = np.poly1d([0.67278584, 0.17556362, 0.01718574])
 
     meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber'.format(args.mesh)
-
-    meshfold = '{}'.format(args.mesh)
-
     meshbasename = meshname.split('/')[-4]
+    meshfold = '{}/{}'.format(args.init_state_dir,meshbasename)
     
     steady_state_dir = '{}/{}/cell_state'.format(args.init_state_dir, meshbasename)
 
@@ -278,8 +288,8 @@ def run(args, job):
         print ("Successfully created the directory %s " % simid)
 
     bilayer_n_cells, elements_in_fibrotic_reg, endo, endo_ids, centroids, LAT_map, min_LAT, el_to_clean, el_border, stim_pt, fit_LAT, healthy_endo = Methods_fit_to_clinical_LAT.low_vol_LAT(args, meshname+'_with_data.vtk')
-    
-    with open(meshfold+"/clinical_stim_pt.txt","w") as f:
+
+    with open("{}/{}/clinical_stim_pt.txt".format(args.init_state_dir, meshbasename),"w") as f:
         f.write("{} {} {}".format(stim_pt[0],stim_pt[1],stim_pt[2]))
 
     # Set to 1 every LAT <= 1
@@ -296,8 +306,12 @@ def run(args, job):
 
     # Find all not conductive elements belonging to the fibrotic tissue and not use them in the fitting
     tag = {}
-    
-    elems_not_conductive = np.loadtxt(meshfold+'/elems_slow_conductive.regele', skiprows=1, dtype=int)
+    if not os.path.isfile('{}/elems_slow_conductive.regele'.format(meshfold)):
+        Methods_fit_to_clinical_LAT.create_regele(endo,args)
+
+    print ('Reading regele file ...')
+
+    elems_not_conductive = np.loadtxt('{}/elems_slow_conductive.regele'.format(meshfold), skiprows=1, dtype=int)
 
     endo_etag = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('elemTag'))
 
@@ -310,10 +324,9 @@ def run(args, job):
     meshNew = dsa.WrapDataObject(endo)
     meshNew.CellData.append(endo_etag, "elemTag")
 
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(meshfold+"/LA_endo_with_fiber_30.vtk")
+    writer = vtk.vtkXMLUnstructuredGridWriter()
+    writer.SetFileName("{}/LA_endo_with_fiber_30.vtu".format(meshfold))
     writer.SetInputData(meshNew.VTKObject)
-    writer.SetFileTypeToBinary()
     writer.Write()
 
     pts = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetPoints().GetData())
@@ -340,7 +353,7 @@ def run(args, job):
 
     meshname_e = meshfold+"/LA_endo_with_fiber_30"
 
-    new_endo = Methods_converge_to_lat.smart_reader(meshname_e+'.vtk')
+    new_endo = Methods_fit_to_clinical_LAT.smart_reader(meshname_e+'.vtu')
     cellid = vtk.vtkIdFilter()
     cellid.CellIdsOn()
     cellid.SetInputData(new_endo)
@@ -543,7 +556,7 @@ def run(args, job):
             #Run simulation
             remove_trash2(simid)
             job.carp(cmd)
-        
+
             # Read simulated LAT map
             lats = np.loadtxt(simid + '/init_acts_ACTs-thresh.dat')
             meshNew = dsa.WrapDataObject(new_endo)
@@ -560,9 +573,9 @@ def run(args, job):
             model = pt_cell.GetOutput()
             meshNew = dsa.WrapDataObject(model)
             # Extract all not fibrotic tissue (103 is not conductive)
-            healthy_endo = Methods_converge_to_lat.vtk_thr(model,1,"CELLS","elemTag",102)
+            healthy_endo = Methods_fit_to_clinical_LAT.vtk_thr(model,1,"CELLS","elemTag",102)
             # Extract all cells which are activated
-            active = Methods_converge_to_lat.vtk_thr(healthy_endo,0,"POINTS","lat_s",0)
+            active = Methods_fit_to_clinical_LAT.vtk_thr(healthy_endo,0,"POINTS","lat_s",0)
 
             active_cells = vtk.util.numpy_support.vtk_to_numpy(active.GetCellData().GetArray('Global_ids')).astype(int)
             print("active_cells: {}".format(len(active_cells)))
@@ -641,10 +654,10 @@ def run(args, job):
                 slow_CV = np.where(slow_CV<0.15, 0.15, slow_CV)  # Set a lower bound in CV of 0.35 m/s
                 
                 meshNew.CellData.append(slow_CV, "slow_CV")
-                writer = vtk.vtkUnstructuredGridWriter()
-                writer.SetFileName(job.ID+"/endo_cleaned_{}.vtk".format(l))
+                writer = vtk.vtkXMLUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/endo_cleaned_{}.vtu".format(l))
                 writer.SetInputData(meshNew.VTKObject)
-                writer.SetFileTypeToBinary()
+                #writer.SetFileTypeToBinary()
                 writer.Write()
                 LAT_diff = RMSE
                 os.rename(simid + '/low_CV.dat',simid + '/low_CV_old.dat')
@@ -662,10 +675,10 @@ def run(args, job):
                 meshNew.CellData.append(LATs_diff, "LATs_diff")
                 meshNew.CellData.append(slow_CV_old, "slow_CV_old")
                 final_diff.append(LAT_diff)
-                writer = vtk.vtkUnstructuredGridWriter()
-                writer.SetFileName(job.ID+"/endo_cleaned_{}.vtk".format(l))
+                writer = vtk.vtkXMLUnstructuredGridWriter()
+                writer.SetFileName(job.ID+"/endo_cleaned_{}.vtu".format(l))
                 writer.SetInputData(meshNew.VTKObject)
-                writer.SetFileTypeToBinary()
+                #writer.SetFileTypeToBinary()
                 writer.Write()
                 break
     
@@ -715,7 +728,7 @@ def run(args, job):
     remove_trash2(simid)
     job.carp(cmd)
 
-    model_cleaned = Methods_converge_to_lat.vtk_thr(meshNew.VTKObject, 2, "CELLS", "idss", 0,0)
+    model_cleaned = Methods_fit_to_clinical_LAT.vtk_thr(meshNew.VTKObject, 2, "CELLS", "idss", 0,0)
 
     cleaned_ids = vtk.util.numpy_support.vtk_to_numpy(model_cleaned.GetPointData().GetArray('Global_ids')).astype(int)
 
@@ -770,10 +783,10 @@ def run(args, job):
     meshNew.CellData.append(slow_CV, "slow_CV")
     meshNew.CellData.append(LATs_diff, "LATs_diff")
 
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(job.ID+"/endo_final.vtk".format(l))
+    writer = vtk.vtkXMLUnstructuredGridWriter()
+    writer.SetFileName(job.ID+"/endo_final.vtu".format(l))
     writer.SetInputData(meshNew.VTKObject)
-    writer.SetFileTypeToBinary()
+    #writer.SetFileTypeToBinary()
     writer.Write()
 
 if __name__ == '__main__':
