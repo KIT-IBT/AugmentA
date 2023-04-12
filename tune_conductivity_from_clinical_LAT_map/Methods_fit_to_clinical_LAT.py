@@ -38,7 +38,7 @@ vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 def low_vol_LAT(args, path):
 
     # Read mesh
-    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber_with_data'.format(args.mesh)
+    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber_with_data_um'.format(args.mesh) # in um
     model = smart_reader('{}.vtk'.format(meshname))
 
     bilayer_n_cells = model.GetNumberOfCells()
@@ -382,51 +382,6 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
     return el_to_clean, el_border
 
 def create_regele(endo,args):
-    # Read mesh
-    # meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber_with_data'.format(args.mesh)
-    # model = smart_reader('{}.vtk'.format(meshname))
-    #
-    # bilayer_n_cells = model.GetNumberOfCells()
-    #
-    # # Transfer lat and bipolar voltage from points to elements
-    # pt_cell = vtk.vtkPointDataToCellData()
-    # pt_cell.SetInputData(model)
-    # pt_cell.AddPointDataArray("bi")
-    # pt_cell.AddPointDataArray("lat")
-    # pt_cell.PassPointDataOn()
-    # pt_cell.CategoricalDataOff()
-    # pt_cell.ProcessAllArraysOff()
-    # pt_cell.Update()
-    #
-    # model = pt_cell.GetOutput()
-    #
-    # # Create Points and Cells ids
-    # cellid = vtk.vtkIdFilter()
-    # cellid.CellIdsOn()
-    # cellid.SetInputData(model)
-    # cellid.PointIdsOn()
-    # cellid.FieldDataOn()
-    # if int(vtk_version) >= 9:
-    #     cellid.SetPointIdsArrayName('Global_ids')
-    #     cellid.SetCellIdsArrayName('Global_ids')
-    # else:
-    #     cellid.SetIdsArrayName('Global_ids')
-    # cellid.Update()
-    #
-    # model = cellid.GetOutput()
-    #
-    # # Compute elements centroids
-    # filter_cell_centers = vtk.vtkCellCenters()
-    # filter_cell_centers.SetInputData(model)
-    # filter_cell_centers.Update()
-    # centroids = vtk.util.numpy_support.vtk_to_numpy(filter_cell_centers.GetOutput().GetPoints().GetData())
-    #
-    # geo_filter = vtk.vtkGeometryFilter()
-    # geo_filter.SetInputData(model)
-    # geo_filter.Update()
-    #
-    # endo = vtk_thr(geo_filter.GetOutput(),1,"CELLS","elemTag",10)
-
     # Low voltage in the model
     low_vol = vtk_thr(endo, 1, "CELLS", "bi", args.low_vol_thr)
     low_vol_ids = vtk.util.numpy_support.vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
