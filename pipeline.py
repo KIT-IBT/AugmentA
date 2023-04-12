@@ -228,8 +228,8 @@ def AugmentA(args):
             meshin = pv.read('{}.vtk'.format(meshname))
             pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
 
-            if args.atrium =='LA_RA':
-                apex_id = -1 # Find new location with resampled mesh
+            #if args.atrium =='LA_RA':
+            apex_id = -1 # Find new location with resampled mesh
 
             # Here finds the LAA_id and/or RAA_id for the remeshed geometry
             resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=args.target_mesh_resolution, find_apex_with_curv=0, scale=args.scale, apex_id=apex_id, atrium = args.atrium)
@@ -310,7 +310,8 @@ def AugmentA(args):
                 la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(0), "--mesh_type", "vol", "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
             else:
                 la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
-                os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=carp_txt -scale={}".format('{}_fibers/result_{}/{}_bilayer_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium), '{}_fibers/result_{}/{}_bilayer_with_fiber_um.{}'.format(processed_mesh, args.atrium, args.atrium), 1000 * args.scale))
+                os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=carp_txt -scale={}".format('{}_fibers/result_{}/{}_bilayer_with_fiber'.format(processed_mesh, args.atrium, args.atrium), '{}_fibers/result_{}/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium, args.atrium), 1000 * args.scale))
+                os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=vtk".format('{}_fibers/result_{}/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium, args.atrium), '{}_fibers/result_{}/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium, args.atrium)))
 
         elif args.atrium == "RA":
             # Atrial region annotation and fiber generation using LDRBM
