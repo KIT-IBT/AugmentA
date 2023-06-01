@@ -228,8 +228,8 @@ def AugmentA(args):
             meshin = pv.read('{}.vtk'.format(meshname))
             pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
 
-            if args.atrium =='LA_RA':
-                apex_id = -1 # Find new location with resampled mesh
+            #if args.atrium =='LA_RA':
+            apex_id = -1 # Find new location with resampled mesh
 
             # Here finds the LAA_id and/or RAA_id for the remeshed geometry
             resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=args.target_mesh_resolution, find_apex_with_curv=0, scale=args.scale, apex_id=apex_id, atrium = args.atrium)
