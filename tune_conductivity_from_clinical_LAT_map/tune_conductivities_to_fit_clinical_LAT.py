@@ -52,8 +52,8 @@ def parser():
     # Generate the standard command line parser
     parser = tools.standard_parser()
     # Add arguments
-    parser.add_argument('--giL', type=float, default=0.86, help='intracellular longitudinal conductivity to fit CV=0.714 m/s with dx=0.3 mm and dt=20')
-    parser.add_argument('--geL', type=float, default=3.10, help='extracellular longitudinal conductivity to fit CV=0.714 m/s with dx=0.3 mm and dt=20')
+    parser.add_argument('--giL', type=float, default=0.4, help='intracellular longitudinal conductivity to fit CV=0.714 m/s with dx=0.3 mm and dt=20')
+    parser.add_argument('--geL', type=float, default=1.1, help='extracellular longitudinal conductivity to fit CV=0.714 m/s with dx=0.3 mm and dt=20')
     parser.add_argument('--model',
                         type=str,
                         default='COURTEMANCHE',
@@ -131,11 +131,21 @@ def parser():
     parser.add_argument('--bcl',
                         type=float, default=500.0,
                         help='initial basic cycle lenght in [ms]')
-
-    parser.add_argument('--beats-single-cell',
-                    type = int,
-                        default = 20, 
-                        help='Beats to prepace at single cell') 
+    parser.add_argument('--stim_duration',
+                        type=float, default=3.0,
+                        help='stimulation duration in ms')
+    parser.add_argument('--strength',
+                        type=float, default=30,
+                        help='stimulation transmembrane current in uA/cm^2 (2Dcurrent) or uA/cm^3 (3Dcurrent)')
+    # Single cell prepace
+    parser.add_argument('--cell_bcl',
+                          type=float,
+                          default=1000.0,
+                          help='Specify the basic cycle length (ms) to initialize cells')
+    parser.add_argument('--numstim',
+                          type=int,
+                          default=50,
+                          help='Specify the number of single cell stimuli with the given bcl')
 
     parser.add_argument('--prebeats',
                         type = int,
@@ -152,7 +162,7 @@ def parser():
 def jobID(args):
     today = date.today()
     mesh= args.mesh.split('/')[-1]
-    ID = '{}/{}/converge_band_{}_prebeats_{}_bcl_{}_fib_{}_max_LAT_pt_{}_voltage_{}_CV_{}_meth_{}_fib_p_{}_step_{}_thr_{}'.format(args.results_dir,today.isoformat(),mesh,
+    ID = '{}/{}_converge_band_{}_prebeats_{}_bcl_{}_fib_{}_max_LAT_pt_{}_voltage_{}_CV_{}_meth_{}_fib_p_{}_step_{}_thr_{}'.format(args.results_dir,today.isoformat(),mesh,
         args.prebeats, args.bcl, args.fibrotic_tissue, args.max_LAT_pt, args.low_vol_thr, args.low_CV_thr, args.meth, args.fib_perc, args.step, args.thr)
     return ID
 
@@ -169,24 +179,24 @@ def single_cell_initialization(args,job, steady_state_dir, to_do):
 
     n_regions = len(g_CaL_reg)
 
-    duration = 20*1000
+    duration = args.numstim*args.cell_bcl
     for k in range(n_regions):
-        init_file = steady_state_dir + '/init_values_stab_bcl_{}_reg_{}.sv'.format(1000, k)
+        init_file = steady_state_dir + '/init_values_stab_bcl_{}_reg_{}_numstim_{}.sv'.format(args.cell_bcl, k,args.numstim)
         cmd = [settings.execs.BENCH,
         '--imp',                args.model,
         '--imp-par',            'g_CaL*{},g_K1*{},blf_i_Kur*{},g_to*{},g_Ks*{},maxI_pCa*{},maxI_NaCa*{},g_Kr*{}'.format(g_CaL_reg[k],g_K1_reg[k],blf_g_Kur_reg[k],g_to_reg[k],g_Ks_reg[k],maxI_pCa_reg[k],maxI_NaCa_reg[k],g_Kr_reg[k]),
-        '--bcl',                1000,
-        '--dt-out',             duration,
+        '--bcl',                args.cell_bcl,
+        '--dt-out',             1, # Temporal granularity in ms (if  --dt-out= duration it saves only last value)
         '--stim-curr',          9.5,
-        '--stim-dur',           2,
-        '--numstim',            20,
+        '--stim-dur',           args.stim_duration,
+        '--numstim',            args.numstim,
         '--duration',           duration,
         '--stim-start',         0,
         '--dt',                 args.dt/1000,
-        '--fout='               + '{}/tVI_stabilization'.format(job.ID),
+        '--fout='               + steady_state_dir + '/{}_numstim_{}_bcl_ms_{}'.format(args.numstim,args.cell_bcl,k),
         '-S',                   duration,
         '-F',                   init_file,
-        '--no-trace',           'on']
+        '--trace-no',           k]
         if to_do:
             job.bash(cmd)
 
@@ -203,31 +213,40 @@ def single_cell_initialization(args,job, steady_state_dir, to_do):
         n_regions += len(g_CaL_fib)
 
         for kk in range(len(g_CaL_fib)):
-            init_file = steady_state_dir + '/init_values_stab_bcl_{}_reg_{}.sv'.format(1000, k+1+kk)
+            init_file = steady_state_dir + '/init_values_stab_bcl_{}_reg_{}_numstim_{}.sv'.format(args.cell_bcl, k+1+kk,args.numstim)
             cmd = [settings.execs.BENCH,
             '--imp',                args.model,
             '--imp-par',            'g_CaL*{},g_Na*{},blf_i_Kur*{},g_to*{},g_Ks*{},maxI_pCa*{},maxI_NaCa*{}'.format(g_CaL_fib[kk],g_Na_fib[kk],blf_g_Kur_fib[kk],g_to_fib[kk],g_Ks_fib[kk],maxI_pCa_fib[kk],maxI_NaCa_fib[kk]),
-            '--bcl',                1000,
-            '--dt-out',             duration,
+            '--bcl',                args.cell_bcl,
+            '--dt-out',             1, # Temporal granularity in ms (if  --dt-out= duration it saves only last value)
             '--stim-curr',          9.5,
-            '--stim-dur',           2,
-            '--numstim',            20,
+            '--stim-dur',           args.stim_duration,
+            '--numstim',            args.numstim,
             '--duration',           duration,
             '--stim-start',         0,
             '--dt',                 args.dt/1000,
-            '--fout='               + '{}/tVI_stabilization'.format(job.ID),
+            '--fout='               + steady_state_dir + '/{}_numstim_{}_bcl_ms_{}'.format(args.numstim,args.cell_bcl,k+1+kk),
             '-S',                   duration,
             '-F',                   init_file,
-            '--no-trace',           'on']
+            '--trace-no',           k+1+kk]
             if to_do:
                 job.bash(cmd)
 
     tissue_init = []
     for k in range(n_regions):
-        init_file = steady_state_dir + '/init_values_stab_bcl_{}_reg_{}.sv'.format(1000, k)
+        init_file = steady_state_dir + '/init_values_stab_bcl_{}_reg_{}_numstim_{}.sv'.format(args.cell_bcl, k, args.numstim)
         tissue_init += ['-imp_region[{}].im_sv_init'.format(k), init_file]
 
+    if to_do: # Move trace files to steady_state_dir
+        for file in os.listdir(os.getcwd()):
+            if file.startswith("Trace") or file.startswith("{}_trace".format(args.model)):
+                old_file = os.getcwd() + '/' + file
+                new_file = steady_state_dir + '/' + file
+                os.rename(old_file, new_file)
+
+
     return tissue_init
+
 
 def remove_trash2(simid):
             for f in os.listdir(simid):
@@ -260,7 +279,7 @@ def run(args, job):
 
     # p = np.poly1d([0.67278584, 0.17556362, 0.01718574])
 
-    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber'.format(args.mesh)
+    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber'.format(args.mesh) # um
     meshbasename = meshname.split('/')[-4]
     meshfold = '{}/{}'.format(args.init_state_dir,meshbasename)
     
@@ -273,11 +292,12 @@ def run(args, job):
     else:
         print ("Successfully created the directory %s " % steady_state_dir)
 
-    if not os.path.isfile(steady_state_dir + '/init_values_stab_bcl_{}_reg_{}.sv'.format(1000, 0)):
-        tissue_init = single_cell_initialization(args,job,steady_state_dir, 1)
+    if not os.path.isfile(
+            steady_state_dir + '/init_values_stab_bcl_{}_reg_{}_numstim_{}.sv'.format(args.cell_bcl, 0, args.numstim)):
+        tissue_init = single_cell_initialization(args, job, steady_state_dir, 1)
     else:
-        tissue_init = single_cell_initialization(args,job,steady_state_dir, 0)
-    
+        tissue_init = single_cell_initialization(args, job, steady_state_dir, 0)
+
     simid = job.ID
 
     try:
@@ -287,7 +307,7 @@ def run(args, job):
     else:
         print ("Successfully created the directory %s " % simid)
 
-    bilayer_n_cells, elements_in_fibrotic_reg, endo, endo_ids, centroids, LAT_map, min_LAT, el_to_clean, el_border, stim_pt, fit_LAT, healthy_endo = Methods_fit_to_clinical_LAT.low_vol_LAT(args, meshname+'_with_data.vtk')
+    bilayer_n_cells, elements_in_fibrotic_reg, endo, endo_ids, centroids, LAT_map, min_LAT, el_to_clean, el_border, stim_pt, fit_LAT, healthy_endo = Methods_fit_to_clinical_LAT.low_vol_LAT(args, meshname+'_with_data_um.vtk')
 
     with open("{}/{}/clinical_stim_pt.txt".format(args.init_state_dir, meshbasename),"w") as f:
         f.write("{} {} {}".format(stim_pt[0],stim_pt[1],stim_pt[2]))
@@ -325,17 +345,17 @@ def run(args, job):
     meshNew.CellData.append(endo_etag, "elemTag")
 
     writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName("{}/LA_endo_with_fiber_30.vtu".format(meshfold))
+    writer.SetFileName("{}/LA_endo_with_fiber_30_um.vtu".format(meshfold))
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
     pts = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetPoints().GetData())
-    with open(meshfold+"/LA_endo_with_fiber_30.pts","w") as f:
+    with open(meshfold+"/LA_endo_with_fiber_30_um.pts","w") as f:
         f.write("{}\n".format(len(pts)))
         for i in range(len(pts)):
             f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
 
-    with open(meshfold+"/LA_endo_with_fiber_30.elem","w") as f:
+    with open(meshfold+"/LA_endo_with_fiber_30_um.elem","w") as f:
         f.write("{}\n".format(meshNew.VTKObject.GetNumberOfCells()))
         for i in range(meshNew.VTKObject.GetNumberOfCells()):
             cell = meshNew.VTKObject.GetCell(i)
@@ -343,15 +363,16 @@ def run(args, job):
             
     el_epi = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('fiber'))
     sheet_epi = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('sheet'))
-    
-    with open(meshfold+"/LA_endo_with_fiber_30.lon","w") as f:
+
+    el_epi = el_epi/1000
+    sheet_epi = sheet_epi/1000
+
+    with open(meshfold+"/LA_endo_with_fiber_30_um.lon","w") as f:
         f.write("2\n")
         for i in range(len(el_epi)):
             f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2], sheet_epi[i][0], sheet_epi[i][1], sheet_epi[i][2]))
-                
-    meshname = meshfold +'/{}'.format(meshbasename)+'_{}'.format(args.fib_perc)
 
-    meshname_e = meshfold+"/LA_endo_with_fiber_30"
+    meshname_e = meshfold+"/LA_endo_with_fiber_30_um"
 
     new_endo = Methods_fit_to_clinical_LAT.smart_reader(meshname_e+'.vtu')
     cellid = vtk.vtkIdFilter()
@@ -372,14 +393,14 @@ def run(args, job):
         for row in reader:
             tag[row['name']] = int(row['tag'])
 
-    reg_0 = [tag['sinus_node'], 54, 65, 57, 67] # SN, ICV, CS
-    reg_1 = [1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15, 17, 51, 52, 55, 56, 58, 61, 62, 63, 66, 68, 84, 86, 88] 
-    reg_2 = tag['crista_terminalis'] #  CT
-    reg_3 = tag['pectinate_muscle'] #  PM
-    reg_4 = [tag['bachmann_bundel_left'], tag['bachmann_bundel_right'], tag['bachmann_bundel_internal']] #  BB
+    reg_0 = [tag['sinus_node'], 54, 65, 70] # SN 69, ICB_endo 54, ICB_epi 65,  CS 70
+    reg_1 = [1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 51, 52, 53, 54, 55, 56, 57, 58, 61, 62, 63, 66, 67, 68, 84, 86, 88] # LA endo 1-7, LA epi 11-17, RA endo 51-58 , RA epi 61-68, 84 MPB, 86 UPB, CSB 88 RA endo 51-58 ->bridges
+    reg_2 = tag['crista_terminalis'] #  CT 60
+    reg_3 = tag['pectinate_muscle'] #  PM 59
+    reg_4 = [tag['bachmann_bundel_left'], tag['bachmann_bundel_right'], tag['bachmann_bundel_internal']] #  BB 81,82,83
 
-    if args.fibrotic_tissue == 1:
-        reg_1 = [1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15, 17, 51, 52, 55, 56, 58, 61, 62, 63, 66, 68, 84, 86, 88, 101, 102]
+    if args.fibrotic_tissue == 1: # append regions 101,102,103
+        reg_1 = [1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 14, 15, 17, 51, 52, 55, 56, 58, 61, 62, 63, 66, 68, 84, 86, 88, 101, 102, 103]
 
     lat = ['-num_LATs',           1,
                '-lats[0].ID',         'ACTs',
@@ -391,6 +412,7 @@ def run(args, job):
     slow_CV = np.ones((len(endo_ids),))
     slow_CV_old = np.ones((len(endo_ids),))
 
+    # Create the conductivity scale map with ones factors as initial condition
     f = open(simid + '/low_CV.dat','w')
     for i in slow_CV:
         f.write("{:.4f}\n".format(i))
@@ -420,140 +442,139 @@ def run(args, job):
             cmd = tools.carp_cmd('stimulation.par')
 
             tissue_0 = ['-num_gregions', 6,
-                        '-gregion[0].num_IDs', len(reg_0), 
-                        '-gregion[0].g_il',  args.giL,
-                        '-gregion[0].g_it',  args.giL,
-                        '-gregion[0].g_in',  args.giL,
-                        '-gregion[0].g_el',  args.geL,
+                        '-gregion[0].num_IDs', len(reg_0),
+                        '-gregion[0].g_il', args.giL,
+                        '-gregion[0].g_it', args.giL,
+                        '-gregion[0].g_in', args.giL,
+                        '-gregion[0].g_el', args.geL,
                         '-gregion[0].g_et ', args.geL,
                         '-gregion[0].g_en ', args.geL]
-            
-            tissue_1 = ['-gregion[1].num_IDs ', len(reg_1), 
+
+            tissue_1 = ['-gregion[1].num_IDs ', len(reg_1),
                         '-gregion[1].g_il ', args.giL,
-                        '-gregion[1].g_it ', args.giL/(3.75*0.62), 
-                        '-gregion[1].g_in ', args.giL/(3.75*0.62),
+                        '-gregion[1].g_it ', args.giL / (3.75 * 0.62),
+                        '-gregion[1].g_in ', args.giL / (3.75 * 0.62),
                         '-gregion[1].g_el ', args.geL,
-                        '-gregion[1].g_et ', args.geL/(3.75*0.62),
-                        '-gregion[1].g_en ', args.geL/(3.75*0.62)]
+                        '-gregion[1].g_et ', args.geL / (3.75 * 0.62),
+                        '-gregion[1].g_en ', args.geL / (3.75 * 0.62)]
             if args.fibrotic_tissue == 1:
                 tissue_0 = ['-num_gregions', 8,
-                        '-gregion[0].num_IDs', len(reg_0), 
-                        '-gregion[0].g_il',  args.giL,
-                        '-gregion[0].g_it',  args.giL,
-                        '-gregion[0].g_in',  args.giL,
-                        '-gregion[0].g_el',  args.geL,
-                        '-gregion[0].g_et ', args.geL,
-                        '-gregion[0].g_en ', args.geL]
-                 
-                tissue_1 = ['-gregion[1].num_IDs ', len(reg_1), 
-                        '-gregion[1].g_il ', args.giL,
-                        '-gregion[1].g_it ', args.giL/(3.75*0.62), 
-                        '-gregion[1].g_in ', args.giL/(3.75*0.62),
-                        '-gregion[1].g_el ', args.geL,
-                        '-gregion[1].g_et ', args.geL/(3.75*0.62),
-                        '-gregion[1].g_en ', args.geL/(3.75*0.62)]
-            for i in range(len(reg_0)):
-                tissue_0 += ['-gregion[0].ID[' + str(i) + ']', reg_0[i],]
-            for i in range(len(reg_1)):
-                tissue_1 += ['-gregion[1].ID[' + str(i) + ']', reg_1[i],]
+                            '-gregion[0].num_IDs', len(reg_0),
+                            '-gregion[0].g_il', args.giL,
+                            '-gregion[0].g_it', args.giL,
+                            '-gregion[0].g_in', args.giL,
+                            '-gregion[0].g_el', args.geL,
+                            '-gregion[0].g_et ', args.geL,
+                            '-gregion[0].g_en ', args.geL]
 
-            CT_gi = args.giL*2
-            CT_ge = args.geL*2
+                tissue_1 = ['-gregion[1].num_IDs ', len(reg_1),
+                            '-gregion[1].g_il ', args.giL,
+                            '-gregion[1].g_it ', args.giL / (3.75 * 0.62),
+                            '-gregion[1].g_in ', args.giL / (3.75 * 0.62),
+                            '-gregion[1].g_el ', args.geL,
+                            '-gregion[1].g_et ', args.geL / (3.75 * 0.62),
+                            '-gregion[1].g_en ', args.geL / (3.75 * 0.62)]
+            for i in range(len(reg_0)):
+                tissue_0 += ['-gregion[0].ID[' + str(i) + ']', reg_0[i], ]
+            for i in range(len(reg_1)):
+                tissue_1 += ['-gregion[1].ID[' + str(i) + ']', reg_1[i], ]
+
+            CT_gi = args.giL * 2
+            CT_ge = args.geL * 2
             tissue_2 = ['-gregion[2].num_IDs ', 1,
                         '-gregion[2].ID ', reg_2,
                         '-gregion[2].g_il ', CT_gi,
-                        '-gregion[2].g_it ', CT_gi/(6.562*0.62), 
-                        '-gregion[2].g_in ', CT_gi/(6.562*0.62),
+                        '-gregion[2].g_it ', CT_gi / (6.562 * 0.62),
+                        '-gregion[2].g_in ', CT_gi / (6.562 * 0.62),
                         '-gregion[2].g_el ', CT_ge,
-                        '-gregion[2].g_et ', CT_ge/(6.562*0.62),
-                        '-gregion[2].g_en ', CT_ge/(6.562*0.62)]
-            PM_gi = args.giL*2
-            PM_ge = args.geL*2
+                        '-gregion[2].g_et ', CT_ge / (6.562 * 0.62),
+                        '-gregion[2].g_en ', CT_ge / (6.562 * 0.62)]
+            PM_gi = args.giL * 2
+            PM_ge = args.geL * 2
             tissue_3 = ['-gregion[3].num_IDs ', 1,
                         '-gregion[3].ID ', reg_3,
                         '-gregion[3].g_il ', PM_gi,
-                        '-gregion[3].g_it ', PM_gi/(10.52*0.62),
-                        '-gregion[3].g_in ', PM_gi/(10.52*0.62),
+                        '-gregion[3].g_it ', PM_gi / (10.52 * 0.62),
+                        '-gregion[3].g_in ', PM_gi / (10.52 * 0.62),
                         '-gregion[3].g_el ', PM_ge,
-                        '-gregion[3].g_et ', PM_ge/(10.52*0.62),
-                        '-gregion[3].g_en ', PM_ge/(10.52*0.62)]
-            BB_gi = args.giL*3
-            BB_ge = args.geL*3
-            tissue_4 = ['-gregion[4].num_IDs ', 3, 
+                        '-gregion[3].g_et ', PM_ge / (10.52 * 0.62),
+                        '-gregion[3].g_en ', PM_ge / (10.52 * 0.62)]
+            BB_gi = args.giL * 3
+            BB_ge = args.geL * 3
+            tissue_4 = ['-gregion[4].num_IDs ', 3,
                         '-gregion[4].g_il ', BB_gi,
-                        '-gregion[4].g_it ', BB_gi/(9*0.62), 
-                        '-gregion[4].g_in ', BB_gi/(9*0.62),
+                        '-gregion[4].g_it ', BB_gi / (9 * 0.62),
+                        '-gregion[4].g_in ', BB_gi / (9 * 0.62),
                         '-gregion[4].g_el ', BB_ge,
-                        '-gregion[4].g_et ', BB_ge/(9*0.62),
-                        '-gregion[4].g_en ', BB_ge/(9*0.62)]
+                        '-gregion[4].g_et ', BB_ge / (9 * 0.62),
+                        '-gregion[4].g_en ', BB_ge / (9 * 0.62)]
             for i in range(len(reg_4)):
-                tissue_4 += ['-gregion[4].ID[' + str(i) + ']', reg_4[i],]
+                tissue_4 += ['-gregion[4].ID[' + str(i) + ']', reg_4[i], ]
 
             sigma_L = 2.1
-            bilayer = ['-gregion[5].num_IDs ', 1, 
-                        '-gregion[5].ID ', 100,
-                        '-gregion[5].g_il ', sigma_L,
-                        '-gregion[5].g_it ', sigma_L, 
-                        '-gregion[5].g_in ', sigma_L,
-                        '-gregion[5].g_el ', sigma_L,
-                        '-gregion[5].g_et ', sigma_L,
-                        '-gregion[5].g_en ', sigma_L]
-            if it == 1:
-                g_scale = ['-ge_scale_vec', simid+'/conductivity_map_old.dat',
-                       '-gi_scale_vec', simid+'/conductivity_map_old.dat']
-            else:
-                g_scale = ['-ge_scale_vec', simid+'/conductivity_map.dat',
-                       '-gi_scale_vec', simid+'/conductivity_map.dat']
+            bilayer = ['-gregion[5].num_IDs ', 1,
+                       '-gregion[5].ID ', 100,
+                       '-gregion[5].g_il ', sigma_L,
+                       '-gregion[5].g_it ', sigma_L,
+                       '-gregion[5].g_in ', sigma_L,
+                       '-gregion[5].g_el ', sigma_L,
+                       '-gregion[5].g_et ', sigma_L,
+                       '-gregion[5].g_en ', sigma_L]
+
+            g_scale = ['-ge_scale_vec', simid + '/low_CV.dat',
+                        '-gi_scale_vec', simid + '/low_CV.dat']
+
             # Set different tissue properties
-            cmd += tissue_0 
-            cmd += tissue_1 
+            cmd += tissue_0
+            cmd += tissue_1
             cmd += tissue_2
             cmd += tissue_3
-            cmd += tissue_4 + bilayer + g_scale
-            if args.fibrotic_tissue == 1:
-                fib_reg = [103]
-                sigma = 0.000001
-                fibrotic_tissue = ['-gregion[6].num_IDs ', 1, #tianbao
-                        '-gregion[6].ID ', 103,
-                        '-gregion[6].g_il ', sigma,
-                        '-gregion[6].g_it ', sigma, 
-                        '-gregion[6].g_in ', sigma,
-                        '-gregion[6].g_el ', sigma,
-                        '-gregion[6].g_et ', sigma,
-                        '-gregion[6].g_en ', sigma]
-                cmd += fibrotic_tissue
+            cmd += tissue_4 + bilayer
+            cmd += g_scale
+            # if args.fibrotic_tissue == 1:
+            #     fib_reg = [103]
+            #     sigma = 0.000001
+            #     fibrotic_tissue = ['-gregion[6].num_IDs ', 1, #tianbao
+            #             '-gregion[6].ID ', 103,
+            #             '-gregion[6].g_il ', sigma,
+            #             '-gregion[6].g_it ', sigma,
+            #             '-gregion[6].g_in ', sigma,
+            #             '-gregion[6].g_el ', sigma,
+            #             '-gregion[6].g_et ', sigma,
+            #             '-gregion[6].g_en ', sigma]
+            #     cmd += fibrotic_tissue
 
             writestatef = 'state'
             tsav_state = fit_LAT[l]
             # Setting the stimulus at the sinus node
-            prepace = ['-num_stim',                     1,
-                    '-write_statef', writestatef,
-                    '-num_tsav', 1,
-                    '-tsav[0]', tsav_state,
-                    '-stimulus[0].stimtype',         0,
-                    '-stimulus[0].strength',         30.0,
-                    '-stimulus[0].duration',         2.0,
-                    '-stimulus[0].npls',             1,
-                    '-stimulus[0].ctr_def',          1,
-                    '-stimulus[0].x0',               stim_pt[0],
-                    '-stimulus[0].xd',               3000,
-                    '-stimulus[0].y0',               stim_pt[1],
-                    '-stimulus[0].yd',               3000,
-                    '-stimulus[0].z0',               stim_pt[2],
-                    '-stimulus[0].zd',               3000]
+            prepace = ['-num_stim', 1,
+                       '-write_statef', writestatef,
+                       '-num_tsav', 1,
+                       '-tsav[0]', tsav_state,
+                       '-stimulus[0].stimtype', 0,
+                       '-stimulus[0].strength', 30.0,
+                       '-stimulus[0].duration', args.stim_duration,
+                       '-stimulus[0].npls', 1,
+                       '-stimulus[0].ctr_def', 1,
+                       '-stimulus[0].x0', stim_pt[0] ,
+                       '-stimulus[0].xd', 3000,
+                       '-stimulus[0].y0', stim_pt[1] ,
+                       '-stimulus[0].yd', 3000,
+                       '-stimulus[0].z0', stim_pt[2] ,
+                       '-stimulus[0].zd', 3000]
 
-            cmd += lat 
+            cmd += lat
 
             cmd += tissue_init + prepace
-            
+
             cmd += ['-simID', simid,
-                    '-dt',  20,
+                    '-dt', 20,
                     '-spacedt', 1,
                     '-mass_lumping', args.M_lump,
                     '-timedt', 10,
-                    '-tend', tsav_state+0.1,
+                    '-tend', tsav_state + 0.1,
                     '-meshname', meshname_e]
-            #Run simulation
+            # Run simulation
             remove_trash2(simid)
             job.carp(cmd)
 
@@ -622,7 +643,7 @@ def run(args, job):
             print("old_cells: {}".format(len(old_cells)))
 
             # Compute RMSE between simulated and clinical LAT excluding elements to clean (marked as wrong annotation)
-            if len(lats_to_fit[active_cells_band])>0: 
+            if len(lats_to_fit[active_cells_band])>0:
                 if len(active_border)>0:
                     print("Active border")
                     current_active_to_interp = np.array([], dtype=int)
@@ -695,7 +716,7 @@ def run(args, job):
     cmd += tissue_3
     cmd += tissue_4 + bilayer + g_scale
     
-    cmd += fibrotic_tissue
+    #cmd += fibrotic_tissue
     cmd += lat
     # Setting the stimulus at the sinus node
     prepace = ['-num_stim',                     1,
