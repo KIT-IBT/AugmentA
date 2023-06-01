@@ -310,7 +310,8 @@ def AugmentA(args):
                 la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(0), "--mesh_type", "vol", "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
             else:
                 la_main.run(["--mesh",processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
-                os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=carp_txt -scale={}".format('{}_fibers/result_{}/{}_bilayer_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium), '{}_fibers/result_{}/{}_bilayer_with_fiber_um.{}'.format(processed_mesh, args.atrium, args.atrium), 1000 * args.scale))
+                os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=carp_txt -scale={}".format('{}_fibers/result_{}/{}_bilayer_with_fiber'.format(processed_mesh, args.atrium, args.atrium), '{}_fibers/result_{}/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium, args.atrium), 1000 * args.scale))
+                os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=vtk".format('{}_fibers/result_{}/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium, args.atrium), '{}_fibers/result_{}/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium, args.atrium)))
 
         elif args.atrium == "RA":
             # Atrial region annotation and fiber generation using LDRBM
