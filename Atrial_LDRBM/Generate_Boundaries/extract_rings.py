@@ -873,8 +873,8 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir,debug):
         # delete added region id
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
-
-    connect.AddSpecifiedRegion(top_endo_id-1) # Find the id in the points dividing the RA, avoid CS
+    # It can happen that the first i=region(0) is the CS. Remove the -1 if that is the case
+    connect.AddSpecifiedRegion(top_endo_id)#-1) # Find the id in the points dividing the RA, avoid CS
     connect.Update()
     surface = connect.GetOutput()
 
