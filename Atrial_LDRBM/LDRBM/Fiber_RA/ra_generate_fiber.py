@@ -234,7 +234,7 @@ def ra_generate_fiber(model, args, job):
     IVC_s = Method.extract_largest_region(IVC_s) # Added
 
 
-    max_phie_r_ivc = np.max(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r')))
+    max_phie_r_ivc = np.max(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r')))+0.2
 
     RAW_s = Method.vtk_thr(no_TV_s, 1,"CELLS","phie_r", max_phie_r_ivc) # Added +0.03 fro dk01
 
@@ -265,7 +265,7 @@ def ra_generate_fiber(model, args, job):
     #thr_max = 0.38518
 
     #CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", thr_min, thr_max) # dk01 fit_both
-    CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_minus-0.01, tao_ct_plus) # grad_w
+    CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_plus,tao_ct_minus-0.01) # grad_w
 
     CT_ub = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_plus-0.02, tao_ct_plus) # grad_w
 
@@ -1517,7 +1517,7 @@ def ra_generate_fiber(model, args, job):
             CS_p = IVC_SEPT_CT_pt
             print("No CS found, use last CT point instead")
             
-        if args.mesh_type == "bilayer":    
+        if args.mesh_type == "bilayer":
             add_free_bridge(args, la_epi, model, CS_p, df, job)
-        elif args.mesh_type == "vol":    
+        elif args.mesh_type == "vol":
             add_free_bridge(args, la, model, CS_p, df, job)
