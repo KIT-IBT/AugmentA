@@ -276,7 +276,7 @@ def AugmentA(args):
 
         elif not args.resample_input and not args.find_appendage: # do not resample and do not find appendage
 
-            processed_mesh = meshname
+            processed_mesh = meshname # Provide mesh with _res in  the name
 
             # if not args.closed_surface:
             #     #Convert mesh from vtk to obj
@@ -285,7 +285,6 @@ def AugmentA(args):
             # else:
             #     meshin = pv.read('{}.obj'.format(meshname))
 
-
         # Label atrial orifices using apex id found in the resampling algorithm
         df = pd.read_csv('{}_mesh_data.csv'.format(processed_mesh))
 
@@ -293,13 +292,19 @@ def AugmentA(args):
             label_atrial_orifices(processed_mesh+'.obj', LAA_id=int(df["LAA_id"]), RAA_id=int(df["RAA_id"])) # Label both
             #Do the LA first
             la_main.run(
-                 ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",
+                ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",
                   args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
             args.atrium = "RA"
             ra_main.run(
                 ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(args.normals_outside), "--ofmt",
                  args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
             args.atrium = "LA_RA"
+            os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=carp_txt -scale={}".format(
+                '{}_fibers/result_RA/{}_bilayer_with_fiber'.format(processed_mesh, args.atrium),
+                '{}_fibers/result_RA/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium), 1000 * args.scale))
+            os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=vtk".format(
+                '{}_fibers/result_RA/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium),
+                '{}_fibers/result_RA/{}_bilayer_with_fiber_um'.format(processed_mesh, args.atrium)))
         if args.atrium == "LA":
             label_atrial_orifices(processed_mesh+'.obj',LAA_id=int(df[args.atrium+"A_id"]))
             # Atrial region annotation and fiber generation using LDRBM
@@ -338,7 +343,7 @@ def AugmentA(args):
             geom = pv.Line()
         mask = bil['elemTag'] >99
         bil['elemTag'][mask] = 0
-        mask = bil['elemTag'] >80
+        mask = bil['elemTag'] >80 # Changes needed to render properly biatrial meshes
         bil['elemTag'][mask] = 20
         mask = bil['elemTag'] >10
         bil['elemTag'][mask] = bil['elemTag'][mask]-10
