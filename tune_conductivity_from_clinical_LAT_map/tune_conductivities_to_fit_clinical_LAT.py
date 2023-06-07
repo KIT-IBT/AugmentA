@@ -805,7 +805,7 @@ def run(args, job):
     meshNew.CellData.append(LATs_diff, "LATs_diff")
 
     writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(job.ID+"/endo_final.vtu".format(l))
+    writer.SetFileName(job.ID+"/endo_final.vtu")
     writer.SetInputData(meshNew.VTKObject)
     #writer.SetFileTypeToBinary()
     writer.Write()
