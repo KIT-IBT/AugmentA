@@ -265,7 +265,7 @@ def ra_generate_fiber(model, args, job):
     #thr_max = 0.38518
 
     #CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", thr_min, thr_max) # dk01 fit_both
-    CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_plus,tao_ct_minus-0.01) # grad_w
+    CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_plus, tao_ct_minus-0.01) # grad_w
 
     CT_ub = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_plus-0.02, tao_ct_plus) # grad_w
 
