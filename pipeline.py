@@ -290,6 +290,10 @@ def AugmentA(args):
         df = pd.read_csv('{}_mesh_data.csv'.format(processed_mesh))
 
         if args.atrium == "LA_RA":
+            if not os.path.exists(processed_mesh+'.obj'):
+                meshin = pv.read('{}.vtk'.format(processed_mesh))
+                pv.save_meshio('{}.obj'.format(processed_mesh), meshin, "obj")
+
             label_atrial_orifices(processed_mesh+'.obj', LAA_id=int(df["LAA_id"]), RAA_id=int(df["RAA_id"])) # Label both
             #Do the LA first
             la_main.run(
