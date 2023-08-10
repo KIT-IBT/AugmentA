@@ -873,8 +873,8 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir,debug):
         # delete added region id
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
-
-    connect.AddSpecifiedRegion(top_endo_id-1) # Find the id in the points dividing the RA, avoid CS
+    # It can happen that the first i=region(0) is the CS. Remove the -1 if that is the case
+    connect.AddSpecifiedRegion(top_endo_id)#-1) # Find the id in the points dividing the RA, avoid CS
     connect.Update()
     surface = connect.GetOutput()
 
@@ -886,7 +886,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir,debug):
     top_cut = cln.GetOutput()
 
     if debug:
-        vtkWrite(top_cut, outdir + '/top_endo_epi.vtk')
+        vtkWrite(top_cut, outdir + '/top_endo_epi.vtk') # If this is the CS, then change top_endo_id in 877
     
     pts_in_top = vtk.util.numpy_support.vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))
     pts_in_svc = vtk.util.numpy_support.vtk_to_numpy(svc.GetPointData().GetArray("Ids"))

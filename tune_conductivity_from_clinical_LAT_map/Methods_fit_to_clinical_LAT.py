@@ -356,9 +356,9 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         centroids1 = filter_cell_centers.GetOutput().GetPoints()
         centroids1_array = vtk.util.numpy_support.vtk_to_numpy(centroids1.GetData())
         
-        dd, ii = tree.query(centroids1_array, n_jobs=-1)
+        dd, ii = tree.query(centroids1_array, n_jobs=-1) # Find distance to endo_clean pts
                     
-        el_border.append(np.unique(el_cleaned[ii]))
+        el_border.append(np.unique(el_cleaned[ii])) # Give id of the closest point to the endo_clean
 
         # delete added region id
         connect.DeleteSpecifiedRegion(n)
@@ -374,6 +374,12 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
             print("Creation of the directory %s failed" % debug_dir)
         else:
             print("Successfully created the directory %s " % debug_dir)
+
+        el_border_array = np.concatenate(el_border) # convert to linear array
+        border = np.zeros((endo.GetNumberOfCells(),))
+        border[el_border_array] = 1
+        meshNew.CellData.append(border, "border")
+
         writer = vtk.vtkXMLUnstructuredGridWriter()
         writer.SetFileName('{}/endo_with_clean_tag.vtu'.format(debug_dir))
         writer.SetInputData(meshNew.VTKObject)

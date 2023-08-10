@@ -95,6 +95,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     ms = pymeshlab.MeshSet()
 
     ms.load_new_mesh('{}.obj'.format(meshname))
+    #ms.apply_filter('turn_into_a_pure_triangular_mesh')  # if polygonal mesh
+    #ms.save_current_mesh('{}.obj'.format(meshname))
 
     ms.select_self_intersecting_faces()
 
@@ -187,6 +189,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         ms.load_new_mesh('{}.obj'.format(meshname))
 
+
     # compute the geometric measures of the current mesh
     # and save the results in the out_dict dictionary
     out_dict = ms.compute_geometric_measures()
@@ -218,11 +221,13 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         else:
             break
         it += 1
-    
+
+
+    mesh_data["avg_edge_length"] = [out_dict['avg_edge_length']]
     mesh_data["surf"]=[out_dict['surface_area']]
+
     # Better to save as .ply
     ms.save_current_mesh('{}_res.ply'.format(meshname), save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
-
     meshin = pv.read('{}_res.ply'.format(meshname))
 
     if find_apex_with_curv and apex_id==-1:
@@ -260,7 +265,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         p.add_mesh(meshin,color='r')
         p.enable_point_picking(meshin, use_mesh=True)
-        p.add_text('Select the appendage apex and close the window',position='lower_left')
+        p.add_text('Select the appendage apex and close the window',position='lower_left') # Select the LAA first
 
         p.show()
         if p.picked_point is None:
@@ -296,6 +301,19 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         dist, apex_id = tree.query(apex)
 
         mesh_data["{}A_id".format(atrium)] = [apex_id]  # change accordingly
+
+        reader = vtk.vtkPLYReader()
+        reader.SetFileName('{}_res.ply'.format(meshname))
+        reader.Update()
+
+        Mass = vtk.vtkMassProperties()
+        Mass.SetInputData(reader.GetOutput())
+        Mass.Update()
+
+        print("Volume = ", Mass.GetVolume())
+        print("Surface = ", Mass.GetSurfaceArea())
+        mesh_data["vol_bi"] = Mass.GetVolume() # Biatrial volume
+
 
 
     fname = '{}_res_mesh_data.csv'.format(meshname)

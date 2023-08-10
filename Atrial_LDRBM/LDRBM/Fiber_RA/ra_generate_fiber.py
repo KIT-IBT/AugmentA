@@ -234,7 +234,7 @@ def ra_generate_fiber(model, args, job):
     IVC_s = Method.extract_largest_region(IVC_s) # Added
 
 
-    max_phie_r_ivc = np.max(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r')))
+    max_phie_r_ivc = np.max(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r')))+0.2
 
     RAW_s = Method.vtk_thr(no_TV_s, 1,"CELLS","phie_r", max_phie_r_ivc) # Added +0.03 fro dk01
 
@@ -248,6 +248,7 @@ def ra_generate_fiber(model, args, job):
         Method.writer_vtk(no_IVC_s, '{}_surf/'.format(args.mesh) + "no_ivc_s.vtk")
         Method.writer_vtk(SVC_s, '{}_surf/'.format(args.mesh) + "svc_s.vtk")
         Method.writer_vtk(no_SVC_s, '{}_surf/'.format(args.mesh) + "no_svc_s.vtk")
+        Method.writer_vtk(RAW_s, '{}_surf/'.format(args.mesh) + "raw_s.vtk")
     
     tao_ct_plus = np.min(vtk.util.numpy_support.vtk_to_numpy(SVC_s.GetCellData().GetArray('phie_w')))
     
@@ -265,19 +266,18 @@ def ra_generate_fiber(model, args, job):
     #thr_max = 0.38518
 
     #CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", thr_min, thr_max) # dk01 fit_both
-    CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_minus-0.01, tao_ct_plus) # grad_w
+    CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_plus, 0.1) # grad_w
 
     CT_ub = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", tao_ct_plus-0.02, tao_ct_plus) # grad_w
 
     CT_ub = Method.extract_largest_region(CT_ub)
 
     if args.debug:
-        Method.writer_vtk(RAW_s, '{}_surf/'.format(args.mesh) + "raw_s.vtk")
         Method.writer_vtk(CT_band, '{}_surf/'.format(args.mesh) + "ct_band.vtk")
         Method.writer_vtk(CT_ub, '{}_surf/'.format(args.mesh) + "ct_ub.vtk")
     
     geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(CT_ub)
+    geo_filter.SetInputData(CT_band)
     geo_filter.Update()
     mesh_surf = geo_filter.GetOutput()
 
@@ -1517,7 +1517,7 @@ def ra_generate_fiber(model, args, job):
             CS_p = IVC_SEPT_CT_pt
             print("No CS found, use last CT point instead")
             
-        if args.mesh_type == "bilayer":    
+        if args.mesh_type == "bilayer":
             add_free_bridge(args, la_epi, model, CS_p, df, job)
-        elif args.mesh_type == "vol":    
+        elif args.mesh_type == "vol":
             add_free_bridge(args, la, model, CS_p, df, job)

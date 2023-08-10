@@ -96,7 +96,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     point_septum_IVC = ra_septum.GetPoint(loc.FindClosestPoint(IVC_p))
     
     SVC_IVC_septum_path = Method.dijkstra_path_coord(ra_epi_surface, point_septum_SVC, point_septum_IVC)
-    
+
+    if args.debug:
+        Method.create_pts(SVC_IVC_septum_path, 'SVC_IVC_septum_path', '{}_surf/'.format(args.mesh))
+
     middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.6),:]
     
     upper_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.4),:]

@@ -76,7 +76,7 @@ def parser():
                     help='set to 1 to compute and add interatrial bridges, 0 otherwise')
     parser.add_argument('--just_bridges',
                         type=int,
-                        default=1,
+                        default=0,
                         help='set to 1 to only check bridges')
     parser.add_argument('--laplace',
                         type=int,
