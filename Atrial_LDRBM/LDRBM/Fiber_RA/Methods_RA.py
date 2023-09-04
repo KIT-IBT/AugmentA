@@ -127,7 +127,7 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
     
     tree = cKDTree(epi_pts)
-    dd, ii = tree.query(endo_pts, distance_upper_bound = max_dist, n_jobs=-1)
+    dd, ii = tree.query(endo_pts, distance_upper_bound = max_dist)#, n_jobs=-1)
     
     endo_ids = np.where(dd!=np.inf)[0]
     epi_ids = ii[endo_ids]
