@@ -126,7 +126,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     loc.SetDataSet(ra_septum)
     loc.BuildLocator()
     point_CS_bridge = ra_septum.GetPoint(loc.FindClosestPoint(point_CS_on_MV))
-    
+
     csb_tube, csb_sphere_1, csb_sphere_2, csb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface, ra_epi_surface, point_CS_bridge, bridge_radius)
     Method.smart_bridge_writer(csb_tube, csb_sphere_1, csb_sphere_2, "coronary_sinus_bridge", job)
     
@@ -433,6 +433,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     reader.Update()
     la_endo = reader.GetOutput()
 
+    earth_cell_ids_list = []
+
     for var in bridge_list:
         print(var)
 
@@ -498,12 +500,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
         append_filter.AddInputData(extract.GetOutput())
         append_filter.Update()  # added
-        la_endo = append_filter.GetOutput()  # we lose this mesh, when defining the append filter later
+        la_endo_final = append_filter.GetOutput()  # we lose this mesh, when defining the append filter later
 
         if args.debug and var == 'upper_posterior_bridge':
             writer = vtk.vtkXMLUnstructuredGridWriter()
             writer.SetFileName(job.ID + "/result_RA/LA_endo_with_holes.vtu")  # Still has element Tag
-            writer.SetInputData(la_endo)
+            writer.SetInputData(la_endo_final)
             writer.Write()
 
     #     append_filter = vtk.vtkAppendFilter()
