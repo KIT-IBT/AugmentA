@@ -299,7 +299,7 @@ def ra_generate_fiber(model, args, job):
 
     tree = cKDTree(centroids_array)
 
-    ii = tree.query_ball_point(CT_ub_pts, r = 7*args.scale, n_jobs=-1)
+    ii = tree.query_ball_point(CT_ub_pts, r = 7*args.scale)#, n_jobs=-1)
     
     ii = set([item for sublist in ii for item in sublist])
 
