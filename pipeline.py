@@ -114,7 +114,7 @@ def AugmentA(args):
                 p = pv.Plotter(notebook=False)
                 p.add_mesh(mesh_from_vtk, 'r')
                 p.add_text('Select the appendage apex and close the window',position='lower_left')
-                p.enable_point_picking(mesh_from_vtk, use_mesh=True)
+                p.enable_point_picking(mesh_from_vtk, use_picker=True)
                 p.show()
 
                 if p.picked_point is not None:
@@ -143,7 +143,7 @@ def AugmentA(args):
                     p = pv.Plotter(notebook=False)
                     p.add_mesh(mesh_from_vtk, 'r')
                     p.add_text('Select the RA appendage apex and close the window', position='lower_left')
-                    p.enable_point_picking(mesh_from_vtk, use_mesh=True)
+                    p.enable_point_picking(mesh_from_vtk, use_picker=True)
                     p.show()
 
                     if p.picked_point is not None:
