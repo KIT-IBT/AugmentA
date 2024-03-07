@@ -465,8 +465,25 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
     return b_tag, centroids
 
 def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
+
+    """
+    Identifies rings of the right atrium and assigns labels corresponding to their position
+    Assumes that tricuspid valve is the closest ring to the right atrial appendage of the two larges orifices
+    @param RAA_id:
+    @param rings: Orifices of the right atria
+    @param b_tag:
+    @param centroids: points for each orifice of the left atrium. This function addes the points of the right atrium
+    @param outdir:
+    @return:
+    """
+    ring_lengths = [r.np for r in rings]
+    sorted_indices = np.argsort(ring_lengths)[-2:]
+    tv_index = sorted_indices[0] if rings[sorted_indices[0]].ap_dist < rings[sorted_indices[1]].ap_dist else \
+        sorted_indices[1]
+    rings[tv_index].name = "TV"
+
     # It can happen that the TV is not the biggest ring!
-    rings[np.argmax([r.np for r in rings])].name = "TV"
+    #rings[np.argmax([r.np for r in rings])].name = "TV"
     other = [i for i in range(len(rings)) if rings[i].name!="TV"]
     
     estimator = KMeans(n_clusters=2)
@@ -874,7 +891,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir,debug):
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
     # It can happen that the first i=region(0) is the CS. Remove the -1 if that is the case
-    connect.AddSpecifiedRegion(top_endo_id)#-1) # Find the id in the points dividing the RA, avoid CS
+    connect.AddSpecifiedRegion(top_endo_id-1) # Find the id in the points dividing the RA, avoid CS
     connect.Update()
     surface = connect.GetOutput()
 
