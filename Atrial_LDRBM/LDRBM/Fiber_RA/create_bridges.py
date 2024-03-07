@@ -574,6 +574,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         print("Union between earth and bridges in "+var)
         
         ms = pymeshlab.MeshSet()
+        if args.just_bridges and var == 'BB_intern_bridges':
+            job.ID="../"+job.ID# Change if you enter from ra_main and not from pipeline.py, otherwise comment the line
         ms.load_new_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
         ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4*args.scale, adaptive=True)
         ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_union.obj",save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
