@@ -100,7 +100,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     if args.debug:
         Method.create_pts(SVC_IVC_septum_path, 'SVC_IVC_septum_path', '{}_surf/'.format(args.mesh))
 
-    middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.6),:]
+    middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.6),:] # Can happen that the 0.6 is where the BB is
     
     upper_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.4),:]
     
@@ -115,7 +115,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     loc = vtk.vtkPointLocator() # it happened that the point is too close to the edge and the heart is not found
     loc.SetDataSet(mv_la)
     loc.BuildLocator()
-    point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
+    point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1)) # adapt this value if CS is too low
 
     #loc = vtk.vtkPointLocator()
     #loc.SetDataSet(la_wall)
@@ -525,7 +525,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     # Fit a spline to the points
     spline = vtk.vtkParametricSpline()
     spline.SetPoints(spline_points)
-    
+
     functionSource = vtk.vtkParametricFunctionSource()
     functionSource.SetParametricFunction(spline)
     functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
@@ -574,8 +574,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         print("Union between earth and bridges in "+var)
         
         ms = pymeshlab.MeshSet()
-        if args.just_bridges and var == 'BB_intern_bridges':
-            job.ID="../"+job.ID# Change if you enter from ra_main and not from pipeline.py, otherwise comment the line
+        #if args.just_bridges and var == 'BB_intern_bridges':
+            #job.ID='../'+job.ID# Change if you enter from ra_main and not from pipeline.py, otherwise comment the line
         ms.load_new_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
         ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4*args.scale, adaptive=True)
         ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_union.obj",save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
