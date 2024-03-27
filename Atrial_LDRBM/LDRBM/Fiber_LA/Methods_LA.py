@@ -890,7 +890,7 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
     
     tree = cKDTree(centroids1_array)
 
-    dd, ii = tree.query(pts2, n_jobs=-1)
+    dd, ii = tree.query(pts2)#, n_jobs=-1)
     
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
