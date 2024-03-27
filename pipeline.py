@@ -347,10 +347,12 @@ def AugmentA(args):
             geom = pv.Line()
         mask = bil['elemTag'] >99
         bil['elemTag'][mask] = 0
-        mask = bil['elemTag'] >80 # Changes needed to render properly biatrial meshes
+        mask = bil['elemTag'] >80
         bil['elemTag'][mask] = 20
         mask = bil['elemTag'] >10
         bil['elemTag'][mask] = bil['elemTag'][mask]-10
+        mask = bil['elemTag'] > 50
+        bil['elemTag'][mask] = bil['elemTag'][mask] - 50
         p = pv.Plotter(notebook=False)
         if not args.closed_surface:
             fibers = bil.glyph(orient="fiber",factor=0.5,geom=geom, scale="elemTag")
