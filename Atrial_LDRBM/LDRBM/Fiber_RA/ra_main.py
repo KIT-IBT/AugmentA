@@ -155,14 +155,22 @@ def run(args, job):
     start_time = datetime.datetime.now()
     print('[Step 2] Generating fibers... ' + str(start_time))
 
-    ra_generate_fiber(output_laplace, args, job)
-
     if args.just_bridges:
         la_epi = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
         model = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
         df = pd.read_csv(args.mesh + "_surf/rings_centroids.csv")
         CS_p = np.array(df["CS"])
         add_free_bridge(args, la_epi, model, CS_p, df, job)
+
+        args.atrium = "LA_RA"
+        os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=carp_txt -scale={}".format(
+            '{}_fibers/result_RA/{}_bilayer_with_fiber'.format(args.mesh, args.atrium),
+            '{}_fibers/result_RA/{}_bilayer_with_fiber_um'.format(args.mesh, args.atrium), 1000 * args.scale))
+        os.system("meshtool convert -imsh={} -ifmt=carp_txt -omsh={} -ofmt=vtk".format(
+            '{}_fibers/result_RA/{}_bilayer_with_fiber_um'.format(args.mesh, args.atrium),
+            '{}_fibers/result_RA/{}_bilayer_with_fiber_um'.format(args.mesh, args.atrium)))
+    else:
+        ra_generate_fiber(output_laplace, args, job)
 
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
