@@ -48,6 +48,7 @@ import collections
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.vtk_methods import filters
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 pv.set_plot_theme('dark')
@@ -137,11 +138,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     model = model.VTKObject
 
     if debug:
-        writer = vtk.vtkPolyDataWriter()
-        writer.SetFileName(f"{full_path}/{atrium}_clean_with_curv.vtk")
-        writer.SetInputData(model)
-        writer.Write()
-
+        vtk_polydata_writer(f"{full_path}/{atrium}_clean_with_curv.vtk", model)
     apex = None
     if not MRI:
 
@@ -255,11 +252,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     model = cellid.GetOutput()
 
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(f"{full_path}/{atrium}_curv.vtk")
-    writer.SetInputData(model)
-    writer.SetFileTypeToBinary()
-    writer.Write()
+    vtk_polydata_writer(f"{full_path}/{atrium}_curv.vtk", model, True)
 
     curv = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('curv'))
 
@@ -275,11 +268,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     high_c = vtk_thr(model, 0, "POINTS", "curv", np.median(curv) * 1.15)  # (np.min(curv)+np.max(curv))/2)
 
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(f"{full_path}/{atrium}_h_curv.vtk")
-    writer.SetInputData(high_c)
-    writer.SetFileTypeToBinary()
-    writer.Write()
+    vtk_unstructured_grid_writer(f"{full_path}/{atrium}_h_curv.vtk", high_c, True)
 
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(high_c)
@@ -462,11 +451,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     model = extract_largest_region(model)
 
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(f"{full_path}/{atrium}_cutted.vtk")
-    writer.SetInputData(model)
-    writer.Write()
-
+    vtk_polydata_writer(f"{full_path}/{atrium}_cutted.vtk", model)
     if debug:
         if apex is not None:
             point_cloud = pv.PolyData(apex)
@@ -518,7 +503,8 @@ def run():
 
 
 def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1, thr2)
+    return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
+                                                                               thr2)
 
 
 def find_elements_within_radius(mesh, points_data, radius):
@@ -615,10 +601,7 @@ def to_polydata(mesh):
 
 
 def writer_vtk(mesh, filename):
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(filename)
-    writer.SetInputData(to_polydata(mesh))
-    writer.Write()
+    vtk_polydata_writer(filename, to_polydata(mesh))
 
 
 if __name__ == '__main__':

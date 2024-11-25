@@ -27,6 +27,8 @@ under the License.
 import os
 import sys
 
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_polydata_writer
+
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 from carputils.carpio import igb
@@ -139,13 +141,10 @@ def la_laplace(args, job, model):
         else:
             print(f"Successfully created the directory {simid} ")
         if args.mesh_type == "vol":
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(simid + "/LA_with_laplace.vtu")
+            vtk_xml_unstructured_grid_writer(simid + "/LA_with_laplace.vtu", meshNew.VTKObject)
         else:
-            writer = vtk.vtkXMLPolyDataWriter()
-            writer.SetFileName(simid + "/LA_with_laplace.vtp")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
+            vtk_polydata_writer(simid + "/LA_with_laplace.vtp", meshNew.VTKObject, store_xml=True)
+
     """
     calculate the gradient
     """
@@ -194,9 +193,5 @@ def laplace_0_1(args, job, model, name1, name2, outname):
         else:
             print(f"Successfully created the directory {simid} ")
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(simid + "/LA_with_laplace.vtu")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(simid + "/LA_with_laplace.vtu", meshNew.VTKObject)
     return meshNew.VTKObject

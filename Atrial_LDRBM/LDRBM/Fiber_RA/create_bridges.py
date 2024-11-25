@@ -39,6 +39,7 @@ import pickle
 from numpy.linalg import norm
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -154,10 +155,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter = vtk.vtkAppendFilter()
         append_filter.AddInputData(meshNew.VTKObject)
         append_filter.Update()
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/la_ra_res.vtu")
-        writer.SetInputData(append_filter.GetOutput())
-        writer.Write()
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu", append_filter.GetOutput())
     elif args.mesh_type == "bilayer":
 
         la_e = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
@@ -227,11 +225,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     la_ra_usg = append_filter.GetOutput()  # this has already elemTag
 
     if args.debug:
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/la_ra_usg.vtu")
-        writer.SetInputData(la_ra_usg)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_usg.vtu", la_ra_usg)
     print('reading done!')
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
@@ -585,11 +579,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     append_filter.Update()
     bridges = append_filter.GetOutput()
 
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(job.ID + "/result_RA/append_bridges_2.vtu")  # Has elementTag! :)
-    writer.SetInputData(bridges)
-    writer.Write()
-
+    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/append_bridges_2.vtu")  # Has elementTag! :, bridges)
     # # Append all the bridges first
     # if var == bridge_list[0]: # just define append_filter in the first iteration
     #     append_filter = vtk.vtkAppendFilter()
@@ -634,25 +624,13 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     append_filter.Update()
     epi = append_filter.GetOutput()
 
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(job.ID + "/result_RA/LA_RA_with_bundles.vtu")
-    writer.SetInputData(epi)
-    writer.Write()
-
+    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_with_bundles.vtu", epi)
     epi = Method.generate_sheet_dir(args, epi, job)
 
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(job.ID + "/result_RA/LA_RA_with_sheets.vtu")
-    writer.SetInputData(epi)
-    writer.Write()
-
+    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_with_sheets.vtu", epi)
     if args.mesh_type == "bilayer":
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/la_ra_epi_with_sheets.vtu")  # Has elemTag! :)
-        writer.SetInputData(epi)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_epi_with_sheets.vtu")  # Has elemTag! :, epi)
         reader = vtk.vtkXMLUnstructuredGridReader()
         reader.SetFileName(job.ID + "/result_RA/RA_CT_PMs.vtu")  # Has elemTag! :)
         reader.Update()
@@ -669,30 +647,18 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter.AddInputData(ra_endo)
         append_filter.Update()
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/append_LA_endo_RA_endo.vtu")  # Has elemTag! :)
-        writer.SetInputData(append_filter.GetOutput())
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/append_LA_endo_RA_endo.vtu")  # Has elemTag! :, append_filter.GetOutput())
         endo = Method.move_surf_along_normals(append_filter.GetOutput(), 0.1 * args.scale,
                                               1)  # # Warning: set -1 if pts normals are pointing outside
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/la_ra_endo.vtu")  # Has elemTag! :)
-        writer.SetInputData(endo)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_endo.vtu")  # Has elemTag! :, endo)
         bilayer = Method.generate_bilayer(args, job, endo, epi, 0.12 * args.scale)  # Does not have elemTag :(!
 
         Method.write_bilayer(args, job)
 
     else:
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/LA_RA_vol_with_fiber.vtu")
-        writer.SetInputData(epi)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_vol_with_fiber.vtu", epi)
         pts = vtk.util.numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
         with open(job.ID + '/result_RA/LA_RA_vol_with_fiber.pts', "w") as f:
             f.write(f"{len(pts)}\n")

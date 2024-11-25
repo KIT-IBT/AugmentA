@@ -36,6 +36,8 @@ import transformations as tf
 
 import argparse
 
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+
 
 def parser():
     parser = argparse.ArgumentParser(description='Prealign meshes using landmarks.')
@@ -111,12 +113,12 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
     json2 = '['
     for i in df_new.columns:
         json1 = json1 + "{\"id\":\"" + f"{i}" + "\",\"coordinates\":[" + "{},{},{}".format(df_new[i][0],
-                                                                                                   df_new[i][1],
-                                                                                                   df_new[i][2]) + "]},"
+                                                                                           df_new[i][1],
+                                                                                           df_new[i][2]) + "]},"
     json1 = json1[:-1] + ']'
     for i in df2.columns:
         json2 = json2 + "{\"id\":\"" + f"{i}" + "\",\"coordinates\":[" + "{},{},{}".format(df2[i][0], df2[i][1],
-                                                                                                   df2[i][2]) + "]},"
+                                                                                           df2[i][2]) + "]},"
     json2 = json2[:-1] + ']'
 
     f = open(f"{mesh1_name}_surf/prealigned_landmarks.json", "w")
@@ -147,15 +149,13 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
     writer.Write()
 
     meshNew = dsa.WrapDataObject(transform_poly.GetOutput())
-    writer = vtk.vtkPolyDataWriter()
     if case == "both":
-        writer.SetFileName(f'{mesh1_name}_surf/LA_RA_prealigned.vtk')
+        vtk_polydata_writer(f'{mesh1_name}_surf/LA_RA_prealigned.vtk', meshNew.VTKObject)
     elif case == "LA":
-        writer.SetFileName(f'{mesh1_name}_surf/LA_prealigned.vtk')
+        vtk_polydata_writer(f'{mesh1_name}_surf/LA_prealigned.vtk', meshNew.VTKObject)
     else:
-        writer.SetFileName(f'{mesh1_name}_surf/RA_prealigned.vtk')
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
+        vtk_polydata_writer(f'{mesh1_name}_surf/RA_prealigned.vtk', meshNew.VTKObject)
+
 
 
 def run():

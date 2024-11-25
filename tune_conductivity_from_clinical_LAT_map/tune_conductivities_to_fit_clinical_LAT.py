@@ -372,11 +372,7 @@ def run(args, job):
     meshNew = dsa.WrapDataObject(endo)
     meshNew.CellData.append(endo_etag, "elemTag")
 
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(f"{meshfold}/LA_endo_with_fiber_30_um.vtu")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
-
+    vtk_xml_unstructured_grid_writer(f"{meshfold}/LA_endo_with_fiber_30_um.vtu", meshNew.VTKObject)
     pts = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetPoints().GetData())
     with open(meshfold + "/LA_endo_with_fiber_30_um.pts", "w") as f:
         f.write(f"{len(pts)}\n")

@@ -36,6 +36,8 @@ from la_laplace import laplace_0_1
 import os
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
+    vtk_xml_unstructured_grid_writer
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -151,7 +153,6 @@ def la_generate_fiber(model, args, job):
 
     thr = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
 
-
     phie_r2_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetCellData().GetArray('phie_r2'))
     max_phie_r2_tau_lpv = np.max(phie_r2_tau_lpv)
 
@@ -179,7 +180,6 @@ def la_generate_fiber(model, args, job):
 
     start_time = datetime.datetime.now()
     print('Calculating fibers... ' + str(start_time))
-
 
     # Bilayer mesh
     if args.mesh_type == 'bilayer':
@@ -409,15 +409,10 @@ def la_generate_fiber(model, args, job):
         meshNew.CellData.append(el_endo, "fiber")
         meshNew.CellData.append(sheet_endo, "sheet")
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_LA/LA_endo_with_fiber.vtk")
-            writer.SetFileTypeToBinary()
+            vtk_unstructured_grid_writer(job.ID + "/result_LA/LA_endo_with_fiber.vtk", meshNew.VTKObject,
+                                         store_binary=True)
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_LA/LA_endo_with_fiber.vtu")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
-
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_LA/LA_endo_with_fiber.vtu", meshNew.VTKObject)
         pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
         with open(job.ID + '/result_LA/LA_endo_with_fiber.pts', "w") as f:
             f.write(f"{len(pts)}\n")
@@ -621,15 +616,9 @@ def la_generate_fiber(model, args, job):
         meshNew.CellData.append(el_epi, "fiber")
         meshNew.CellData.append(sheet_epi, "sheet")
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_LA/LA_epi_with_fiber.vtk")
-            writer.SetFileTypeToBinary()
+            vtk_unstructured_grid_writer(job.ID + "/result_LA/LA_epi_with_fiber.vtk", meshNew.VTKObject, store_binary=True)
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
-
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_LA/LA_epi_with_fiber.vtu", meshNew.VTKObject)
         pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
         with open(job.ID + '/result_LA/LA_epi_with_fiber.pts', "w") as f:
             f.write(f"{len(pts)}\n")
@@ -689,15 +678,9 @@ def la_generate_fiber(model, args, job):
         meshNew.CellData.append(el, "fiber")
         meshNew.CellData.append(sheet, "sheet")
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_LA/LA_vol_with_fiber.vtk")
-            writer.SetFileTypeToBinary()
+            vtk_unstructured_grid_writer(job.ID + "/result_LA/LA_vol_with_fiber.vtk", meshNew.VTKObject, store_binary=True)
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_LA/LA_vol_with_fiber.vtu")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
-
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_LA/LA_vol_with_fiber.vtu", meshNew.VTKObject)
         pts = numpy_support.vtk_to_numpy(model.GetPoints().GetData())
         with open(job.ID + '/result_LA/LA_vol_with_fiber.pts', "w") as f:
             f.write(f"{len(pts)}\n")

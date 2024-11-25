@@ -47,11 +47,7 @@ def run(args):
     endo = move_surf_along_normals(ra_endo, 0.1 * args.scale,
                                    1)  # # Warning: set -1 if pts normals are pointing outside
 
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(args.mesh + "/RA_endo_with_fiber_moved.vtk")
-    writer.SetInputData(endo)
-    writer.Write()
-
+    vtk_unstructured_grid_writer(args.mesh + "/RA_endo_with_fiber_moved.vtk", endo)
     bilayer = generate_bilayer(endo, ra_epi, 0.12 * args.scale)
     # bilayer = generate_bilayer(ra_endo, ra_epi)
 
@@ -160,11 +156,7 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
 
 # Creates VTK and CARP files: .pts, .lon, .elem
 def write_bilayer(bilayer):
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(args.mesh + "/RA_bilayer_with_fiber.vtk")
-    writer.SetFileTypeToBinary()
-    writer.SetInputData(bilayer)
-    writer.Write()
+    vtk_unstructured_grid_writer(args.mesh + "/RA_bilayer_with_fiber.vtk", bilayer, store_binary=True)
 
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
     with open(args.mesh + '/RA_bilayer_with_fiber.pts', "w") as f:

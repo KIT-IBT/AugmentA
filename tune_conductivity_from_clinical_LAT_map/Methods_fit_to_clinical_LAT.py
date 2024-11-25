@@ -93,11 +93,7 @@ def low_vol_LAT(args, path):
         else:
             print(f"Successfully created the directory {debug_dir} ")
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(f'{debug_dir}/low_vol.vtu')
-        writer.SetInputData(low_vol)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(f'{debug_dir}/low_vol.vtu', low_vol)
     # Endo
 
     geo_filter = vtk.vtkGeometryFilter()
@@ -107,11 +103,7 @@ def low_vol_LAT(args, path):
     endo = vtk_thr(geo_filter.GetOutput(), 1, "CELLS", "elemTag", 10)
 
     if args.debug:
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(f'{debug_dir}/endo.vtu')
-        writer.SetInputData(endo)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(f'{debug_dir}/endo.vtu', endo)
     # Get point LAT map in endocardium
     LAT_endo = vtk.util.numpy_support.vtk_to_numpy(endo.GetPointData().GetArray('lat'))
     endo_ids = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('Global_ids')).astype(int)
@@ -128,11 +120,7 @@ def low_vol_LAT(args, path):
         not_low_volt_endo.GetPointData().GetArray('Global_ids')).astype(int)
 
     if args.debug:
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(f'{debug_dir}/not_low_volt_endo.vtu')
-        writer.SetInputData(not_low_volt_endo)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(f'{debug_dir}/not_low_volt_endo.vtu', not_low_volt_endo)
     # Extract LA wall from SSM to be sure that no veins or LAA is included when selecting the earliest activated point
     if args.SSM_fitting:
         LA_wall = smart_reader(args.SSM_basename + '/LA_wall.vtk')
@@ -381,11 +369,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         border[el_border_array] = 1
         meshNew.CellData.append(border, "border")
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(f'{debug_dir}/endo_with_clean_tag.vtu')
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(f'{debug_dir}/endo_with_clean_tag.vtu', meshNew.VTKObject)
     return el_to_clean, el_border
 
 

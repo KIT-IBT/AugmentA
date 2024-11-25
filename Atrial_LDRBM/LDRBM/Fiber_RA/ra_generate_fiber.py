@@ -37,6 +37,8 @@ import os
 from scipy.spatial import cKDTree
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
+    vtk_xml_unstructured_grid_writer
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -376,7 +378,7 @@ def ra_generate_fiber(model, args, job):
     CT_plus = vtk_thr(RAW_s, 0, "CELLS", "phie_w", tao_ct_plus)
 
     RAW_S = vtk_thr(CT_plus, 2, "CELLS", "phie_v", tao_scv,
-                           tao_icv)  # IB_S grad_v Changed order tao_scv, tao_icv
+                    tao_icv)  # IB_S grad_v Changed order tao_scv, tao_icv
 
     RAW_S_ids = vtk.util.numpy_support.vtk_to_numpy(RAW_S.GetCellData().GetArray('Global_ids'))
 
@@ -618,18 +620,11 @@ def ra_generate_fiber(model, args, job):
         meshNew.CellData.append(tag, "elemTag")
         meshNew.CellData.append(el, "fiber")
         meshNew.CellData.append(sheet, "sheet")
-
-        writer = vtk.vtkUnstructuredGridWriter()
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_epi_with_fiber.vtk")
-            writer.SetFileTypeToBinary()
+            vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtk", meshNew.VTKObject,
+                                         store_binary=True)
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
-
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtu", meshNew.VTKObject)
         """
         PM and CT
         """
@@ -678,15 +673,10 @@ def ra_generate_fiber(model, args, job):
 
             writer = vtk.vtkUnstructuredGridWriter()
             if args.ofmt == 'vtk':
-                writer = vtk.vtkUnstructuredGridWriter()
-                writer.SetFileName(job.ID + "/result_RA/RA_epi_with_fiber.vtk")
-                writer.SetFileTypeToBinary()
+                vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtk", meshNew.VTKObject,
+                                             store_binary=True)
             else:
-                writer = vtk.vtkXMLUnstructuredGridWriter()
-                writer.SetFileName(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
-            writer.SetInputData(meshNew.VTKObject)
-            writer.Write()
-
+                vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtu", meshNew.VTKObject)
     center = np.asarray((np.array(df["SVC"]) + np.array(df["IVC"])) / 2)
 
     loc = vtk.vtkPointLocator()
@@ -1114,30 +1104,21 @@ def ra_generate_fiber(model, args, job):
 
         endo = meshNew.VTKObject
 
-        writer = vtk.vtkUnstructuredGridWriter()
 
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_endo_with_fiber.vtk")
-            writer.SetFileTypeToBinary()
+
+            vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_endo_with_fiber.vtk", endo, store_binary=True)
+
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_endo_with_fiber.vtu")
-        writer.SetInputData(endo)
-        writer.Write()
+
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_endo_with_fiber.vtu", endo)
 
         CT_PMs = vtk_thr(endo, 2, "CELLS", "elemTag", pectinate_muscle, crista_terminalis)
 
-        writer = vtk.vtkUnstructuredGridWriter()
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_CT_PMs.vtk")
-            writer.SetFileTypeToBinary()
+            vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_CT_PMs.vtk", CT_PMs, store_binary=True)
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_CT_PMs.vtu")
-        writer.SetInputData(CT_PMs)
-        writer.Write()
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_CT_PMs.vtu", CT_PMs)
 
     elif args.mesh_type == "vol":
 
@@ -1180,14 +1161,10 @@ def ra_generate_fiber(model, args, job):
 
             writer = vtk.vtkUnstructuredGridWriter()
             if args.ofmt == 'vtk':
-                writer = vtk.vtkUnstructuredGridWriter()
-                writer.SetFileName(job.ID + "/result_RA/RA_endo_with_fiber.vtk")
-                writer.SetFileTypeToBinary()
+                vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_endo_with_fiber.vtk", meshNew.VTKObject,
+                                             store_binary=True)
             else:
-                writer = vtk.vtkXMLUnstructuredGridWriter()
-                writer.SetFileName(job.ID + "/result_RA/RA_endo_with_fiber.vtu")
-            writer.SetInputData(meshNew.VTKObject)
-            writer.Write()
+                vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_endo_with_fiber.vtu", meshNew.VTKObject)
 
     # Bachmann-Bundle
     if args.mesh_type == "vol":
@@ -1254,26 +1231,18 @@ def ra_generate_fiber(model, args, job):
     meshNew.CellData.append(tag, "elemTag")
     meshNew.CellData.append(el, "fiber")
     meshNew.CellData.append(sheet, "sheet")
-    writer = vtk.vtkUnstructuredGridWriter()
 
     if args.mesh_type == "bilayer":
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_epi_with_fiber.vtk")
-            writer.SetFileTypeToBinary()
+            vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtk", meshNew.VTKObject, True)
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtu", meshNew.VTKObject)
     else:
         if args.ofmt == 'vtk':
-            writer = vtk.vtkUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_vol_with_fiber.vtk")
-            writer.SetFileTypeToBinary()
+            vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_vol_with_fiber.vtk", meshNew.VTKObject,
+                                         store_binary=True)
         else:
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/RA_vol_with_fiber.vtu")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_vol_with_fiber.vtu", meshNew.VTKObject)
 
     model = meshNew.VTKObject
 

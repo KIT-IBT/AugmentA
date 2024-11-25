@@ -84,9 +84,5 @@ def ra_calculate_gradient(args, model, job):
         else:
             print(f"Successfully created the directory {simid} ")
         # write the file as vtk 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(simid + "/RA_with_lp_res_gradient.vtu")
-        writer.SetInputData(output)
-        writer.Write()
-
+        vtk_xml_unstructured_grid_writer(simid + "/RA_with_lp_res_gradient.vtu", output)
     return output

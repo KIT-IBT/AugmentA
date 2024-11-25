@@ -38,6 +38,7 @@ from sklearn.cluster import KMeans
 import argparse
 from scipy.spatial import cKDTree
 
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
@@ -142,10 +143,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         LA_tag = id_vec[int(LAA_id)]
         RA_tag = id_vec[int(RAA_id)]
 
-        #thr = vtk.vtkThreshold()
-        #thr.SetInputData(mesh_conn)
-        #thr.ThresholdBetween(LA_tag, LA_tag)
-        #thr.Update()
+        # thr = vtk.vtkThreshold()
+        # thr.SetInputData(mesh_conn)
+        # thr.ThresholdBetween(LA_tag, LA_tag)
+        # thr.Update()
 
         warning("WARNING: Should be checkt for functionality extract_rings l151")
         thr = get_threshold_between(mesh_conn, LA_tag, LA_tag, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
@@ -974,10 +975,7 @@ def to_polydata(mesh):
 
 
 def vtkWrite(input_data, name):
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetInputData(input_data)
-    writer.SetFileName(name)
-    writer.Write()
+    vtk_polydata_writer(name, input_data)
 
 
 if __name__ == '__main__':

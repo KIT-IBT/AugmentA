@@ -31,6 +31,9 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
+    vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -138,7 +141,6 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     if args.debug:
         writer = vtk.vtkXMLUnstructuredGridWriter()
         writer.SetFileName(job.ID + "/result_RA/test_LA_RA_bilayer.vtu")  # Has three arrays :)
-        # writer.SetFileTypeToBinary() # 'vtkmodules.vtkIOXML.vtkXMLUnstructuredGridWriter' object has no attribute 'SetFileTypeToBinary'
         writer.SetInputData(bilayer_1)
         writer.Write()
 
@@ -157,14 +159,9 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     bilayer = appendFilter.GetOutput()
 
     if args.ofmt == 'vtk':
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtk")
-        writer.SetFileTypeToBinary()
+        vtk_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtk", bilayer, store_binary=True)
     else:
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  # Has elemTag! :)
-    writer.SetInputData(bilayer)
-    writer.Write()
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  # Has elemTag! :, bilayer)
 
     reader = vtk.vtkXMLUnstructuredGridReader()
     reader.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  # Has elemTag! :)
@@ -329,10 +326,7 @@ def generate_sheet_dir(args, model, job):
     meshNew.CellData.append(fiber, "fiber")
     meshNew.CellData.append(sheet_norm, "sheet")
     if args.debug:
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/model_with_sheet.vtk")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
+        vtk_unstructured_grid_writer(job.ID + "/result_RA/model_with_sheet.vtk", meshNew.VTKObject)
         print('writing... done!')
 
     return meshNew.VTKObject
@@ -1122,7 +1116,4 @@ def to_polydata(mesh):
 
 
 def writer_vtk(mesh, filename):
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(filename)
-    writer.SetInputData(to_polydata(mesh))
-    writer.Write()
+    vtk_polydata_writer(filename, to_polydata(mesh))

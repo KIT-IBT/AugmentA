@@ -34,6 +34,9 @@ from scipy.spatial.distance import cosine
 import collections
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
+    vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
     get_threshold_between
 
@@ -166,15 +169,9 @@ def generate_bilayer(endo, epi):
 
 def write_bilayer(bilayer, args, job):
     if args.ofmt == 'vtk':
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_LA/LA_bilayer_with_fiber.vtk")
-        writer.SetFileTypeToBinary()
+        vtk_unstructured_grid_writer(job.ID + "/result_LA/LA_bilayer_with_fiber.vtk", bilayer, store_binary=True)
     else:
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_LA/LA_bilayer_with_fiber.vtu")
-    writer.SetInputData(bilayer)
-    writer.Write()
-
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_LA/LA_bilayer_with_fiber.vtu", bilayer)
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
     with open(job.ID + '/result_LA/LA_bilayer_with_fiber.pts', "w") as f:
         f.write(f"{len(pts)}\n")
@@ -806,12 +803,7 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
         data2 = data[ii]
         meshNew.PointData.append(data2, idat)
 
-    writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName(
-        f"{mesh2_name.split('.vtk')[0]}_with_data.vtk")  # It can happen that the relative directory is given
-    writer.SetFileTypeToBinary()
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
+    vtk_unstructured_grid_writer(f"{mesh2_name.split('.vtk')[0]}_with_data.vtk", meshNew.VTKObject, store_binary=True)
     return meshNew.VTKObject
 
 
@@ -1090,22 +1082,11 @@ def creat_center_line(start_end_point):
 
 def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
     meshNew = dsa.WrapDataObject(tube.GetOutput())
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_tube.vtk")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
-
+    vtk_polydata_writer(job.ID + "/bridges/" + str(name) + "_tube.vtk", meshNew.VTKObject)
     meshNew = dsa.WrapDataObject(sphere_1.GetOutput())
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_1.vtk")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
-
+    vtk_polydata_writer(job.ID + "/bridges/" + str(name) + "_sphere_1.vtk", meshNew.VTKObject)
     meshNew = dsa.WrapDataObject(sphere_2.GetOutput())
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_2.vtk")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
+    vtk_polydata_writer(job.ID + "/bridges/" + str(name) + "_sphere_2.vtk", meshNew.VTKObject)
 
 
 def find_tau(model, ub, lb, low_up, scalar):

@@ -31,6 +31,8 @@ import vtk
 from carputils.carpio import igb
 from vtk.numpy_interface import dataset_adapter as dsa
 
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_polydata_writer
+
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -160,13 +162,10 @@ def ra_laplace(args, job, model):
         else:
             print(f"Successfully created the directory {simid} ")
         if args.mesh_type == "vol":
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(simid + "/RA_with_laplace.vtu")
+            vtk_xml_unstructured_grid_writer(simid + "/RA_with_laplace.vtu", meshNew.VTKObject)
         else:
-            writer = vtk.vtkXMLPolyDataWriter()
-            writer.SetFileName(simid + "/RA_with_laplace.vtp")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
+            vtk_polydata_writer(simid + "/RA_with_laplace.vtp", meshNew.VTKObject)
+
     """
     calculate the gradient
     """

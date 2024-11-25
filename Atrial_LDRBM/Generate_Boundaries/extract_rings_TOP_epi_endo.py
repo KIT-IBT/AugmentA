@@ -38,6 +38,7 @@ from sklearn.cluster import KMeans
 import argparse
 from scipy.spatial import cKDTree
 
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
@@ -492,10 +493,7 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
 
 
 def vtkWrite(input_data, name):
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetInputData(input_data)
-    writer.SetFileName(name)
-    writer.Write()
+    vtk_polydata_writer(name, input_data, store_xml=True)
 
 
 def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):

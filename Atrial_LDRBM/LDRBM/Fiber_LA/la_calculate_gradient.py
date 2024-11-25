@@ -84,9 +84,5 @@ def la_calculate_gradient(args, model, job):
         else:
             print(f"Successfully created the directory {simid} ")
         # write the file as vtk 
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(simid + "/LA_with_lp_res_gradient.vtk")
-        writer.SetInputData(output)
-        writer.Write()
-
+        vtk_unstructured_grid_writer(simid + "/LA_with_lp_res_gradient.vtk", output)
     return output
