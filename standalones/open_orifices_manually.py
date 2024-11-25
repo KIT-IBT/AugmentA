@@ -179,7 +179,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     elif atrium == "RA":
         RAA = apex_id
 
-    meshpath = f"{full_path}/{atrium}_cutted"
+    meshpath = f"{full_path}/{atrium}_cutted.vtk"
 
     command = ["--mesh", meshpath, "--LAA", str(LAA), "--RAA", str(RAA)]
     print(f"extract rings with:{command}")
