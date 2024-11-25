@@ -853,7 +853,7 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
         for i in range(mesh1.GetPointData().GetNumberOfArrays()):
             data = vtk.util.numpy_support.vtk_to_numpy(
                 mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
-            if isinstance(data[0], collections.Sized):
+            if isinstance(data[0], collections.abc.Sized):
                 data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
             else:
                 data2 = np.zeros((len(pts2),), dtype=data.dtype)
@@ -867,7 +867,7 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
             meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
     else:
         data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
-        if isinstance(data[0], collections.Sized):
+        if isinstance(data[0], collections.abc.Sized):
             data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
             data2 = np.zeros((len(pts2),), dtype=data.dtype)
@@ -906,7 +906,7 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
         for i in range(mesh1.GetCellData().GetNumberOfArrays()):
             data = vtk.util.numpy_support.vtk_to_numpy(
                 mesh1.GetCellData().GetArray(mesh1.GetCellData().GetArrayName(i)))
-            if isinstance(data[0], collections.Sized):
+            if isinstance(data[0], collections.abc.Sized):
                 data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
             else:
                 data2 = np.zeros((len(pts2),), dtype=data.dtype)
@@ -915,7 +915,7 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
             meshNew.PointData.append(data2, mesh1.GetCellData().GetArrayName(i))
     else:
         data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetCellData().GetArray(idat))
-        if isinstance(data[0], collections.Sized):
+        if isinstance(data[0], collections.abc.Sized):
             data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
             data2 = np.zeros((len(pts2),), dtype=data.dtype)
