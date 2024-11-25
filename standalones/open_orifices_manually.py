@@ -24,29 +24,22 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import os, sys
-import numpy as np
-import pathlib
-from glob import glob
-import pandas as pd
-import vtk
-from vtk.util import numpy_support
-import scipy.spatial as spatial
-from vtk.numpy_interface import dataset_adapter as dsa
-import datetime
-from sklearn.cluster import KMeans
 import argparse
-from scipy.spatial import cKDTree
 
+import numpy as np
 import pymeshfix
-from pymeshfix import _meshfix
 import pyvista as pv
-import collections
+import vtk
+from scipy.spatial import cKDTree
+from vtk.numpy_interface import dataset_adapter as dsa
+
+from Atrial_LDRBM.Generate_Boundaries import extract_rings
+from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 
 pv.set_plot_theme('dark')
 
-sys.path.append('../Atrial_LDRBM/Generate_Boundaries')
-import extract_rings
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 

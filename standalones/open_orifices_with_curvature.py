@@ -25,6 +25,8 @@ specific language governing permissions and limitations
 under the License.  
 """
 import os, sys
+import warnings
+
 import numpy as np
 import pathlib
 from glob import glob
@@ -42,6 +44,10 @@ import pymeshfix
 from pymeshfix import _meshfix
 import pyvista as pv
 import collections
+
+import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
+from standalones.open_orifices_manually import open_orifices_manually
+from vtk_opencarp_helper_methods.vtk_methods import filters
 
 pv.set_plot_theme('dark')
 
@@ -139,6 +145,12 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     if not MRI:
 
         valve = vtk_thr(model, 0, "POINTS", "valve", 0.5)
+        if valve.GetPoints() is None or valve.GetNumberOfPoints() == 0:
+            # do manually orifice opening when automatically does not find valves
+            warnings.warn("No points for valve found. Should default to manual assignment")
+            return open_orifices_manually(meshpath, atrium, MRI, scale, size, min_cutting_radius, max_cutting_radius,
+                                          LAA, RAA,
+                                          debug)
         valve = extract_largest_region(valve)
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
@@ -183,16 +195,19 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     else:
         valve = vtk_thr(model, 0, "POINTS", "curv", 0.05)
         valve = extract_largest_region(valve)
+        if valve.GetPoints() is None or valve.GetNumberOfPoints() == 0:
+            # do manually orifice opening when automatically does not find valves
+            warnings.warn("No points for valve found. Should default to manual assignment")
+            return open_orifices_manually(meshpath, atrium, MRI, scale, size, min_cutting_radius, max_cutting_radius,
+                                          LAA, RAA,
+                                          debug)
 
         if debug and atrium == 'RA':
             writer_vtk(valve, f"{full_path}/{atrium}_clean_with_curv_" + "valve.vtk")
 
-        centerOfMassFilter = vtk.vtkCenterOfMass()
-        centerOfMassFilter.SetInputData(valve)
-        centerOfMassFilter.SetUseScalarsAsWeights(False)
-        centerOfMassFilter.Update()
+        center_of_mass = filters.get_center_of_mass(valve, False)
 
-        valve_center = np.array(centerOfMassFilter.GetCenter())
+        valve_center = np.array(center_of_mass)
 
         valve_pts = vtk.util.numpy_support.vtk_to_numpy(valve.GetPoints().GetData())
         max_dist = 0
@@ -531,29 +546,7 @@ def smart_reader(path):
 
 
 def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    if mode == 0:
-        thresh.ThresholdByUpper(thr1)
-    elif mode == 1:
-        thresh.ThresholdByLower(thr1)
-    elif mode == 2:
-        if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1, thr2)
-        else:
-            thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-            thresh.Update()
-            thr = thresh.GetOutput()
-            thresh = vtk.vtkThreshold()
-            thresh.SetInputData(thr)
-            thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-    thresh.Update()
-
-    output = thresh.GetOutput()
-
-    return output
+    return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1, thr2)
 
 
 def find_elements_within_radius(mesh, points_data, radius):
