@@ -76,7 +76,7 @@ def parser():
 
 
 def jobID(args):
-    ID = '{}_fibers'.format(args.mesh)
+    ID = f'{args.mesh}_fibers'
     return ID
 
 
@@ -105,16 +105,16 @@ def run(args, job):
     pts = numpy_support.vtk_to_numpy(LA.GetPoints().GetData())
 
     with open(LA_mesh + '.pts', "w") as f:
-        f.write("{}\n".format(len(pts)))
+        f.write(f"{len(pts)}\n")
         for i in range(len(pts)):
-            f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
     with open(LA_mesh + '.elem', "w") as f:
-        f.write("{}\n".format(LA.GetNumberOfCells()))
+        f.write(f"{LA.GetNumberOfCells()}\n")
         for i in range(LA.GetNumberOfCells()):
             cell = LA.GetCell(i)
             if cell.GetNumberOfPoints() == 2:
-                f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), 1))
+                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {1}\n")
             elif cell.GetNumberOfPoints() == 3:
                 f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
                                                   cell.GetPointIds().GetId(2), 1))

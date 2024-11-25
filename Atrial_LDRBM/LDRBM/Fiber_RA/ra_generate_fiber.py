@@ -48,17 +48,17 @@ def ra_generate_fiber(model, args, job):
     try:
         os.makedirs(simid)
     except OSError:
-        print("Creation of the directory %s failed" % simid)
+        print(f"Creation of the directory {simid} failed")
     else:
-        print("Successfully created the directory %s " % simid)
+        print(f"Successfully created the directory {simid} ")
 
     simid = job.ID + "/bridges"
     try:
         os.makedirs(simid)
     except OSError:
-        print("Creation of the directory %s failed" % simid)
+        print(f"Creation of the directory {simid} failed")
     else:
-        print("Successfully created the directory %s " % simid)
+        print(f"Successfully created the directory {simid} ")
 
     # Riunet
     tao_tv = 0.9
@@ -184,12 +184,12 @@ def ra_generate_fiber(model, args, job):
 
     # Use fixed thickness
 
-    ring_ids = np.loadtxt('{}_surf/'.format(args.mesh) + 'ids_TV.vtx', skiprows=2, dtype=int)
+    ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_TV.vtx', skiprows=2, dtype=int)
 
     rings_pts = vtk.util.numpy_support.vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
 
     if args.debug:
-        Method.create_pts(rings_pts, 'TV_ring', '{}_surf/'.format(args.mesh))
+        Method.create_pts(rings_pts, 'TV_ring', f'{args.mesh}_surf/')
 
     TV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
 
@@ -220,8 +220,8 @@ def ra_generate_fiber(model, args, job):
 
     # To check if TV was correctly identified
     if args.debug:
-        Method.writer_vtk(TV_s, '{}_surf/'.format(args.mesh) + "tv_s.vtk")
-        Method.writer_vtk(no_TV_s, '{}_surf/'.format(args.mesh) + "no_tv_s.vtk")
+        Method.writer_vtk(TV_s, f'{args.mesh}_surf/' + "tv_s.vtk")
+        Method.writer_vtk(no_TV_s, f'{args.mesh}_surf/' + "no_tv_s.vtk")
 
     # del ra_TV, ra_diff, ra_no_TV
 
@@ -244,11 +244,11 @@ def ra_generate_fiber(model, args, job):
     SVC_s = Method.extract_largest_region(SVC_s)
 
     if args.debug:  # CHECK
-        Method.writer_vtk(IVC_s, '{}_surf/'.format(args.mesh) + "ivc_s.vtk")
-        Method.writer_vtk(no_IVC_s, '{}_surf/'.format(args.mesh) + "no_ivc_s.vtk")
-        Method.writer_vtk(SVC_s, '{}_surf/'.format(args.mesh) + "svc_s.vtk")
-        Method.writer_vtk(no_SVC_s, '{}_surf/'.format(args.mesh) + "no_svc_s.vtk")
-        Method.writer_vtk(RAW_s, '{}_surf/'.format(args.mesh) + "raw_s.vtk")
+        Method.writer_vtk(IVC_s, f'{args.mesh}_surf/' + "ivc_s.vtk")
+        Method.writer_vtk(no_IVC_s, f'{args.mesh}_surf/' + "no_ivc_s.vtk")
+        Method.writer_vtk(SVC_s, f'{args.mesh}_surf/' + "svc_s.vtk")
+        Method.writer_vtk(no_SVC_s, f'{args.mesh}_surf/' + "no_svc_s.vtk")
+        Method.writer_vtk(RAW_s, f'{args.mesh}_surf/' + "raw_s.vtk")
 
     tao_ct_plus = np.min(vtk.util.numpy_support.vtk_to_numpy(SVC_s.GetCellData().GetArray('phie_w')))
 
@@ -275,8 +275,8 @@ def ra_generate_fiber(model, args, job):
     CT_ub = Method.extract_largest_region(CT_ub)
 
     if args.debug:
-        Method.writer_vtk(CT_band, '{}_surf/'.format(args.mesh) + "ct_band.vtk")
-        Method.writer_vtk(CT_ub, '{}_surf/'.format(args.mesh) + "ct_ub.vtk")
+        Method.writer_vtk(CT_band, f'{args.mesh}_surf/' + "ct_band.vtk")
+        Method.writer_vtk(CT_ub, f'{args.mesh}_surf/' + "ct_ub.vtk")
 
     geo_filter = vtk.vtkGeometryFilter()
     geo_filter.SetInputData(CT_band)
@@ -318,7 +318,7 @@ def ra_generate_fiber(model, args, job):
     # IVC_max_r_CT_pt = CT_band.GetPoint(np.argmax(vtk.util.numpy_support.vtk_to_numpy(CT_band.GetPointData().GetArray('phie_r'))))  # optional choice for pm, be careful as it overwrites
 
     if args.debug:
-        Method.writer_vtk(CT_band, '{}_surf/'.format(args.mesh) + "ct_band_2.vtk")
+        Method.writer_vtk(CT_band, f'{args.mesh}_surf/' + "ct_band_2.vtk")
 
     CT_band_ids = vtk.util.numpy_support.vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
 
@@ -396,9 +396,9 @@ def ra_generate_fiber(model, args, job):
     tag[IB_ids] = inter_caval_bundle_epi  # Change to 68
 
     if args.debug:
-        Method.writer_vtk(IB, '{}_surf/'.format(args.mesh) + "ib.vtk")
-        Method.writer_vtk(RAW_S, '{}_surf/'.format(args.mesh) + "raw_s.vtk")
-        Method.writer_vtk(CT_plus, '{}_surf/'.format(args.mesh) + "ct_plus.vtk")
+        Method.writer_vtk(IB, f'{args.mesh}_surf/' + "ib.vtk")
+        Method.writer_vtk(RAW_S, f'{args.mesh}_surf/' + "raw_s.vtk")
+        Method.writer_vtk(CT_plus, f'{args.mesh}_surf/' + "ct_plus.vtk")
 
     k[IB_ids] = v_grad[IB_ids]
 
@@ -427,8 +427,8 @@ def ra_generate_fiber(model, args, job):
     RAS_S = Method.vtk_thr(RAS_S, 0, "CELLS", "phie_r", 0.05)  # grad_r or w
 
     if args.debug:
-        Method.writer_vtk(septal_surf, '{}_surf/'.format(args.mesh) + "septal_surf.vtk")
-        Method.writer_vtk(RAS_S, '{}_surf/'.format(args.mesh) + "ras_s.vtk")
+        Method.writer_vtk(septal_surf, f'{args.mesh}_surf/' + "septal_surf.vtk")
+        Method.writer_vtk(RAS_S, f'{args.mesh}_surf/' + "ras_s.vtk")
 
     RAS_S_ids = vtk.util.numpy_support.vtk_to_numpy(RAS_S.GetCellData().GetArray('Global_ids'))
 
@@ -480,12 +480,12 @@ def ra_generate_fiber(model, args, job):
     septal_surf = meshExtractFilter.GetOutput()
 
     if args.debug:
-        Method.writer_vtk(septal_surf, '{}_surf/'.format(args.mesh) + "septal_surf_2.vtk")
+        Method.writer_vtk(septal_surf, f'{args.mesh}_surf/' + "septal_surf_2.vtk")
 
     CS_ids = vtk.util.numpy_support.vtk_to_numpy(septal_surf.GetCellData().GetArray('Global_ids'))
 
     # if len(CS_ids) == 0:
-    ring_ids = np.loadtxt('{}_surf/'.format(args.mesh) + 'ids_CS.vtx', skiprows=2, dtype=int)
+    ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_CS.vtx', skiprows=2, dtype=int)
 
     rings_pts = vtk.util.numpy_support.vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
 
@@ -498,9 +498,9 @@ def ra_generate_fiber(model, args, job):
     RAA_s = Method.vtk_thr(no_TV_s, 0, "CELLS", "phie_v2", tao_RAA)
 
     if args.debug:
-        Method.writer_vtk(RAS_low, '{}_surf/'.format(args.mesh) + "ras_low.vtk")
-        Method.writer_vtk(RAA_s, '{}_surf/'.format(args.mesh) + "raa_s.vtk")  # Check here if RAA is correctly tagged
-        Method.writer_vtk(RAW_low, '{}_surf/'.format(args.mesh) + "raw_low.vtk")
+        Method.writer_vtk(RAS_low, f'{args.mesh}_surf/' + "ras_low.vtk")
+        Method.writer_vtk(RAA_s, f'{args.mesh}_surf/' + "raa_s.vtk")  # Check here if RAA is correctly tagged
+        Method.writer_vtk(RAW_low, f'{args.mesh}_surf/' + "raw_low.vtk")
 
     RAA_ids = vtk.util.numpy_support.vtk_to_numpy(RAA_s.GetCellData().GetArray('Global_ids'))
 
@@ -886,7 +886,7 @@ def ra_generate_fiber(model, args, job):
     TV_lat = cln.GetOutput()
 
     if args.debug:
-        Method.writer_vtk(TV_lat, '{}_surf/'.format(args.mesh) + "TV_lat.vtk")
+        Method.writer_vtk(TV_lat, f'{args.mesh}_surf/' + "TV_lat.vtk")
 
     # writer = vtk.vtkPolyDataWriter()
     # writer.SetFileName("TV_lat.vtk")
@@ -898,7 +898,7 @@ def ra_generate_fiber(model, args, job):
     # np.savetxt("ct_points_data.txt", ct_points_data, fmt='%.4f')
 
     if args.debug:
-        Method.create_pts(ct_points_data, 'ct_points_data', '{}_surf/'.format(args.mesh))
+        Method.create_pts(ct_points_data, 'ct_points_data', f'{args.mesh}_surf/')
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(TV_lat)
@@ -911,7 +911,7 @@ def ra_generate_fiber(model, args, job):
     tv_points_data = Method.dijkstra_path(TV_lat, point3_id, point4_id)
 
     if args.debug:
-        Method.create_pts(tv_points_data, 'tv_points_data', '{}_surf/'.format(args.mesh))
+        Method.create_pts(tv_points_data, 'tv_points_data', f'{args.mesh}_surf/')
     # np.savetxt("tv_points_data.txt", tv_points_data, fmt='%.4f')
 
     # np.savetxt("point3_id_new.txt", TV_lat.GetPoint(point3_id), fmt='%.4f')
@@ -1153,7 +1153,7 @@ def ra_generate_fiber(model, args, job):
 
     pm = Method.downsample_path(pm, int(len(pm) * 0.1))
     if args.debug:
-        Method.create_pts(pm, 'pm_0_downsampled', '{}_surf/'.format(args.mesh))
+        Method.create_pts(pm, 'pm_0_downsampled', f'{args.mesh}_surf/')
 
     if args.mesh_type == "bilayer":
 
@@ -1188,7 +1188,7 @@ def ra_generate_fiber(model, args, job):
         pm = Method.downsample_path(pm, int(len(pm) * 0.065))
 
         if args.debug:
-            Method.create_pts(pm, 'pm_' + str(i + 1) + '_downsampled', '{}_surf/'.format(args.mesh))
+            Method.create_pts(pm, 'pm_' + str(i + 1) + '_downsampled', f'{args.mesh}_surf/')
 
         print("The ", i + 1, "th pm done")
         if args.mesh_type == "bilayer":

@@ -168,18 +168,18 @@ def write_bilayer(bilayer):
 
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
     with open(args.mesh + '/RA_bilayer_with_fiber.pts', "w") as f:
-        f.write("{}\n".format(len(pts)))
+        f.write(f"{len(pts)}\n")
         for i in range(len(pts)):
-            f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
     tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
     with open(args.mesh + '/RA_bilayer_with_fiber.elem', "w") as f:
-        f.write("{}\n".format(bilayer.GetNumberOfCells()))
+        f.write(f"{bilayer.GetNumberOfCells()}\n")
         for i in range(bilayer.GetNumberOfCells()):
             cell = bilayer.GetCell(i)
             if cell.GetNumberOfPoints() == 2:
-                f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_epi[i]))
+                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
             elif cell.GetNumberOfPoints() == 3:
                 f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
                                                   cell.GetPointIds().GetId(2), tag_epi[i]))

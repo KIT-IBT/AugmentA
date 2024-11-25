@@ -63,8 +63,8 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
     # Landmarks to use to prealign both meshes
     if case == "both":
         names = ["MV", "RSPV", "LSPV", "RIPV", "LIPV", "TV", "SVC", "IVC"]
-        meshLA = vtkreader("{}_surf/LA_boundaries_tagged".format(mesh1_name))
-        meshRA = vtkreader("{}_surf/RA_boundaries_tagged".format(mesh1_name))
+        meshLA = vtkreader(f"{mesh1_name}_surf/LA_boundaries_tagged")
+        meshRA = vtkreader(f"{mesh1_name}_surf/RA_boundaries_tagged")
         appendFilter = vtk.vtkAppendFilter()
         appendFilter.AddInputData(meshLA)
         appendFilter.AddInputData(meshRA)
@@ -77,16 +77,16 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
 
     elif case == "LA":
         names = ["MV", "RSPV", "LSPV", "RIPV", "LIPV"]  # Prealign MRI
-        mesh1 = vtkreader("{}_surf/LA_boundaries_tagged".format(mesh1_name))
+        mesh1 = vtkreader(f"{mesh1_name}_surf/LA_boundaries_tagged")
     else:
         names = ["TV", "SVC", "IVC"]
-        mesh1 = vtkreader("{}_surf/RA_boundaries_tagged".format(mesh1_name))
+        mesh1 = vtkreader(f"{mesh1_name}_surf/RA_boundaries_tagged")
 
-    df_tot = pd.read_csv("{}_surf/rings_centroids.csv".format(mesh1_name))
+    df_tot = pd.read_csv(f"{mesh1_name}_surf/rings_centroids.csv")
     A_tot = df_tot.to_numpy()
 
-    df1 = pd.read_csv("{}_surf/rings_centroids.csv".format(mesh1_name), usecols=names)
-    df2 = pd.read_csv("{}_surf/rings_centroids.csv".format(mesh2_name), usecols=names)
+    df1 = pd.read_csv(f"{mesh1_name}_surf/rings_centroids.csv", usecols=names)
+    df2 = pd.read_csv(f"{mesh2_name}_surf/rings_centroids.csv", usecols=names)
     df2 = df2[df1.columns]
 
     A = df1.to_numpy()
@@ -106,23 +106,23 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
     df_new = pd.DataFrame(data=new_pts, columns=df1.columns)
     df_new_tot = pd.DataFrame(data=new_centroids, columns=df_tot.columns)
 
-    df_new_tot.to_csv("{}_surf/rings_centroids_prealigned.csv".format(mesh1_name), index=False)
+    df_new_tot.to_csv(f"{mesh1_name}_surf/rings_centroids_prealigned.csv", index=False)
     json1 = '['
     json2 = '['
     for i in df_new.columns:
-        json1 = json1 + "{\"id\":\"" + "{}".format(i) + "\",\"coordinates\":[" + "{},{},{}".format(df_new[i][0],
+        json1 = json1 + "{\"id\":\"" + f"{i}" + "\",\"coordinates\":[" + "{},{},{}".format(df_new[i][0],
                                                                                                    df_new[i][1],
                                                                                                    df_new[i][2]) + "]},"
     json1 = json1[:-1] + ']'
     for i in df2.columns:
-        json2 = json2 + "{\"id\":\"" + "{}".format(i) + "\",\"coordinates\":[" + "{},{},{}".format(df2[i][0], df2[i][1],
+        json2 = json2 + "{\"id\":\"" + f"{i}" + "\",\"coordinates\":[" + "{},{},{}".format(df2[i][0], df2[i][1],
                                                                                                    df2[i][2]) + "]},"
     json2 = json2[:-1] + ']'
 
-    f = open("{}_surf/prealigned_landmarks.json".format(mesh1_name), "w")
+    f = open(f"{mesh1_name}_surf/prealigned_landmarks.json", "w")
     f.write(json1)
     f.close()
-    f = open("{}_surf/landmarks_to_prealign.json".format(mesh2_name), "w")
+    f = open(f"{mesh2_name}_surf/landmarks_to_prealign.json", "w")
     f.write(json2)
     f.close()
 
@@ -139,21 +139,21 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
     writer = vtk.vtkSTLWriter()
     writer.SetInputConnection(transform_poly.GetOutputPort())
     if case == "both":
-        writer.SetFileName('{}_surf/LA_RA_prealigned.stl'.format(mesh1_name))
+        writer.SetFileName(f'{mesh1_name}_surf/LA_RA_prealigned.stl')
     elif case == "LA":
-        writer.SetFileName('{}_surf/LA_prealigned.stl'.format(mesh1_name))
+        writer.SetFileName(f'{mesh1_name}_surf/LA_prealigned.stl')
     else:
-        writer.SetFileName('{}_surf/RA_prealigned.stl'.format(mesh1_name))
+        writer.SetFileName(f'{mesh1_name}_surf/RA_prealigned.stl')
     writer.Write()
 
     meshNew = dsa.WrapDataObject(transform_poly.GetOutput())
     writer = vtk.vtkPolyDataWriter()
     if case == "both":
-        writer.SetFileName('{}_surf/LA_RA_prealigned.vtk'.format(mesh1_name))
+        writer.SetFileName(f'{mesh1_name}_surf/LA_RA_prealigned.vtk')
     elif case == "LA":
-        writer.SetFileName('{}_surf/LA_prealigned.vtk'.format(mesh1_name))
+        writer.SetFileName(f'{mesh1_name}_surf/LA_prealigned.vtk')
     else:
-        writer.SetFileName('{}_surf/RA_prealigned.vtk'.format(mesh1_name))
+        writer.SetFileName(f'{mesh1_name}_surf/RA_prealigned.vtk')
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
@@ -167,7 +167,7 @@ def run():
 def vtkreader(meshname):
     reader = vtk.vtkPolyDataReader()
 
-    reader.SetFileName('{}.vtk'.format(meshname))
+    reader.SetFileName(f'{meshname}.vtk')
     reader.Update()
 
     geo_filter = vtk.vtkGeometryFilter()

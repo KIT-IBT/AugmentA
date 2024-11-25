@@ -60,7 +60,7 @@ def parser():
 
 
 def jobID(args):
-    ID = '{}_fibers'.format(args.mesh1.split('/')[-1])
+    ID = f"{args.mesh1.split('/')[-1]}_fibers"
     return ID
 
 

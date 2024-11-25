@@ -41,7 +41,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 def la_laplace(args, job, model):
     meshdir = args.mesh + '_surf/LA'
-    surfdir = '{}_surf/'.format(args.mesh)
+    surfdir = f'{args.mesh}_surf/'
     parfdir = os.path.join(EXAMPLE_DIR, 'Parfiles')
 
     if args.mesh_type == 'vol':
@@ -135,9 +135,9 @@ def la_laplace(args, job, model):
         try:
             os.makedirs(simid)
         except OSError:
-            print("Creation of the directory %s failed" % simid)
+            print(f"Creation of the directory {simid} failed")
         else:
-            print("Successfully created the directory %s " % simid)
+            print(f"Successfully created the directory {simid} ")
         if args.mesh_type == "vol":
             writer = vtk.vtkXMLUnstructuredGridWriter()
             writer.SetFileName(simid + "/LA_with_laplace.vtu")
@@ -156,7 +156,7 @@ def la_laplace(args, job, model):
 
 def laplace_0_1(args, job, model, name1, name2, outname):
     meshdir = args.mesh + '_surf/LA'
-    surfdir = '{}_surf/'.format(args.mesh)
+    surfdir = f'{args.mesh}_surf/'
     parfdir = os.path.join(EXAMPLE_DIR, 'Parfiles')
     #####################################
     # Solver for the ab laplace solution
@@ -165,8 +165,8 @@ def laplace_0_1(args, job, model, name1, name2, outname):
     simid = job.ID + '/Lp_ab'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_{}'.format(name1),
-            '-stimulus[1].vtx_file', surfdir + 'ids_{}'.format(name2)]
+            '-stimulus[0].vtx_file', surfdir + f'ids_{name1}',
+            '-stimulus[1].vtx_file', surfdir + f'ids_{name2}']
 
     if name1 == "4":
         cmd = tools.carp_cmd(parfdir + '/la_lps_phi_0_1_4.par')
@@ -190,9 +190,9 @@ def laplace_0_1(args, job, model, name1, name2, outname):
         try:
             os.makedirs(simid)
         except OSError:
-            print("Creation of the directory %s failed" % simid)
+            print(f"Creation of the directory {simid} failed")
         else:
-            print("Successfully created the directory %s " % simid)
+            print(f"Successfully created the directory {simid} ")
 
         writer = vtk.vtkXMLUnstructuredGridWriter()
         writer.SetFileName(simid + "/LA_with_laplace.vtu")

@@ -208,7 +208,7 @@ def single_cell_initialization(args, job, steady_state_dir, to_do):
                '--duration', duration,
                '--stim-start', 0,
                '--dt', args.dt / 1000,
-               '--fout=' + steady_state_dir + '/{}_numstim_{}_bcl_ms_{}'.format(args.numstim, args.cell_bcl, k),
+               '--fout=' + steady_state_dir + f'/{args.numstim}_numstim_{args.cell_bcl}_bcl_ms_{k}',
                '-S', duration,
                '-F', init_file,
                '--trace-no', k]
@@ -261,11 +261,11 @@ def single_cell_initialization(args, job, steady_state_dir, to_do):
     for k in range(n_regions):
         init_file = steady_state_dir + '/init_values_stab_bcl_{}_reg_{}_numstim_{}.sv'.format(args.cell_bcl, k,
                                                                                               args.numstim)
-        tissue_init += ['-imp_region[{}].im_sv_init'.format(k), init_file]
+        tissue_init += [f'-imp_region[{k}].im_sv_init', init_file]
 
     if to_do:  # Move trace files to steady_state_dir
         for file in os.listdir(os.getcwd()):
-            if file.startswith("Trace") or file.startswith("{}_trace".format(args.model)):
+            if file.startswith("Trace") or file.startswith(f"{args.model}_trace"):
                 old_file = os.getcwd() + '/' + file
                 new_file = steady_state_dir + '/' + file
                 os.rename(old_file, new_file)
@@ -306,21 +306,21 @@ def run(args, job):
 
     # p = np.poly1d([0.67278584, 0.17556362, 0.01718574])
 
-    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber'.format(args.mesh)  # um
+    meshname = f'{args.mesh}_fibers/result_LA/LA_bilayer_with_fiber'  # um
     meshbasename = meshname.split('/')[-4]
-    meshfold = '{}/{}'.format(args.init_state_dir, meshbasename)
+    meshfold = f'{args.init_state_dir}/{meshbasename}'
 
-    steady_state_dir = '{}/{}/cell_state'.format(args.init_state_dir, meshbasename)
+    steady_state_dir = f'{args.init_state_dir}/{meshbasename}/cell_state'
 
     try:
         os.makedirs(steady_state_dir)
     except OSError:
-        print("Creation of the directory %s failed" % steady_state_dir)
+        print(f"Creation of the directory {steady_state_dir} failed")
     else:
-        print("Successfully created the directory %s " % steady_state_dir)
+        print(f"Successfully created the directory {steady_state_dir} ")
 
     if not os.path.isfile(
-            steady_state_dir + '/init_values_stab_bcl_{}_reg_{}_numstim_{}.sv'.format(args.cell_bcl, 0, args.numstim)):
+            steady_state_dir + f'/init_values_stab_bcl_{args.cell_bcl}_reg_{0}_numstim_{args.numstim}.sv'):
         tissue_init = single_cell_initialization(args, job, steady_state_dir, 1)
     else:
         tissue_init = single_cell_initialization(args, job, steady_state_dir, 0)
@@ -330,15 +330,15 @@ def run(args, job):
     try:
         os.makedirs(simid)
     except OSError:
-        print("Creation of the directory %s failed" % simid)
+        print(f"Creation of the directory {simid} failed")
     else:
-        print("Successfully created the directory %s " % simid)
+        print(f"Successfully created the directory {simid} ")
 
     bilayer_n_cells, elements_in_fibrotic_reg, endo, endo_ids, centroids, LAT_map, min_LAT, el_to_clean, el_border, stim_pt, fit_LAT, healthy_endo = Methods_fit_to_clinical_LAT.low_vol_LAT(
         args, meshname + '_with_data_um.vtk')
 
-    with open("{}/{}/clinical_stim_pt.txt".format(args.init_state_dir, meshbasename), "w") as f:
-        f.write("{} {} {}".format(stim_pt[0], stim_pt[1], stim_pt[2]))
+    with open(f"{args.init_state_dir}/{meshbasename}/clinical_stim_pt.txt", "w") as f:
+        f.write(f"{stim_pt[0]} {stim_pt[1]} {stim_pt[2]}")
 
     # Set to 1 every LAT <= 1
     LAT_map = np.where(LAT_map <= 1, 1, LAT_map)
@@ -348,18 +348,18 @@ def run(args, job):
     # Set to max_LAT every LAT >= max_LAT
     LAT_map = np.where(LAT_map > args.LaAT, args.LaAT, LAT_map)
 
-    print("Wanted LAT: {}".format(args.LaAT))
-    print("Max LAT point id: {}".format(args.max_LAT_id))
+    print(f"Wanted LAT: {args.LaAT}")
+    print(f"Max LAT point id: {args.max_LAT_id}")
     print(fit_LAT)
 
     # Find all not conductive elements belonging to the fibrotic tissue and not use them in the fitting
     tag = {}
-    if not os.path.isfile('{}/elems_slow_conductive.regele'.format(meshfold)):
+    if not os.path.isfile(f'{meshfold}/elems_slow_conductive.regele'):
         Methods_fit_to_clinical_LAT.create_regele(endo, args)
 
     print('Reading regele file ...')
 
-    elems_not_conductive = np.loadtxt('{}/elems_slow_conductive.regele'.format(meshfold), skiprows=1, dtype=int)
+    elems_not_conductive = np.loadtxt(f'{meshfold}/elems_slow_conductive.regele', skiprows=1, dtype=int)
 
     endo_etag = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('elemTag'))
 
@@ -373,18 +373,18 @@ def run(args, job):
     meshNew.CellData.append(endo_etag, "elemTag")
 
     writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName("{}/LA_endo_with_fiber_30_um.vtu".format(meshfold))
+    writer.SetFileName(f"{meshfold}/LA_endo_with_fiber_30_um.vtu")
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
     pts = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetPoints().GetData())
     with open(meshfold + "/LA_endo_with_fiber_30_um.pts", "w") as f:
-        f.write("{}\n".format(len(pts)))
+        f.write(f"{len(pts)}\n")
         for i in range(len(pts)):
-            f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
     with open(meshfold + "/LA_endo_with_fiber_30_um.elem", "w") as f:
-        f.write("{}\n".format(meshNew.VTKObject.GetNumberOfCells()))
+        f.write(f"{meshNew.VTKObject.GetNumberOfCells()}\n")
         for i in range(meshNew.VTKObject.GetNumberOfCells()):
             cell = meshNew.VTKObject.GetCell(i)
             f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
@@ -449,12 +449,12 @@ def run(args, job):
     # Create the conductivity scale map with ones factors as initial condition
     f = open(simid + '/low_CV.dat', 'w')
     for i in slow_CV:
-        f.write("{:.4f}\n".format(i))
+        f.write(f"{i:.4f}\n")
     f.close()
 
     f = open(simid + '/low_CV_old.dat', 'w')
     for i in slow_CV:
-        f.write("{:.4f}\n".format(i))
+        f.write(f"{i:.4f}\n")
     f.close()
 
     final_diff = []
@@ -633,7 +633,7 @@ def run(args, job):
             active = Methods_fit_to_clinical_LAT.vtk_thr(healthy_endo, 0, "POINTS", "lat_s", 0)
 
             active_cells = vtk.util.numpy_support.vtk_to_numpy(active.GetCellData().GetArray('Global_ids')).astype(int)
-            print("active_cells: {}".format(len(active_cells)))
+            print(f"active_cells: {len(active_cells)}")
             act_cls_old = np.zeros((model.GetNumberOfCells(),))
             act_cls = np.zeros((model.GetNumberOfCells(),))
             meshNew.CellData.append(act_cls, "act_cls")
@@ -672,9 +672,9 @@ def run(args, job):
 
             last_ACT = np.mean(lats_to_fit[active_cells_band])
 
-            print("ACT to fit: {}".format(fit_LAT[l]))
-            print("last ACT: {}".format(last_ACT))
-            print("old_cells: {}".format(len(old_cells)))
+            print(f"ACT to fit: {fit_LAT[l]}")
+            print(f"last ACT: {last_ACT}")
+            print(f"old_cells: {len(old_cells)}")
 
             # Compute RMSE between simulated and clinical LAT excluding elements to clean (marked as wrong annotation)
             if len(lats_to_fit[active_cells_band]) > 0:
@@ -713,7 +713,7 @@ def run(args, job):
 
                 meshNew.CellData.append(slow_CV, "slow_CV")
                 writer = vtk.vtkXMLUnstructuredGridWriter()
-                writer.SetFileName(job.ID + "/endo_cleaned_{}.vtu".format(l))
+                writer.SetFileName(job.ID + f"/endo_cleaned_{l}.vtu")
                 writer.SetInputData(meshNew.VTKObject)
                 # writer.SetFileTypeToBinary()
                 writer.Write()
@@ -721,7 +721,7 @@ def run(args, job):
                 os.rename(simid + '/low_CV.dat', simid + '/low_CV_old.dat')
                 f = open(simid + '/low_CV.dat', 'w')
                 for i in slow_CV:
-                    f.write("{:.4f}\n".format(i))
+                    f.write(f"{i:.4f}\n")
                 f.close()
                 it += 1
             else:
@@ -734,7 +734,7 @@ def run(args, job):
                 meshNew.CellData.append(slow_CV_old, "slow_CV_old")
                 final_diff.append(LAT_diff)
                 writer = vtk.vtkXMLUnstructuredGridWriter()
-                writer.SetFileName(job.ID + "/endo_cleaned_{}.vtu".format(l))
+                writer.SetFileName(job.ID + f"/endo_cleaned_{l}.vtu")
                 writer.SetInputData(meshNew.VTKObject)
                 # writer.SetFileTypeToBinary()
                 writer.Write()
@@ -799,12 +799,12 @@ def run(args, job):
 
     print(RMSE)
 
-    print("Final last ACT: {}".format(last_ACT))
-    print("Final giL: {}".format(args.giL))
-    print("Final geL: {}".format(args.geL))
+    print(f"Final last ACT: {last_ACT}")
+    print(f"Final giL: {args.giL}")
+    print(f"Final geL: {args.geL}")
     f = open(job.ID + '/err.dat', 'w')
     for i in final_diff:
-        f.write("{:.4f}\n".format(i))
+        f.write(f"{i:.4f}\n")
     f.close()
 
     if os.path.exists('RMSE_patients.txt'):
@@ -812,7 +812,7 @@ def run(args, job):
     else:
         append_write = 'w'  # make a new file if not
     f = open('RMSE_patients.txt', append_write)
-    f.write("{} {} {} {:.2f}\n".format(args.mesh, args.step, args.thr, RMSE))
+    f.write(f"{args.mesh} {args.step} {args.thr} {RMSE:.2f}\n")
     f.close()
 
     slow_CV = np.loadtxt(simid + '/low_CV_old.dat')
@@ -820,9 +820,9 @@ def run(args, job):
     slow_CV_bil[endo_ids] = slow_CV
     slow_CV_bil[endo_ids + len(endo_ids)] = slow_CV
 
-    f = open(meshfold + '/low_CV_3_{}_{}.dat'.format(args.step, args.thr), 'w')
+    f = open(meshfold + f'/low_CV_3_{args.step}_{args.thr}.dat', 'w')
     for i in slow_CV_bil:
-        f.write("{:.4f}\n".format(i))
+        f.write(f"{i:.4f}\n")
     f.close()
 
     meshNew = dsa.WrapDataObject(new_endo)

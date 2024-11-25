@@ -106,19 +106,19 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     meshin = pv.read(meshpath)
     meshfix = pymeshfix.MeshFix(meshin)
     meshfix.repair()
-    meshfix.mesh.save("{}/{}_clean.vtk".format(full_path, atrium))
-    pv.save_meshio("{}/{}_clean.obj".format(full_path, atrium), meshfix.mesh, "obj")
+    meshfix.mesh.save(f"{full_path}/{atrium}_clean.vtk")
+    pv.save_meshio(f"{full_path}/{atrium}_clean.obj", meshfix.mesh, "obj")
 
     # Compute surface curvature
-    os.system("meshtool query curvature -msh={}/{}_clean.obj -size={}".format(full_path, atrium, size * scale))
+    os.system(f"meshtool query curvature -msh={full_path}/{atrium}_clean.obj -size={size * scale}")
 
     # Verify if the mesh curvature is not nan
 
     mesh_with_data = smart_reader(meshpath)
 
-    curv = np.loadtxt('{}/{}_clean.curv.dat'.format(full_path, atrium))
+    curv = np.loadtxt(f'{full_path}/{atrium}_clean.curv.dat')
 
-    mesh_clean = smart_reader("{}/{}_clean.vtk".format(full_path, atrium))
+    mesh_clean = smart_reader(f"{full_path}/{atrium}_clean.vtk")
 
     # Map point data to cleaned mesh
     mesh = point_array_mapper(mesh_with_data, mesh_clean, "all")
@@ -131,7 +131,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     if debug:
         writer = vtk.vtkPolyDataWriter()
-        writer.SetFileName("{}/{}_clean_with_curv.vtk".format(full_path, atrium))
+        writer.SetFileName(f"{full_path}/{atrium}_clean_with_curv.vtk")
         writer.SetInputData(model)
         writer.Write()
 
@@ -155,7 +155,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                 max_dist = np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0))
 
         if max_dist > max_cutting_radius * 2:
-            print("Valve bigger than {} cm".format(max_cutting_radius * 2))
+            print(f"Valve bigger than {max_cutting_radius * 2} cm")
         el_to_del_tot = find_elements_within_radius(model, valve_center, max_cutting_radius)
 
         model_new_el = vtk.vtkIdList()
@@ -185,7 +185,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         valve = extract_largest_region(valve)
 
         if debug and atrium == 'RA':
-            writer_vtk(valve, "{}/{}_clean_with_curv_".format(full_path, atrium) + "valve.vtk")
+            writer_vtk(valve, f"{full_path}/{atrium}_clean_with_curv_" + "valve.vtk")
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
         centerOfMassFilter.SetInputData(valve)
@@ -240,7 +240,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     model = cellid.GetOutput()
 
     writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName("{}/{}_curv.vtk".format(full_path, atrium))
+    writer.SetFileName(f"{full_path}/{atrium}_curv.vtk")
     writer.SetInputData(model)
     writer.SetFileTypeToBinary()
     writer.Write()
@@ -260,7 +260,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     high_c = vtk_thr(model, 0, "POINTS", "curv", np.median(curv) * 1.15)  # (np.min(curv)+np.max(curv))/2)
 
     writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName("{}/{}_h_curv.vtk".format(full_path, atrium))
+    writer.SetFileName(f"{full_path}/{atrium}_h_curv.vtk")
     writer.SetInputData(high_c)
     writer.SetFileTypeToBinary()
     writer.Write()
@@ -304,7 +304,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     else:
         transeptal_punture_id = -1
         p = pv.Plotter(notebook=False)
-        mesh_from_vtk = pv.PolyData("{}/{}_clean.vtk".format(full_path, atrium))
+        mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_clean.vtk")
         p.add_mesh(mesh_from_vtk, 'r')
         p.add_text('Select the transeptal punture and close the window', position='lower_left')
         p.enable_point_picking(meshfix.mesh, use_mesh=True)
@@ -447,7 +447,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     model = extract_largest_region(model)
 
     writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName("{}/{}_cutted.vtk".format(full_path, atrium))
+    writer.SetFileName(f"{full_path}/{atrium}_cutted.vtk")
     writer.SetInputData(model)
     writer.Write()
 
@@ -456,7 +456,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             point_cloud = pv.PolyData(apex)
 
             p = pv.Plotter(notebook=False)
-            mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
+            mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
             p.add_mesh(mesh_from_vtk, 'r')
             p.add_mesh(point_cloud, color='w', point_size=30., render_points_as_spheres=True)
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
@@ -468,7 +468,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             p.close()
         else:
             p = pv.Plotter(notebook=False)
-            mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
+            mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
             p.add_mesh(mesh_from_vtk, 'r')
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
             p.add_text('Select the appendage apex and close the window', position='lower_left')
@@ -478,7 +478,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                 apex = p.picked_point
             p.close()
 
-    model = smart_reader("{}/{}_cutted.vtk".format(full_path, atrium))
+    model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(model)
     loc.BuildLocator()
@@ -488,7 +488,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     elif atrium == "RA":
         RAA = apex_id
 
-    label_atrial_orifices("{}/{}_cutted.vtk".format(full_path, atrium), LAA, RAA)
+    label_atrial_orifices(f"{full_path}/{atrium}_cutted.vtk", LAA, RAA)
 
     return apex_id
 
@@ -634,10 +634,10 @@ def point_array_mapper(mesh1, mesh2, idat):
 
 
 def create_pts(array_points, array_name, mesh_dir):
-    f = open("{}{}.pts".format(mesh_dir, array_name), "w")
+    f = open(f"{mesh_dir}{array_name}.pts", "w")
     f.write("0 0 0\n")
     for i in range(len(array_points)):
-        f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
+        f.write(f"{array_points[i][0]} {array_points[i][1]} {array_points[i][2]}\n")
     f.close()
 
 

@@ -80,9 +80,9 @@ def la_calculate_gradient(args, model, job):
         try:
             os.makedirs(simid)
         except OSError:
-            print("Creation of the directory %s failed" % simid)
+            print(f"Creation of the directory {simid} failed")
         else:
-            print("Successfully created the directory %s " % simid)
+            print(f"Successfully created the directory {simid} ")
         # write the file as vtk 
         writer = vtk.vtkUnstructuredGridWriter()
         writer.SetFileName(simid + "/LA_with_lp_res_gradient.vtk")

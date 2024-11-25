@@ -97,7 +97,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
     ms = pymeshlab.MeshSet()
 
-    ms.load_new_mesh('{}.obj'.format(meshname))
+    ms.load_new_mesh(f'{meshname}.obj')
     # ms.apply_filter('turn_into_a_pure_triangular_mesh')  # if polygonal mesh
     # ms.save_current_mesh('{}.obj'.format(meshname))
 
@@ -112,7 +112,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
     if self_intersecting_faces:
         reader = vtk.vtkOBJReader()
-        reader.SetFileName('{}.obj'.format(meshname))
+        reader.SetFileName(f'{meshname}.obj')
         reader.Update()
 
         boundaryEdges = vtk.vtkFeatureEdges()
@@ -126,15 +126,15 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         boundary_pts = vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData())
 
         # Clean the mesh from holes and self intersecting triangles
-        meshin = pv.read('{}.obj'.format(meshname))
+        meshin = pv.read(f'{meshname}.obj')
         meshfix = pymeshfix.MeshFix(meshin)  # Be careful with biatrial geometries as it might delete one chamber
         meshfix.repair()
         vol = meshfix.mesh.volume
 
-        pv.save_meshio('{}_meshfix.obj'.format(meshname), meshfix.mesh, "obj")
+        pv.save_meshio(f'{meshname}_meshfix.obj', meshfix.mesh, "obj")
 
         reader = vtk.vtkOBJReader()
-        reader.SetFileName('{}_meshfix.obj'.format(meshname))
+        reader.SetFileName(f'{meshname}_meshfix.obj')
         reader.Update()
 
         Mass = vtk.vtkMassProperties()
@@ -176,20 +176,20 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         writer = vtk.vtkOBJWriter()
         writer.SetInputData(cleaner.GetOutput())
-        writer.SetFileName('{}_cleaned.obj'.format(meshname))
+        writer.SetFileName(f'{meshname}_cleaned.obj')
         writer.Write()
 
         mesh_data["vol"] = [vol]
 
         ms = pymeshlab.MeshSet()
 
-        ms.load_new_mesh('{}_cleaned.obj'.format(meshname))
+        ms.load_new_mesh(f'{meshname}_cleaned.obj')
 
     else:
 
         ms = pymeshlab.MeshSet()
 
-        ms.load_new_mesh('{}.obj'.format(meshname))
+        ms.load_new_mesh(f'{meshname}.obj')
 
     # compute the geometric measures of the current mesh
     # and save the results in the out_dict dictionary
@@ -202,8 +202,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
     loc_tgt_edge_length = target_mesh_resolution * scale
     it = 1
-    print("Current resolution: {} mm".format(avg_edge_length / scale))
-    print("Target resolution: {} mm".format(tgt_edge_length / scale))
+    print(f"Current resolution: {avg_edge_length / scale} mm")
+    print(f"Target resolution: {tgt_edge_length / scale} mm")
     while avg_edge_length > tgt_edge_length * 1.05 or avg_edge_length < tgt_edge_length * 0.95 or it < 3:
 
         ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=loc_tgt_edge_length)
@@ -212,13 +212,13 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         out_dict = ms.compute_geometric_measures()
 
         avg_edge_length = out_dict['avg_edge_length']
-        print("Current resolution: {} mm".format(avg_edge_length / scale))
+        print(f"Current resolution: {avg_edge_length / scale} mm")
         if avg_edge_length > tgt_edge_length * 1.05:
             loc_tgt_edge_length = tgt_edge_length * 0.95
-            print("New target resolution: {} mm".format(loc_tgt_edge_length / scale))
+            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
         elif avg_edge_length < tgt_edge_length * 0.95:
             loc_tgt_edge_length = tgt_edge_length * 1.05
-            print("New target resolution: {} mm".format(loc_tgt_edge_length / scale))
+            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
         else:
             break
         it += 1
@@ -227,19 +227,19 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     mesh_data["surf"] = [out_dict['surface_area']]
 
     # Better to save as .ply
-    ms.save_current_mesh('{}_res.ply'.format(meshname), save_vertex_color=False, save_vertex_normal=False,
+    ms.save_current_mesh(f'{meshname}_res.ply', save_vertex_color=False, save_vertex_normal=False,
                          save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
-    meshin = pv.read('{}_res.ply'.format(meshname))
+    meshin = pv.read(f'{meshname}_res.ply')
 
     if find_apex_with_curv and apex_id == -1:
         if self_intersecting_faces:
-            os.system("meshtool query curvature -msh={}_cleaned.obj -size={}".format(meshname, size * scale))
-            curv = np.loadtxt('{}_cleaned.curv.dat'.format(meshname))
-            mesh_curv = pv.read('{}_cleaned.obj'.format(meshname))
+            os.system(f"meshtool query curvature -msh={meshname}_cleaned.obj -size={size * scale}")
+            curv = np.loadtxt(f'{meshname}_cleaned.curv.dat')
+            mesh_curv = pv.read(f'{meshname}_cleaned.obj')
         else:
-            os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, size * scale))
-            curv = np.loadtxt('{}.curv.dat'.format(meshname))
-            mesh_curv = pv.read('{}.obj'.format(meshname))
+            os.system(f"meshtool query curvature -msh={meshname}.obj -size={size * scale}")
+            curv = np.loadtxt(f'{meshname}.curv.dat')
+            mesh_curv = pv.read(f'{meshname}.obj')
 
         apex = mesh_curv.points[np.argmax(curv), :]
 
@@ -281,7 +281,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     if atrium == 'LA_RA':
         mesh_data["LAA_id"] = [apex_id]  # change accordingly
     else:
-        mesh_data["{}A_id".format(atrium)] = [apex_id]  # change accordingly
+        mesh_data[f"{atrium}A_id"] = [apex_id]  # change accordingly
 
     if atrium == 'LA_RA':
         atrium = 'RA'
@@ -301,10 +301,10 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         tree = cKDTree(meshin.points.astype(np.double))
         dist, apex_id = tree.query(apex)
 
-        mesh_data["{}A_id".format(atrium)] = [apex_id]  # change accordingly
+        mesh_data[f"{atrium}A_id"] = [apex_id]  # change accordingly
 
         reader = vtk.vtkPLYReader()
-        reader.SetFileName('{}_res.ply'.format(meshname))
+        reader.SetFileName(f'{meshname}_res.ply')
         reader.Update()
 
         Mass = vtk.vtkMassProperties()
@@ -315,7 +315,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         print("Surface = ", Mass.GetSurfaceArea())
         mesh_data["vol_bi"] = Mass.GetVolume()  # Biatrial volume
 
-    fname = '{}_res_mesh_data.csv'.format(meshname)
+    fname = f'{meshname}_res_mesh_data.csv'
     df = pd.DataFrame(mesh_data)
     df.to_csv(fname, float_format="%.2f", index=False)
 

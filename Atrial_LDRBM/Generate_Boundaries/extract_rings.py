@@ -125,7 +125,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
     mesh = mesh[:-(len(extension) + 1)]
 
     meshname = mesh.split("/")[-1]
-    outdir = "{}_surf".format(mesh)
+    outdir = f"{mesh}_surf"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -411,13 +411,13 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
 
     for r in rings:
         id_vec = numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
-        fname = outdir + '/ids_{}.vtx'.format(r.name)
+        fname = outdir + f'/ids_{r.name}.vtx'
         if os.path.exists(fname):
             id_vec = id_vec[0:len(id_vec) - 1]
             f = open(fname, 'a')
         else:
             f = open(fname, 'w')
-            f.write('{}\n'.format(len(id_vec)))
+            f.write(f'{len(id_vec)}\n')
             f.write('extra\n')
 
         if r.name == "MV":
@@ -436,32 +436,32 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
             RPV = RPV + list(id_vec)
 
         for i in id_vec:
-            f.write('{}\n'.format(i))
+            f.write(f'{i}\n')
         f.close()
 
         centroids[r.name] = r.center
 
     fname = outdir + '/ids_LAA.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(1))
+    f.write(f'{1}\n')
     f.write('extra\n')
-    f.write('{}\n'.format(LAA_id))
+    f.write(f'{LAA_id}\n')
     f.close()
 
     fname = outdir + '/ids_LPV.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(LPV)))
+    f.write(f'{len(LPV)}\n')
     f.write('extra\n')
     for i in LPV:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     fname = outdir + '/ids_RPV.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(RPV)))
+    f.write(f'{len(RPV)}\n')
     f.write('extra\n')
     for i in RPV:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     return b_tag, centroids
@@ -507,10 +507,10 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
 
     for r in rings:
         id_vec = numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
-        fname = outdir + '/ids_{}.vtx'.format(r.name)
+        fname = outdir + f'/ids_{r.name}.vtx'
 
         f = open(fname, 'w')
-        f.write('{}\n'.format(len(id_vec)))
+        f.write(f'{len(id_vec)}\n')
         f.write('extra\n')
 
         if r.name == "TV":
@@ -523,7 +523,7 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
             b_tag[id_vec] = 9
 
         for i in id_vec:
-            f.write('{}\n'.format(i))
+            f.write(f'{i}\n')
 
         f.close()
 
@@ -531,9 +531,9 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
 
     fname = outdir + '/ids_RAA.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(1))
+    f.write(f'{1}\n')
     f.write('extra\n')
-    f.write('{}\n'.format(RAA_id))
+    f.write(f'{RAA_id}\n')
     f.close()
 
     return b_tag, centroids, rings
@@ -628,18 +628,18 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
 
     fname = outdir + '/ids_MV_ant.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(MV_ant)))
+    f.write(f'{len(MV_ant)}\n')
     f.write('extra\n')
     for i in MV_ant:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     fname = outdir + '/ids_MV_post.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(MV_post)))
+    f.write(f'{len(MV_post)}\n')
     f.write('extra\n')
     for i in MV_post:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     loc = vtk.vtkPointLocator()
@@ -671,10 +671,10 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
 
     fname = outdir + '/ids_MV_LPV.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(mv_lpv)))
+    f.write(f'{len(mv_lpv)}\n')
     f.write('extra\n')
     for i in mv_lpv:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
@@ -691,10 +691,10 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
 
     fname = outdir + '/ids_MV_RPV.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(mv_rpv)))
+    f.write(f'{len(mv_rpv)}\n')
     f.write('extra\n')
     for i in mv_rpv:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
@@ -711,10 +711,10 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
 
     fname = outdir + '/ids_RPV_LPV.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(rpv_lpv)))
+    f.write(f'{len(rpv_lpv)}\n')
     f.write('extra\n')
     for i in rpv_lpv:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
 
@@ -821,10 +821,10 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     tv_f_ids = vtk.util.numpy_support.vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_F.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(tv_f_ids)))
+    f.write(f'{len(tv_f_ids)}\n')
     f.write('extra\n')
     for i in tv_f_ids:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     geo_filter2 = vtk.vtkGeometryFilter()
@@ -835,10 +835,10 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     tv_s_ids = vtk.util.numpy_support.vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_S.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(tv_s_ids)))
+    f.write(f'{len(tv_s_ids)}\n')
     f.write('extra\n')
     for i in tv_s_ids:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     svc_points = svc.GetPoints().GetData()
@@ -859,7 +859,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
         surface = connect.GetOutput()
 
         if debug:
-            vtkWrite(surface, outdir + '/gamma_top_{}.vtk'.format(str(i)))
+            vtkWrite(surface, outdir + f'/gamma_top_{str(i)}.vtk')
 
         # Clean unused points
         cln = vtk.vtkCleanPolyData()
@@ -871,7 +871,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
         points = points.tolist()
 
         if debug:
-            create_pts(points, '/border_points_{}'.format(str(i)), outdir)
+            create_pts(points, f'/border_points_{str(i)}', outdir)
 
         in_ivc = False
         in_svc = False
@@ -971,18 +971,18 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     top_endo = vtk.util.numpy_support.vtk_to_numpy(cln.GetOutput().GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TOP_ENDO.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(top_endo)))
+    f.write(f'{len(top_endo)}\n')
     f.write('extra\n')
     for i in top_endo:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
 
 def create_pts(array_points, array_name, mesh_dir):
-    f = open("{}{}.pts".format(mesh_dir, array_name), "w")
+    f = open(f"{mesh_dir}{array_name}.pts", "w")
     f.write("0 0 0\n")
     for i in range(len(array_points)):
-        f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
+        f.write(f"{array_points[i][0]} {array_points[i][1]} {array_points[i][2]}\n")
     f.close()
 
 

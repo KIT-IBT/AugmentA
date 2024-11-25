@@ -110,12 +110,12 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     meshin = pv.read(meshpath)
     meshfix = pymeshfix.MeshFix(meshin)
     meshfix.repair()
-    meshfix.mesh.save("{}/{}_clean.vtk".format(full_path, atrium))
-    pv.save_meshio("{}/{}_clean.obj".format(full_path, atrium), meshfix.mesh, "obj")
+    meshfix.mesh.save(f"{full_path}/{atrium}_clean.vtk")
+    pv.save_meshio(f"{full_path}/{atrium}_clean.obj", meshfix.mesh, "obj")
 
     mesh_with_data = smart_reader(meshpath)
 
-    mesh_clean = smart_reader("{}/{}_clean.vtk".format(full_path, atrium))
+    mesh_clean = smart_reader(f"{full_path}/{atrium}_clean.vtk")
 
     # Map point data to cleaned mesh
     mesh = point_array_mapper(mesh_with_data, mesh_clean, "all")
@@ -131,7 +131,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         while picked_pt is None:
             p = pv.Plotter(notebook=False)
             p.add_mesh(meshfix.mesh, 'r')
-            p.add_text('Select the center of the {} and close the window to cut, otherwise just close'.format(r),
+            p.add_text(f'Select the center of the {r} and close the window to cut, otherwise just close',
                        position='lower_left')
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
             p.show()
@@ -168,12 +168,12 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     model = extract_largest_region(mesh)
 
     writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName("{}/{}_cutted.vtk".format(full_path, atrium))
+    writer.SetFileName(f"{full_path}/{atrium}_cutted.vtk")
     writer.SetInputData(model)
     writer.Write()
 
     p = pv.Plotter(notebook=False)
-    mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
+    mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
     p.add_mesh(mesh_from_vtk, 'r')
     p.add_text('Select the atrial appendage apex', position='lower_left')
     p.enable_point_picking(meshfix.mesh, use_mesh=True)
@@ -184,7 +184,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         apex = p.picked_point
 
     p.close()
-    model = smart_reader("{}/{}_cutted.vtk".format(full_path, atrium))
+    model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(model)
     loc.BuildLocator()
@@ -194,7 +194,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     elif atrium == "RA":
         RAA = apex_id
 
-    meshpath = "{}/{}_cutted".format(full_path, atrium)
+    meshpath = f"{full_path}/{atrium}_cutted"
     extract_rings.run(["--mesh", meshpath, "--LAA", str(LAA), "--RAA", str(RAA)])
 
     return apex_id

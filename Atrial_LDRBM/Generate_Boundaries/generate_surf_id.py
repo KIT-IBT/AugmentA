@@ -37,49 +37,49 @@ from extract_rings import smart_reader
 
 
 def write_surf_ids(outdir, name, ii):
-    fname = outdir + '/ids_{}.vtx'.format(name)
+    fname = outdir + f'/ids_{name}.vtx'
     f = open(fname, 'w')
     if isinstance(ii, int):
         f.write('1\n')
         f.write('extra\n')
-        f.write('{}\n'.format(ii))
+        f.write(f'{ii}\n')
     else:
-        f.write('{}\n'.format(len(ii)))
+        f.write(f'{len(ii)}\n')
         f.write('extra\n')
         for i in ii:
-            f.write('{}\n'.format(i))
+            f.write(f'{i}\n')
     f.close()
 
 
 def generate_surf_id(meshname, atrium):
     """The whole model"""
 
-    vol = smart_reader(meshname + "_{}_vol.vtk".format(atrium))
+    vol = smart_reader(meshname + f"_{atrium}_vol.vtk")
     whole_model_points_coordinate = vtk.util.numpy_support.vtk_to_numpy(vol.GetPoints().GetData())
 
     tree = cKDTree(whole_model_points_coordinate)
     epi_pts = vtk.util.numpy_support.vtk_to_numpy(
-        smart_reader(meshname + '_{}_epi.obj'.format(atrium)).GetPoints().GetData())
+        smart_reader(meshname + f'_{atrium}_epi.obj').GetPoints().GetData())
     dd, ii = tree.query(epi_pts)
 
     epi_ids = np.array(ii)
-    outdir = meshname + "_{}_vol_surf".format(atrium)
+    outdir = meshname + f"_{atrium}_vol_surf"
 
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
-    shutil.copyfile(meshname + "_{}_vol.vtk".format(atrium), outdir + '/{}.vtk'.format(atrium))
-    shutil.copyfile(meshname + "_{}_epi_surf/rings_centroids.csv".format(atrium), outdir + '/rings_centroids.csv')
+    shutil.copyfile(meshname + f"_{atrium}_vol.vtk", outdir + f'/{atrium}.vtk')
+    shutil.copyfile(meshname + f"_{atrium}_epi_surf/rings_centroids.csv", outdir + '/rings_centroids.csv')
 
     write_surf_ids(outdir, "EPI", ii)
 
     dd, ii = tree.query(vtk.util.numpy_support.vtk_to_numpy(
-        smart_reader(meshname + '_{}_endo.obj'.format(atrium)).GetPoints().GetData()))
+        smart_reader(meshname + f'_{atrium}_endo.obj').GetPoints().GetData()))
     ii = np.setdiff1d(ii, epi_ids)
 
     write_surf_ids(outdir, "ENDO", ii)
 
-    fol_name = meshname + '_{}_epi_surf'.format(atrium)
+    fol_name = meshname + f'_{atrium}_epi_surf'
 
     ids_files = glob(fol_name + '/ids_*')
 

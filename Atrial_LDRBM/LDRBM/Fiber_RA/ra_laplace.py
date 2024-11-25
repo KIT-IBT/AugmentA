@@ -36,7 +36,7 @@ EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 def ra_laplace(args, job, model):
     meshdir = args.mesh + '_surf/RA'
-    surfdir = '{}_surf/'.format(args.mesh)
+    surfdir = f'{args.mesh}_surf/'
     parfdir = os.path.join(EXAMPLE_DIR, 'Parfiles')
 
     if args.mesh_type == 'vol':
@@ -156,9 +156,9 @@ def ra_laplace(args, job, model):
         try:
             os.makedirs(simid)
         except OSError:
-            print("Creation of the directory %s failed" % simid)
+            print(f"Creation of the directory {simid} failed")
         else:
-            print("Successfully created the directory %s " % simid)
+            print(f"Successfully created the directory {simid} ")
         if args.mesh_type == "vol":
             writer = vtk.vtkXMLUnstructuredGridWriter()
             writer.SetFileName(simid + "/RA_with_laplace.vtu")

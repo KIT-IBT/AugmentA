@@ -38,8 +38,8 @@ vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 def low_vol_LAT(args, path):
     # Read mesh
-    meshname = '{}_fibers/result_LA/LA_bilayer_with_fiber_with_data_um'.format(args.mesh)  # in um
-    model = smart_reader('{}.vtk'.format(meshname))
+    meshname = f'{args.mesh}_fibers/result_LA/LA_bilayer_with_fiber_with_data_um'  # in um
+    model = smart_reader(f'{meshname}.vtk')
 
     bilayer_n_cells = model.GetNumberOfCells()
 
@@ -83,16 +83,16 @@ def low_vol_LAT(args, path):
     if args.debug:
 
         meshbasename = args.mesh.split("/")[-1]
-        debug_dir = '{}/{}/debug'.format(args.init_state_dir, meshbasename)
+        debug_dir = f'{args.init_state_dir}/{meshbasename}/debug'
         try:
             os.makedirs(debug_dir)
         except OSError:
-            print("Creation of the directory %s failed" % debug_dir)
+            print(f"Creation of the directory {debug_dir} failed")
         else:
-            print("Successfully created the directory %s " % debug_dir)
+            print(f"Successfully created the directory {debug_dir} ")
 
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName('{}/low_vol.vtu'.format(debug_dir))
+        writer.SetFileName(f'{debug_dir}/low_vol.vtu')
         writer.SetInputData(low_vol)
         writer.Write()
 
@@ -106,7 +106,7 @@ def low_vol_LAT(args, path):
 
     if args.debug:
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName('{}/endo.vtu'.format(debug_dir))
+        writer.SetFileName(f'{debug_dir}/endo.vtu')
         writer.SetInputData(endo)
         writer.Write()
 
@@ -127,7 +127,7 @@ def low_vol_LAT(args, path):
 
     if args.debug:
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName('{}/not_low_volt_endo.vtu'.format(debug_dir))
+        writer.SetFileName(f'{debug_dir}/not_low_volt_endo.vtu')
         writer.SetInputData(not_low_volt_endo)
         writer.Write()
 
@@ -138,7 +138,7 @@ def low_vol_LAT(args, path):
 
         # See create_SSM_instance standalone to create LA_fit.obj
         reader = vtk.vtkOBJReader()
-        reader.SetFileName('{}/LA_fit.obj'.format(args.mesh))
+        reader.SetFileName(f'{args.mesh}/LA_fit.obj')
         reader.Update()
         LA_fit = reader.GetOutput()
 
@@ -366,13 +366,13 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
     if args.debug:
 
         meshbasename = args.mesh.split("/")[-1]
-        debug_dir = '{}/{}/debug'.format(args.init_state_dir, meshbasename)
+        debug_dir = f'{args.init_state_dir}/{meshbasename}/debug'
         try:
             os.makedirs(debug_dir)
         except OSError:
-            print("Creation of the directory %s failed" % debug_dir)
+            print(f"Creation of the directory {debug_dir} failed")
         else:
-            print("Successfully created the directory %s " % debug_dir)
+            print(f"Successfully created the directory {debug_dir} ")
 
         el_border_array = np.concatenate(el_border)  # convert to linear array
         border = np.zeros((endo.GetNumberOfCells(),))
@@ -380,7 +380,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         meshNew.CellData.append(border, "border")
 
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName('{}/endo_with_clean_tag.vtu'.format(debug_dir))
+        writer.SetFileName(f'{debug_dir}/endo_with_clean_tag.vtu')
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
 
@@ -400,7 +400,7 @@ def create_regele(endo, args):
     #     file.write(str(i) + '\n')
     # file.close()
 
-    f_slow_conductive = '{}/{}/elems_slow_conductive'.format(args.init_state_dir, args.mesh.split("/")[-1])
+    f_slow_conductive = f"{args.init_state_dir}/{args.mesh.split('/')[-1]}/elems_slow_conductive"
     file = open(f_slow_conductive + '.regele', 'w')
     file.write(str(len(low_vol_ids)) + '\n')
     for i in low_vol_ids:
@@ -425,7 +425,7 @@ def low_CV(model, low_CV_thr, meshfold):
 
     f = open(meshfold + '/low_CV.dat', 'w')
     for i in sigma:
-        f.write("{:.4f}\n".format(i))
+        f.write(f"{i:.4f}\n")
     f.close()
 
 

@@ -219,18 +219,18 @@ def write_bilayer(args, job):
 
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
     with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.pts', "w") as f:
-        f.write("{}\n".format(len(pts)))
+        f.write(f"{len(pts)}\n")
         for i in range(len(pts)):
-            f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
     tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
     with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.elem', "w") as f:
-        f.write("{}\n".format(bilayer.GetNumberOfCells()))
+        f.write(f"{bilayer.GetNumberOfCells()}\n")
         for i in range(bilayer.GetNumberOfCells()):
             cell = bilayer.GetCell(i)
             if cell.GetNumberOfPoints() == 2:
-                f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_epi[i]))
+                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
             elif cell.GetNumberOfPoints() == 3:
                 f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
                                                   cell.GetPointIds().GetId(2), tag_epi[i]))
@@ -520,7 +520,7 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     band = cln.GetOutput()
 
     if args.debug:
-        writer_vtk(band, '{}_surf/'.format(args.mesh) + "band_" + str(StartVertex) + "_" + str(EndVertex) + ".vtk")
+        writer_vtk(band, f'{args.mesh}_surf/' + "band_" + str(StartVertex) + "_" + str(EndVertex) + ".vtk")
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(band)
@@ -1154,10 +1154,10 @@ def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
 
 
 def create_pts(array_points, array_name, mesh_dir):
-    f = open("{}{}.pts".format(mesh_dir, array_name), "w")
+    f = open(f"{mesh_dir}{array_name}.pts", "w")
     f.write("0 0 0\n")
     for i in range(len(array_points)):
-        f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
+        f.write(f"{array_points[i][0]} {array_points[i][1]} {array_points[i][2]}\n")
     f.close()
 
 

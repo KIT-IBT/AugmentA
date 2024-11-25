@@ -56,7 +56,7 @@ def parser():
 
 
 def get_landmarks(mesh, prealigned=1, scale=1):
-    mesh_dir = "{}_surf".format(mesh)
+    mesh_dir = f"{mesh}_surf"
     reader = vtk.vtkPolyDataReader()
     if prealigned:
         reader.SetFileName(mesh_dir + '/LA_prealigned.vtk')
@@ -326,18 +326,18 @@ def get_landmarks(mesh, prealigned=1, scale=1):
 
     json2 = '['
     for i in range(len(name_lst)):
-        json2 = json2 + "{\"id\":\"" + "{}".format(name_lst[i]) + "\",\"coordinates\":[" + "{},{},{}".format(
+        json2 = json2 + "{\"id\":\"" + f"{name_lst[i]}" + "\",\"coordinates\":[" + "{},{},{}".format(
             coord_lst[i][0], coord_lst[i][1], coord_lst[i][2]) + "]},"
     json2 = json2[:-1] + ']'
 
-    f = open("{}/landmarks.json".format(mesh_dir), "w")
+    f = open(f"{mesh_dir}/landmarks.json", "w")
     f.write(json2)
     f.close()
 
     # txt file to open in Paraview to check
-    f = open("{}/landmarks.txt".format(mesh_dir), "w")
+    f = open(f"{mesh_dir}/landmarks.txt", "w")
     for i in range(len(name_lst)):
-        f.write("{} {} {} {}\n".format(coord_lst[i][0], coord_lst[i][1], coord_lst[i][2], name_lst[i]))
+        f.write(f"{coord_lst[i][0]} {coord_lst[i][1]} {coord_lst[i][2]} {name_lst[i]}\n")
 
 
 def run():

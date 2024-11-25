@@ -48,9 +48,9 @@ def la_generate_fiber(model, args, job):
     try:
         os.makedirs(simid)
     except OSError:
-        print("Creation of the directory %s failed" % simid)
+        print(f"Creation of the directory {simid} failed")
     else:
-        print("Successfully created the directory %s " % simid)
+        print(f"Successfully created the directory {simid} ")
 
     with open(os.path.join(EXAMPLE_DIR, '../../element_tag.csv')) as f:
         tag_dict = {}
@@ -408,23 +408,23 @@ def la_generate_fiber(model, args, job):
 
     LAA_bb_ids = vtk.util.numpy_support.vtk_to_numpy(LAA_bb.GetPointData().GetArray('Global_ids'))
 
-    MV_ring_ids = np.loadtxt('{}_surf/ids_MV.vtx'.format(args.mesh), skiprows=2, dtype=int)
+    MV_ring_ids = np.loadtxt(f'{args.mesh}_surf/ids_MV.vtx', skiprows=2, dtype=int)
 
     LAA_bb_ids = np.append(LAA_bb_ids, MV_ring_ids)
 
-    fname = '{}_surf/ids_LAA_bb.vtx'.format(args.mesh)
+    fname = f'{args.mesh}_surf/ids_LAA_bb.vtx'
     f = open(fname, 'w')
-    f.write('{}\n'.format(len(LAA_bb_ids)))
+    f.write(f'{len(LAA_bb_ids)}\n')
     f.write('extra\n')
     for i in LAA_bb_ids:
-        f.write('{}\n'.format(i))
+        f.write(f'{i}\n')
     f.close()
 
     LAA_s = laplace_0_1(args, job, model, "LAA", "LAA_bb", "phie_ab3")
 
     LAA_s = Method.vtk_thr(LAA_s, 1, "POINTS", "phie_ab3", 0.95)
 
-    ring_ids = np.loadtxt('{}_surf/'.format(args.mesh) + 'ids_MV.vtx', skiprows=2, dtype=int)
+    ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_MV.vtx', skiprows=2, dtype=int)
 
     rings_pts = vtk.util.numpy_support.vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
 
@@ -614,17 +614,17 @@ def la_generate_fiber(model, args, job):
 
         pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
         with open(job.ID + '/result_LA/LA_endo_with_fiber.pts', "w") as f:
-            f.write("{}\n".format(len(pts)))
+            f.write(f"{len(pts)}\n")
             for i in range(len(pts)):
-                f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+                f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
         with open(job.ID + '/result_LA/LA_endo_with_fiber.elem', "w") as f:
-            f.write("{}\n".format(endo.GetNumberOfCells()))
+            f.write(f"{endo.GetNumberOfCells()}\n")
             for i in range(endo.GetNumberOfCells()):
                 cell = endo.GetCell(i)
                 if cell.GetNumberOfPoints() == 2:
                     f.write(
-                        "Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_endo[i]))
+                        f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_endo[i]}\n")
                 elif cell.GetNumberOfPoints() == 3:
                     f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
                                                       cell.GetPointIds().GetId(2), tag_endo[i]))
@@ -826,17 +826,17 @@ def la_generate_fiber(model, args, job):
 
         pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
         with open(job.ID + '/result_LA/LA_epi_with_fiber.pts', "w") as f:
-            f.write("{}\n".format(len(pts)))
+            f.write(f"{len(pts)}\n")
             for i in range(len(pts)):
-                f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+                f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
         with open(job.ID + '/result_LA/LA_epi_with_fiber.elem', "w") as f:
-            f.write("{}\n".format(epi.GetNumberOfCells()))
+            f.write(f"{epi.GetNumberOfCells()}\n")
             for i in range(epi.GetNumberOfCells()):
                 cell = epi.GetCell(i)
                 if cell.GetNumberOfPoints() == 2:
                     f.write(
-                        "Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_epi[i]))
+                        f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
                 elif cell.GetNumberOfPoints() == 3:
                     f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
                                                       cell.GetPointIds().GetId(2), tag_epi[i]))
@@ -894,16 +894,16 @@ def la_generate_fiber(model, args, job):
 
         pts = numpy_support.vtk_to_numpy(model.GetPoints().GetData())
         with open(job.ID + '/result_LA/LA_vol_with_fiber.pts', "w") as f:
-            f.write("{}\n".format(len(pts)))
+            f.write(f"{len(pts)}\n")
             for i in range(len(pts)):
-                f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+                f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
         with open(job.ID + '/result_LA/LA_vol_with_fiber.elem', "w") as f:
-            f.write("{}\n".format(model.GetNumberOfCells()))
+            f.write(f"{model.GetNumberOfCells()}\n")
             for i in range(model.GetNumberOfCells()):
                 cell = model.GetCell(i)
                 if cell.GetNumberOfPoints() == 2:
-                    f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag[i]))
+                    f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag[i]}\n")
                 elif cell.GetNumberOfPoints() == 3:
                     f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
                                                       cell.GetPointIds().GetId(2), tag[i]))

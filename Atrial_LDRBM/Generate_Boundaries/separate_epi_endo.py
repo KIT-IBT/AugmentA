@@ -42,7 +42,7 @@ def separate_epi_endo(path, atrium):
     geo_filter.Update()
 
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname + "_{}.obj".format(atrium))
+    writer.SetFileName(meshname + f"_{atrium}.obj")
     writer.SetInputData(geo_filter.GetOutput())
     writer.Write()
 
@@ -61,7 +61,7 @@ def separate_epi_endo(path, atrium):
     la_epi = geo_filter.GetOutput()
 
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname + "_{}_epi.obj".format(atrium))
+    writer.SetFileName(meshname + f"_{atrium}_epi.obj")
     writer.SetInputData(la_epi)
     writer.Write()
 
@@ -80,6 +80,6 @@ def separate_epi_endo(path, atrium):
     la_endo = geo_filter.GetOutput()
 
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname + "_{}_endo.obj".format(atrium))
+    writer.SetFileName(meshname + f"_{atrium}_endo.obj")
     writer.SetInputData(la_endo)
     writer.Write()

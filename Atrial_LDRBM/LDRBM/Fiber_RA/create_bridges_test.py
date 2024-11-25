@@ -75,7 +75,7 @@ def parser():
 
 
 def jobID(args):
-    ID = '{}_fibers'.format(args.mesh)
+    ID = f'{args.mesh}_fibers'
     return ID
 
 
@@ -669,19 +669,19 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
         pts = vtk.util.numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
         with open(job.ID + '/result_RA/LA_RA_vol_with_fiber.pts', "w") as f:
-            f.write("{}\n".format(len(pts)))
+            f.write(f"{len(pts)}\n")
             for i in range(len(pts)):
-                f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
+                f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
         tag_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('elemTag'))
 
         with open(job.ID + '/result_RA/LA_RA_vol_with_fiber.elem', "w") as f:
-            f.write("{}\n".format(epi.GetNumberOfCells()))
+            f.write(f"{epi.GetNumberOfCells()}\n")
             for i in range(epi.GetNumberOfCells()):
                 cell = epi.GetCell(i)
                 if cell.GetNumberOfPoints() == 2:
                     f.write(
-                        "Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_epi[i]))
+                        f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
                 elif cell.GetNumberOfPoints() == 3:
                     f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
                                                       cell.GetPointIds().GetId(2), tag_epi[i]))

@@ -84,7 +84,7 @@ def AugmentA(args):
     if args.closed_surface:
         separate_epi_endo(args.mesh, args.atrium)
         meshname_old = str(meshname)
-        meshname = meshname_old + "_{}_epi".format(args.atrium)
+        meshname = meshname_old + f"_{args.atrium}_epi"
     else:
 
         if args.open_orifices:
@@ -160,7 +160,7 @@ def AugmentA(args):
 
                     mesh_data["RAA_id"] = [apex_id]
 
-                fname = '{}_mesh_data.csv'.format(meshname)
+                fname = f'{meshname}_mesh_data.csv'
                 df = pd.DataFrame(mesh_data)
                 df.to_csv(fname, float_format="%.2f", index=False)
 
@@ -215,7 +215,7 @@ def AugmentA(args):
             processed_mesh = mesh_dir + args.atrium + '_cutted_surf/' + args.atrium + '_fit'
 
         # Label atrial orifices using apex id found in the resampling algorithm
-        df = pd.read_csv('{}_mesh_data.csv'.format(mesh_dir + args.atrium + '_cutted_surf/' + args.atrium + '_fit'))
+        df = pd.read_csv(f"{mesh_dir + args.atrium + '_cutted_surf/' + args.atrium + '_fit'}_mesh_data.csv")
         if args.atrium == "LA":
             label_atrial_orifices(processed_mesh + 'obj', LAA_id=int(df[args.atrium + "A_id"]))
             # Atrial region annotation and fiber generation using LDRBM
@@ -236,20 +236,20 @@ def AugmentA(args):
             # Make sure there is an .obj mesh file
 
             # Convert mesh from vtk to obj
-            meshin = pv.read('{}.vtk'.format(meshname))
-            pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
+            meshin = pv.read(f'{meshname}.vtk')
+            pv.save_meshio(f'{meshname}.obj', meshin, "obj")
 
             # if args.atrium =='LA_RA':
             apex_id = -1  # Find new location with resampled mesh
 
             # Here finds the LAA_id and/or RAA_id for the remeshed geometry
-            resample_surf_mesh('{}'.format(meshname), target_mesh_resolution=args.target_mesh_resolution,
+            resample_surf_mesh(f'{meshname}', target_mesh_resolution=args.target_mesh_resolution,
                                find_apex_with_curv=0, scale=args.scale, apex_id=apex_id, atrium=args.atrium)
-            processed_mesh = '{}_res'.format(meshname)
+            processed_mesh = f'{meshname}_res'
 
             # Convert mesh from ply to obj
-            meshin = pv.read('{}.ply'.format(processed_mesh))
-            pv.save_meshio('{}.obj'.format(processed_mesh), meshin, "obj")
+            meshin = pv.read(f'{processed_mesh}.ply')
+            pv.save_meshio(f'{processed_mesh}.obj', meshin, "obj")
 
             # p = pv.Plotter(notebook=False)
             #
@@ -298,12 +298,12 @@ def AugmentA(args):
             #     meshin = pv.read('{}.obj'.format(meshname))
 
         # Label atrial orifices using apex id found in the resampling algorithm
-        df = pd.read_csv('{}_mesh_data.csv'.format(processed_mesh))
+        df = pd.read_csv(f'{processed_mesh}_mesh_data.csv')
 
         if args.atrium == "LA_RA":
             if not os.path.exists(processed_mesh + '.obj'):
-                meshin = pv.read('{}.vtk'.format(processed_mesh))
-                pv.save_meshio('{}.obj'.format(processed_mesh), meshin, "obj")
+                meshin = pv.read(f'{processed_mesh}.vtk')
+                pv.save_meshio(f'{processed_mesh}.obj', meshin, "obj")
 
             label_atrial_orifices(processed_mesh + '.obj', LAA_id=int(df["LAA_id"]),
                                   RAA_id=int(df["RAA_id"]))  # Label both
@@ -326,9 +326,9 @@ def AugmentA(args):
             label_atrial_orifices(processed_mesh + '.obj', LAA_id=int(df[args.atrium + "A_id"]))
             # Atrial region annotation and fiber generation using LDRBM
             if args.closed_surface:
-                generate_mesh(meshname_old + '_{}'.format(args.atrium))
+                generate_mesh(meshname_old + f'_{args.atrium}')
                 generate_surf_id(meshname_old, args.atrium)
-                processed_mesh = meshname_old + "_{}_vol".format(args.atrium)
+                processed_mesh = meshname_old + f"_{args.atrium}_vol"
                 la_main.run(
                     ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(0), "--mesh_type", "vol",
                      "--ofmt", args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
@@ -348,9 +348,9 @@ def AugmentA(args):
             # Atrial region annotation and fiber generation using LDRBM
             if args.closed_surface:
                 label_atrial_orifices_TOP_epi_endo(processed_mesh + '.obj', RAA_id=int(df[args.atrium + "A_id"]))
-                generate_mesh(meshname_old + '_{}'.format(args.atrium))
+                generate_mesh(meshname_old + f'_{args.atrium}')
                 generate_surf_id(meshname_old, args.atrium)
-                processed_mesh = meshname_old + "_{}_vol".format(args.atrium)
+                processed_mesh = meshname_old + f"_{args.atrium}_vol"
                 ra_main.run(
                     ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(0), "--mesh_type", "vol",
                      "--ofmt", args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])
@@ -363,7 +363,7 @@ def AugmentA(args):
     if args.debug:
         if args.closed_surface:
             bil = pv.read(
-                '{}_fibers/result_{}/{}_vol_with_fiber.{}'.format(processed_mesh, args.atrium, args.atrium, args.ofmt))
+                f'{processed_mesh}_fibers/result_{args.atrium}/{args.atrium}_vol_with_fiber.{args.ofmt}')
         else:
             if args.atrium == 'LA_RA':
                 bil = pv.read(
