@@ -36,6 +36,8 @@ from sklearn.cluster import KMeans
 import argparse
 from scipy.spatial import cKDTree
 
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
@@ -76,35 +78,6 @@ def parser():
                         default=1,
                         help='Set to 1 for debbuging the code')
     return parser
-
-
-def smart_reader(path):
-    extension = str(path).split(".")[-1]
-
-    if extension == "vtk":
-        data_checker = vtk.vtkDataSetReader()
-        data_checker.SetFileName(str(path))
-        data_checker.Update()
-
-        if data_checker.IsFilePolyData():
-            reader = vtk.vtkPolyDataReader()
-        elif data_checker.IsFileUnstructuredGrid():
-            reader = vtk.vtkUnstructuredGridReader()
-
-    elif extension == "vtp":
-        reader = vtk.vtkXMLPolyDataReader()
-    elif extension == "vtu":
-        reader = vtk.vtkXMLUnstructuredGridReader()
-    elif extension == "obj":
-        reader = vtk.vtkOBJReader()
-    else:
-        print("No polydata or unstructured grid")
-
-    reader.SetFileName(str(path))
-    reader.Update()
-    output = reader.GetOutput()
-
-    return output
 
 
 def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_id="", debug=1):
@@ -295,8 +268,11 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
     df.to_csv(outdir + "/rings_centroids.csv", float_format="%.2f", index=False)
 
 
-def run():
-    args = parser().parse_args()
+def run(args=None):
+    if args is None:
+        args = parser().parse_args()
+    else:
+        args = parser().parse_args(args)
 
     label_atrial_orifices(args.mesh, args.LAA, args.RAA, args.LAA_base, args.RAA_base, args.debug)
 

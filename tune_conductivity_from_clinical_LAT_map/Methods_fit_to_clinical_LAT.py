@@ -25,13 +25,15 @@ specific language governing permissions and limitations
 under the License.  
 """
 
-import vtk
 import os
-from vtk.numpy_interface import dataset_adapter as dsa
-from vtk.util.numpy_support import vtk_to_numpy
-from scipy.spatial import cKDTree
+
 import numpy as np
-from sklearn.metrics import mean_squared_error
+import vtk
+from scipy.spatial import cKDTree
+from vtk.numpy_interface import dataset_adapter as dsa
+
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -428,21 +430,6 @@ def low_CV(model, low_CV_thr, meshfold):
         f.write(f"{i:.4f}\n")
     f.close()
 
-
-def low_CV(args, job, meas_LAT, new_endo, meshfold):
-    lats = np.loadtxt(job.ID + '/init_acts_ACTs-thresh.dat')
-    meshNew = dsa.WrapDataObject(new_endo)
-    meshNew.PointData.append(lats, "LAT_s")
-
-    healthy_endo = Methods.vtk_thr(meshNew.VTKObject, 1, "CELLS", "elemTag", 7)
-    active = Methods.vtk_thr(healthy_endo, 0, "POINTS", "LAT_s", 0)
-    max_active_LAT = np.max(vtk.util.numpy_support.vtk_to_numpy(active.GetPointData().GetArray('LAT_s')))
-    max_active_band = Methods.vtk_thr(healthy_endo, 2, "POINTS", "LAT_s", max_active_LAT - args.tol, max_active_LAT)
-    active_cells = list(
-        set(vtk.util.numpy_support.vtk_to_numpy(active.GetCellData().GetArray('Global_ids')).astype(int)).difference(
-            low_CV_ids))
-
-
 def dijkstra_path(polydata, StartVertex, EndVertex):
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(polydata)
@@ -481,78 +468,6 @@ def get_EAP(path_mod, path_fib):
     stim_pt = model.GetPoint(LA_MV_ids[np.argmin(LAT_map[LA_MV_ids])])
 
     return stim_pt
-
-
-def smart_reader_old(path):
-    data_checker = vtk.vtkDataSetReader()
-    data_checker.SetFileName(str(path))
-    data_checker.Update()
-
-    if data_checker.IsFilePolyData():
-        reader = vtk.vtkPolyDataReader()
-    elif data_checker.IsFileUnstructuredGrid():
-        reader = vtk.vtkUnstructuredGridReader()
-
-    reader.SetFileName(str(path))
-    reader.Update()
-    output = reader.GetOutput()
-
-    return output
-
-
-def smart_reader(path):
-    extension = str(path).split(".")[-1]
-
-    if extension == "vtk":
-        data_checker = vtk.vtkDataSetReader()
-        data_checker.SetFileName(str(path))
-        data_checker.Update()
-
-        if data_checker.IsFilePolyData():
-            reader = vtk.vtkPolyDataReader()
-        elif data_checker.IsFileUnstructuredGrid():
-            reader = vtk.vtkUnstructuredGridReader()
-
-    elif extension == "vtp":
-        reader = vtk.vtkXMLPolyDataReader()
-    elif extension == "vtu":
-        reader = vtk.vtkXMLUnstructuredGridReader()
-    elif extension == "obj":
-        reader = vtk.vtkOBJReader()
-    else:
-        print("No polydata or unstructured grid")
-
-    reader.SetFileName(str(path))
-    reader.Update()
-    output = reader.GetOutput()
-
-    return output
-
-
-def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    if mode == 0:
-        thresh.ThresholdByUpper(thr1)
-    elif mode == 1:
-        thresh.ThresholdByLower(thr1)
-    elif mode == 2:
-        if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1, thr2)
-        else:
-            thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-            thresh.Update()
-            thr = thresh.GetOutput()
-            thresh = vtk.vtkThreshold()
-            thresh.SetInputData(thr)
-            thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-    thresh.Update()
-
-    output = thresh.GetOutput()
-
-    return output
 
 
 def extract_largest_region(mesh):

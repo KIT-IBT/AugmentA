@@ -36,61 +36,6 @@ import collections
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
-def smart_reader(path):
-    extension = str(path).split(".")[-1]
-
-    if extension == "vtk":
-        data_checker = vtk.vtkDataSetReader()
-        data_checker.SetFileName(str(path))
-        data_checker.Update()
-
-        if data_checker.IsFilePolyData():
-            reader = vtk.vtkPolyDataReader()
-        elif data_checker.IsFileUnstructuredGrid():
-            reader = vtk.vtkUnstructuredGridReader()
-
-    elif extension == "vtp":
-        reader = vtk.vtkXMLPolyDataReader()
-    elif extension == "vtu":
-        reader = vtk.vtkXMLUnstructuredGridReader()
-    elif extension == "obj":
-        reader = vtk.vtkOBJReader()
-    else:
-        print("No polydata or unstructured grid")
-
-    reader.SetFileName(str(path))
-    reader.Update()
-    output = reader.GetOutput()
-
-    return output
-
-
-def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    if mode == 0:
-        thresh.ThresholdByUpper(thr1)
-    elif mode == 1:
-        thresh.ThresholdByLower(thr1)
-    elif mode == 2:
-        if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1, thr2)
-        else:
-            thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-            thresh.Update()
-            thr = thresh.GetOutput()
-            thresh = vtk.vtkThreshold()
-            thresh.SetInputData(thr)
-            thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-    thresh.Update()
-
-    output = thresh.GetOutput()
-
-    return output
-
-
 def mark_LA_endo_elemTag(model, tag, tao_mv, tao_lpv, tao_rpv, max_phie_ab_tau_lpv, max_phie_r2_tau_lpv):
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)

@@ -180,7 +180,10 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         RAA = apex_id
 
     meshpath = f"{full_path}/{atrium}_cutted"
-    extract_rings.run(["--mesh", meshpath, "--LAA", str(LAA), "--RAA", str(RAA)])
+
+    command = ["--mesh", meshpath, "--LAA", str(LAA), "--RAA", str(RAA)]
+    print(f"extract rings with:{command}")
+    extract_rings.run(command)
 
     return apex_id
 
@@ -190,35 +193,6 @@ def run():
 
     apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, args.scale, args.size, args.min_cutting_radius,
                                      args.max_cutting_radius, args.LAA, args.RAA, args.debug)
-
-
-def smart_reader(path):
-    extension = str(path).split(".")[-1]
-
-    if extension == "vtk":
-        data_checker = vtk.vtkDataSetReader()
-        data_checker.SetFileName(str(path))
-        data_checker.Update()
-
-        if data_checker.IsFilePolyData():
-            reader = vtk.vtkPolyDataReader()
-        elif data_checker.IsFileUnstructuredGrid():
-            reader = vtk.vtkUnstructuredGridReader()
-
-    elif extension == "vtp":
-        reader = vtk.vtkXMLPolyDataReader()
-    elif extension == "vtu":
-        reader = vtk.vtkXMLUnstructuredGridReader()
-    elif extension == "obj":
-        reader = vtk.vtkOBJReader()
-    else:
-        print("No polydata or unstructured grid")
-
-    reader.SetFileName(str(path))
-    reader.Update()
-    output = reader.GetOutput()
-
-    return output
 
 
 def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
