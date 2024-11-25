@@ -33,6 +33,7 @@ from vtk.util import numpy_support
 from scipy.spatial.distance import cosine
 import collections
 
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
     get_threshold_between
 

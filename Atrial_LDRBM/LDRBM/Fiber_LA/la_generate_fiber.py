@@ -35,6 +35,8 @@ import pandas as pd
 from la_laplace import laplace_0_1
 import os
 
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -135,7 +137,7 @@ def la_generate_fiber(model, args, job):
     tao_lpv = Method.find_tau(model, ub, lb, "low", "phie_v")
     print('Calculating tao_lpv done! tap_lpv = ', tao_lpv)
 
-    thr = Method.vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
+    thr = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(thr)
     connect.SetExtractionModeToAllRegions()
@@ -147,12 +149,8 @@ def la_generate_fiber(model, args, job):
 
     model = laplace_0_1(args, job, model, "RPV", "LAA", "phie_ab2")
 
-    thr = Method.vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
-    # thr = Method.vtk_thr(model, 1, "CELLS","phie_v", 0.35)
-    # found, val = Method.optimize_shape_PV(thr, 10, 0)
-    # print('Calculating opt_tao_lpv done! tap_lpv = ', val)
-    # if val!=0.35:
-    #    thr = Method.vtk_thr(model, 1, "CELLS","phie_v",val)
+    thr = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
+
 
     phie_r2_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetCellData().GetArray('phie_r2'))
     max_phie_r2_tau_lpv = np.max(phie_r2_tau_lpv)
@@ -169,7 +167,7 @@ def la_generate_fiber(model, args, job):
     tao_rpv = Method.find_tau(model, ub, lb, "up", "phie_v")
     print('Calculating tao_rpv done! tap_rpv = ', tao_rpv)
 
-    thr = Method.vtk_thr(model, 0, "CELLS", "phie_v", tao_rpv)
+    thr = vtk_thr(model, 0, "CELLS", "phie_v", tao_rpv)
 
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(thr)
@@ -182,198 +180,6 @@ def la_generate_fiber(model, args, job):
     start_time = datetime.datetime.now()
     print('Calculating fibers... ' + str(start_time))
 
-    #### Bundles selection ####
-    # # Volume mesh
-    # if 0:# args.mesh_type == 'vol':
-    #     tag = np.zeros(len(r))
-
-    #     for i in range(len(ab_grad)):
-    #         # tagging endo-layer
-    #         if phie[i] <= 0.5:
-    #             if r[i] >= tao_mv:
-    #                 tag[i] = mitral_valve_endo
-    #             elif ab[i] < max_phie_ab_tau_lpv+0.01 and r2[i]>max_phie_r2_tau_lpv+0.01:
-    #                 tag[i] = left_atrial_appendage_endo
-    #             elif v[i] <= tao_lpv and i in PVs["LIPV"]:
-    #                 tag[i] = inferior_left_pulmonary_vein_endo
-    #             elif v[i] <= tao_lpv and i in PVs["LSPV"]:
-    #                 tag[i] = superior_left_pulmonary_vein_endo
-    #             elif v[i] >= tao_rpv and i in PVs["RIPV"]:
-    #                 tag[i] = inferior_right_pulmonary_vein_endo
-    #             elif v[i] >= tao_rpv and i in PVs["RSPV"]:
-    #                 tag[i] = superior_right_pulmonary_vein_endo
-    #             else:
-    #                 tag[i] = left_atrial_wall_endo
-    #         # tagging epi-layer
-    #         else:
-    #             if r[i] >= tao_mv:
-    #                 ab_grad[i] = r_grad[i]
-    #                 tag[i] = mitral_valve_epi
-    #             elif ab[i] < max_phie_ab_tau_lpv+0.01 and r2[i]>max_phie_r2_tau_lpv+0.01:
-    #                 tag[i] = left_atrial_appendage_epi
-    #             elif v[i] <= tao_lpv and i in PVs["LIPV"]:
-    #                 ab_grad[i] = v_grad[i]
-    #                 tag[i] = inferior_left_pulmonary_vein_epi
-    #             elif v[i] <= tao_lpv and i in PVs["LSPV"]:
-    #                 ab_grad[i] = v_grad[i]
-    #                 tag[i] = superior_left_pulmonary_vein_epi
-    #             elif v[i] >= tao_rpv and i in PVs["RIPV"]:
-    #                 ab_grad[i] = v_grad[i]
-    #                 tag[i] = inferior_right_pulmonary_vein_epi
-    #             elif v[i] >= tao_rpv and i in PVs["RSPV"]:
-    #                 ab_grad[i] = v_grad[i]
-    #                 tag[i] = superior_right_pulmonary_vein_epi
-    #             else:
-    #                 tag[i] = left_atrial_wall_epi
-
-    #     meshNew = dsa.WrapDataObject(model)
-    #     meshNew.CellData.append(tag, "elemTag")
-    #     model = meshNew.VTKObject
-
-    #     # normlize the gradient phie
-    #     abs_phie_grad = np.linalg.norm(phie_grad, axis=1, keepdims=True)
-    #     abs_phie_grad = np.where(abs_phie_grad != 0, abs_phie_grad, 1)
-    #     phie_grad_norm = phie_grad / abs_phie_grad
-
-    #     ##### Local coordinate system #####
-    #     # et
-    #     et = phie_grad_norm
-    #     print('############### et ###############')
-    #     print(et)
-
-    #     # k
-    #     k = ab_grad
-    #     print('############### k ###############')
-    #     print(k)
-
-    #     # en
-    #     en = ab_grad
-    #     #for i in range(len(k)):
-    #     #    en[i] = k[i] - np.dot(k[i], et[i]) * et[i]
-
-    #     en = k - np.dot(k, et) * et
-    #     # normalize the en
-    #     abs_en = np.linalg.norm(en, axis=1, keepdims=True)
-    #     abs_en = np.where(abs_en != 0, abs_en, 1)
-    #     en = en / abs_en
-    #     print('############### en ###############')
-    #     print(en)
-
-    #     # el
-    #     el = np.cross(en, et)
-    #     print('############### el ###############')
-    #     print(el)
-
-    #     abs_v_grad = np.linalg.norm(v_grad, axis=1, keepdims=True)
-    #     abs_v_grad = np.where(abs_v_grad != 0, abs_v_grad, 1)
-    #     v_grad_norm = v_grad / abs_v_grad
-    #     ### Subendo bundle selection
-    #     for i in range(len(v_grad_norm)):
-    #         if phie[i] < 0.5 and v[i] <= 0.2:
-    #             el[i] = v_grad_norm[i]
-
-    #     end_time = datetime.datetime.now()
-    #     running_time = end_time - start_time
-    #     print('Calculating fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
-
-    #     reader = vtk.vtkUnstructuredGridReader()
-    #     reader.SetFileName('Mesh/LA_mesh.vtk')
-    #     reader.Update()
-    #     model = reader.GetOutput()
-
-    #     print("Creating bachmann bundles...")
-
-    #     # Extract surface
-    #     geo_filter = vtk.vtkGeometryFilter()
-    #     geo_filter.SetInputData(model)
-    #     geo_filter.PassThroughPointIdsOn()
-    #     geo_filter.Update()
-    #     # Get only epi
-    #     thr = Method.vtk_thr(geo_filter.GetOutput(), 2, "CELLS","elemTag",mitral_valve_epi, left_atrial_roof_epi)
-    #     # Bachmann Bundle
-
-    #     # Get ending point of wide BB
-    #     # Extract the MV
-    #     thr = Method.vtk_thr(thr, 2, "CELLS","elemTag",mitral_valve_epi, mitral_valve_epi)
-
-    #     # Get the closest point to the inferior appendage base in the MV
-    #     loc = vtk.vtkPointLocator()
-    #     loc.SetDataSet(thr)
-    #     loc.BuildLocator()
-
-    #     bb_mv_id =  int(model.GetPointData().GetArray('Global_ids').GetTuple(loc.FindClosestPoint(model.GetPoint(inf_appendage_basis_id)))[0])
-
-    #     thresh = vtk.vtkThreshold()
-    #     thresh.SetInputData(model)
-    #     thresh.ThresholdBetween(max_phie_ab_tau_lpv-0.1, max_phie_ab_tau_lpv+0.1)
-    #     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_ab")
-    #     thresh.Update()
-
-    #     loc = vtk.vtkPointLocator()
-    #     loc.SetDataSet(thresh.GetOutput())
-    #     loc.BuildLocator()
-
-    #     inf_appendage_basis_id = int(thresh.GetOutput().GetPointData().GetArray('Global_ids').GetTuple(loc.FindClosestPoint(df["MV"].to_numpy()))[0])
-
-    #     thresh = vtk.vtkThreshold()
-    #     thresh.SetInputData(thresh.GetOutput())
-    #     thresh.ThresholdBetween(max_phie_r2_tau_lpv-0.1, max_phie_r2_tau_lpv+0.1)
-    #     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r2")
-    #     thresh.Update()
-
-    #     loc = vtk.vtkPointLocator()
-    #     loc.SetDataSet(thresh.GetOutput())
-    #     loc.BuildLocator()
-
-    #     sup_appendage_basis_id = int(thresh.GetOutput().GetPointData().GetArray('Global_ids').GetTuple(loc.FindClosestPoint(df["LAA"].to_numpy()))[0])
-
-    #     bb_left = Method.get_wide_bachmann_path_left(thresh.GetOutput(), inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id)
-
-    #     tag = Method.assign_element_tag_around_path_within_radius(model, bb_left, 2, tag, bachmann_bundel_left)
-    #     el = Method.assign_element_fiber_around_path_within_radius(model, bb_left, 2, el, smooth=True)
-
-    #     # # Bachmann_Bundle internal connection
-    #     # la_connect_point, ra_connect_point = Method.get_connection_point_la_and_ra(la_appex_point)
-    #     # la_connect_point = np.asarray(la_connect_point)
-    #     #
-    #     # path_start_end = np.vstack((appendage_basis, la_connect_point))
-    #     # path_bb_ra = Method.creat_center_line(path_start_end)
-    #     # tag = Method.assign_element_tag_around_path_within_radius(model, path_bb_ra, 2, tag, bachmann_bundel_left)
-    #     # el = Method.assign_element_fiber_around_path_within_radius(model, path_bb_ra, 2, el, smooth=True)
-
-    #     print("Creating bachmann bundles... done")
-    #     abs_el = np.linalg.norm(el, axis=1, keepdims=True)
-    #     interpolate_arr = np.asarray([0, 0, 1])
-    #     index = np.argwhere(abs_el == 0)
-    #     print('There is',len(index),'zero vector(s).')
-    #     for var in index:
-    #         el[var[0]] = interpolate_arr
-
-    #     #### save the result into vtk ####
-    #     start_time = datetime.datetime.now()
-    #     print('Writinga as LA_with_fiber... ' + str(start_time))
-
-    #     # fiber_data = vtk.util.numpy_support.numpy_to_vtk(el, deep=True, array_type=vtk.VTK_DOUBLE)
-    #     # fiber_data.SetNumberOfComponents(3)
-    #     # fiber_data.SetName("fiber")
-    #     # model.GetCellData().SetVectors(fiber_data)  # AddArray(fiber_data)
-
-    #     # tag_data = vtk.util.numpy_support.numpy_to_vtk(tag, deep=True, array_type=vtk.VTK_DOUBLE)
-    #     # tag_data.SetNumberOfComponents(1)
-    #     # tag_data.SetName("elemTag")
-    #     # model.GetCellData().RemoveArray("Cell_ids")
-    #     # model.GetCellData().RemoveArray("elemTag")
-    #     # model.GetCellData().SetScalars(tag_data)
-
-    #     meshNew = dsa.WrapDataObject(model)
-    #     meshNew.CellData.append(tag, "elemTag")
-    #     meshNew.CellData.append(el, "fiber")
-
-    #     model = meshNew.VTKObject
-
-    #     end_time = datetime.datetime.now()
-    #     running_time = end_time - start_time
-    #     print('Writing as LA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
     # Bilayer mesh
     if args.mesh_type == 'bilayer':
@@ -388,7 +194,7 @@ def la_generate_fiber(model, args, job):
     else:  # Volume mesh
         tag = np.ones(len(r), dtype=int) * left_atrial_wall_epi
 
-        epi = Method.vtk_thr(model, 0, "CELLS", "phie_phi", 0.5)
+        epi = vtk_thr(model, 0, "CELLS", "phie_phi", 0.5)
 
         epi_ids = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('Global_ids'))
 
@@ -398,13 +204,13 @@ def la_generate_fiber(model, args, job):
 
         tag[endo_ids] = left_atrial_wall_endo
 
-    LAA_s = Method.vtk_thr(model, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv + 0.01)
+    LAA_s = vtk_thr(model, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv + 0.01)
 
-    LAA_s = Method.vtk_thr(LAA_s, 0, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - 0.03)
+    LAA_s = vtk_thr(LAA_s, 0, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - 0.03)
 
     ## Optimize shape of LAA solving a laplacian with 0 in LAA and 1 in the boundary of LAA_s
 
-    LAA_bb = Method.vtk_thr(model, 2, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - 0.03, max_phie_ab_tau_lpv + 0.01)
+    LAA_bb = vtk_thr(model, 2, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - 0.03, max_phie_ab_tau_lpv + 0.01)
 
     LAA_bb_ids = vtk.util.numpy_support.vtk_to_numpy(LAA_bb.GetPointData().GetArray('Global_ids'))
 
@@ -422,7 +228,7 @@ def la_generate_fiber(model, args, job):
 
     LAA_s = laplace_0_1(args, job, model, "LAA", "LAA_bb", "phie_ab3")
 
-    LAA_s = Method.vtk_thr(LAA_s, 1, "POINTS", "phie_ab3", 0.95)
+    LAA_s = vtk_thr(LAA_s, 1, "POINTS", "phie_ab3", 0.95)
 
     ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_MV.vtx', skiprows=2, dtype=int)
 
@@ -516,7 +322,7 @@ def la_generate_fiber(model, args, job):
 
     norm = norm / np.linalg.norm(norm)
 
-    band_s = Method.vtk_thr(epi, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv)
+    band_s = vtk_thr(epi, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv)
 
     plane = vtk.vtkPlane()
     plane.SetNormal(norm[0], norm[1], norm[2])
@@ -742,7 +548,7 @@ def la_generate_fiber(model, args, job):
         geo_filter.SetInputData(model)
         geo_filter.Update()
         surf = geo_filter.GetOutput()
-        epi_surf = Method.vtk_thr(surf, 0, "CELLS", "phie_phi", 0.5)
+        epi_surf = vtk_thr(surf, 0, "CELLS", "phie_phi", 0.5)
         epi_surf_ids = vtk.util.numpy_support.vtk_to_numpy(epi_surf.GetCellData().GetArray('Global_ids'))
 
         # epi_surf_id_list = vtk.vtkIdList()

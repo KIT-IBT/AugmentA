@@ -36,6 +36,8 @@ import pickle
 import os
 from scipy.spatial import cKDTree
 
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 from create_bridges import add_free_bridge
@@ -175,13 +177,6 @@ def ra_generate_fiber(model, args, job):
     k = np.copy(ab_grad)
 
     # # # Get valve using Laplacian solutions
-
-    # TV_s = Method.vtk_thr(model,0,"CELLS","phie_r",tao_tv) # grad_r
-
-    # TV_ids = vtk.util.numpy_support.vtk_to_numpy(TV_s.GetCellData().GetArray('Global_ids'))
-
-    # no_TV_s = Method.vtk_thr(model, 1,"CELLS","phie_r",tao_tv)
-
     # Use fixed thickness
 
     ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_TV.vtx', skiprows=2, dtype=int)
@@ -229,17 +224,17 @@ def ra_generate_fiber(model, args, job):
 
     k[TV_ids] = r_grad[TV_ids]
 
-    IVC_s = Method.vtk_thr(no_TV_s, 0, "CELLS", "phie_v", tao_icv)  # Changed 0-1 because ICV and SVC are inverted
-    no_IVC_s = Method.vtk_thr(no_TV_s, 1, "CELLS", "phie_v", tao_icv)  # Changed 1-0
+    IVC_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v", tao_icv)  # Changed 0-1 because ICV and SVC are inverted
+    no_IVC_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_v", tao_icv)  # Changed 1-0
 
     IVC_s = Method.extract_largest_region(IVC_s)  # Added
 
     max_phie_r_ivc = np.max(vtk.util.numpy_support.vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r'))) + 0.2
 
-    RAW_s = Method.vtk_thr(no_TV_s, 1, "CELLS", "phie_r", max_phie_r_ivc)  # Added +0.03 fro dk01
+    RAW_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_r", max_phie_r_ivc)  # Added +0.03 fro dk01
 
-    SVC_s = Method.vtk_thr(RAW_s, 1, "CELLS", "phie_v", tao_scv)  # Changed 1->0
-    no_SVC_s = Method.vtk_thr(RAW_s, 0, "CELLS", "phie_v", tao_scv)  # Changed 0->1
+    SVC_s = vtk_thr(RAW_s, 1, "CELLS", "phie_v", tao_scv)  # Changed 1->0
+    no_SVC_s = vtk_thr(RAW_s, 0, "CELLS", "phie_v", tao_scv)  # Changed 0->1
 
     SVC_s = Method.extract_largest_region(SVC_s)
 
@@ -267,10 +262,10 @@ def ra_generate_fiber(model, args, job):
     # thr_min = 0.150038
     # thr_max = 0.38518
 
-    # CT_band = Method.vtk_thr(RAW_s, 2,"CELLS","phie_w", thr_min, thr_max) # dk01 fit_both
-    CT_band = Method.vtk_thr(RAW_s, 2, "CELLS", "phie_w", 0.1, tao_ct_plus)  # grad_w
+    # CT_band = vtk_thr(RAW_s, 2,"CELLS","phie_w", thr_min, thr_max) # dk01 fit_both
+    CT_band = vtk_thr(RAW_s, 2, "CELLS", "phie_w", 0.1, tao_ct_plus)  # grad_w
     CT_band = Method.extract_largest_region(CT_band)
-    CT_ub = Method.vtk_thr(RAW_s, 2, "CELLS", "phie_w", tao_ct_plus - 0.02, tao_ct_plus)  # grad_w
+    CT_ub = vtk_thr(RAW_s, 2, "CELLS", "phie_w", tao_ct_plus - 0.02, tao_ct_plus)  # grad_w
 
     CT_ub = Method.extract_largest_region(CT_ub)
 
@@ -357,7 +352,7 @@ def ra_generate_fiber(model, args, job):
 
     # SVC_CT_pt_id = loc.FindClosestPoint(SVC_CT_pt)
 
-    CT_minus = Method.vtk_thr(RAW_s, 1, "CELLS", "phie_w", tao_ct_plus)  # grad_ab
+    CT_minus = vtk_thr(RAW_s, 1, "CELLS", "phie_w", tao_ct_plus)  # grad_ab
 
     RAW_I_ids = vtk.util.numpy_support.vtk_to_numpy(CT_minus.GetCellData().GetArray('Global_ids'))
 
@@ -378,9 +373,9 @@ def ra_generate_fiber(model, args, job):
 
     k[TV_ids] = r_grad[TV_ids]
 
-    CT_plus = Method.vtk_thr(RAW_s, 0, "CELLS", "phie_w", tao_ct_plus)
+    CT_plus = vtk_thr(RAW_s, 0, "CELLS", "phie_w", tao_ct_plus)
 
-    RAW_S = Method.vtk_thr(CT_plus, 2, "CELLS", "phie_v", tao_scv,
+    RAW_S = vtk_thr(CT_plus, 2, "CELLS", "phie_v", tao_scv,
                            tao_icv)  # IB_S grad_v Changed order tao_scv, tao_icv
 
     RAW_S_ids = vtk.util.numpy_support.vtk_to_numpy(RAW_S.GetCellData().GetArray('Global_ids'))
@@ -389,7 +384,7 @@ def ra_generate_fiber(model, args, job):
 
     k[RAW_S_ids] = ab_grad[RAW_S_ids]
 
-    IB = Method.vtk_thr(RAW_S, 1, "CELLS", "phie_r", 0.05)  # grad_r or w
+    IB = vtk_thr(RAW_S, 1, "CELLS", "phie_r", 0.05)  # grad_r or w
 
     IB_ids = vtk.util.numpy_support.vtk_to_numpy(IB.GetCellData().GetArray('Global_ids'))
 
@@ -423,8 +418,8 @@ def ra_generate_fiber(model, args, job):
     meshExtractFilter.Update()
     septal_surf = meshExtractFilter.GetOutput()
 
-    RAS_S = Method.vtk_thr(septal_surf, 0, "CELLS", "phie_w", tao_ct_plus)
-    RAS_S = Method.vtk_thr(RAS_S, 0, "CELLS", "phie_r", 0.05)  # grad_r or w
+    RAS_S = vtk_thr(septal_surf, 0, "CELLS", "phie_w", tao_ct_plus)
+    RAS_S = vtk_thr(RAS_S, 0, "CELLS", "phie_r", 0.05)  # grad_r or w
 
     if args.debug:
         Method.writer_vtk(septal_surf, f'{args.mesh}_surf/' + "septal_surf.vtk")
@@ -436,7 +431,7 @@ def ra_generate_fiber(model, args, job):
 
     k[RAS_S_ids] = r_grad[RAS_S_ids]
 
-    RAW_low = Method.vtk_thr(no_TV_s, 0, "CELLS", "phie_r", max_phie_r_ivc)
+    RAW_low = vtk_thr(no_TV_s, 0, "CELLS", "phie_r", max_phie_r_ivc)
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(RAW_low)
@@ -444,7 +439,7 @@ def ra_generate_fiber(model, args, job):
     meshExtractFilter.Update()
     RAS_low = meshExtractFilter.GetOutput()
 
-    RAS_low = Method.vtk_thr(RAS_low, 0, "CELLS", "phie_w", 0)  # grad_r overwrites the previous
+    RAS_low = vtk_thr(RAS_low, 0, "CELLS", "phie_w", 0)  # grad_r overwrites the previous
 
     RAS_low_ids = vtk.util.numpy_support.vtk_to_numpy(RAS_low.GetCellData().GetArray('Global_ids'))
 
@@ -452,7 +447,7 @@ def ra_generate_fiber(model, args, job):
 
     k[RAS_low_ids] = r_grad[RAS_low_ids]
 
-    RAW_low = Method.vtk_thr(RAW_low, 1, "CELLS", "phie_w", 0)  # grad_ab
+    RAW_low = vtk_thr(RAW_low, 1, "CELLS", "phie_w", 0)  # grad_ab
 
     RAW_low_ids = vtk.util.numpy_support.vtk_to_numpy(RAW_low.GetCellData().GetArray('Global_ids'))
 
@@ -495,7 +490,7 @@ def ra_generate_fiber(model, args, job):
     k[CS_ids] = ab_grad[CS_ids]
 
     # tag = Method.assign_ra_appendage(model, SVC_s, np.array(df["RAA"]), tag, right_atrial_appendage_epi)
-    RAA_s = Method.vtk_thr(no_TV_s, 0, "CELLS", "phie_v2", tao_RAA)
+    RAA_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v2", tao_RAA)
 
     if args.debug:
         Method.writer_vtk(RAS_low, f'{args.mesh}_surf/' + "ras_low.vtk")
@@ -655,7 +650,7 @@ def ra_generate_fiber(model, args, job):
         endo = vtk.vtkUnstructuredGrid()
         endo.DeepCopy(model)
 
-        CT = Method.vtk_thr(model, 2, "CELLS", "elemTag", crista_terminalis, crista_terminalis)
+        CT = vtk_thr(model, 2, "CELLS", "elemTag", crista_terminalis, crista_terminalis)
 
         CT_ids = vtk.util.numpy_support.vtk_to_numpy(CT.GetCellData().GetArray('Global_ids'))
 
@@ -787,9 +782,9 @@ def ra_generate_fiber(model, args, job):
         geo_filter.Update()
         surface = geo_filter.GetOutput()
 
-        epi = Method.vtk_thr(surface, 0, "POINTS", "phie_phi", 0.5)
+        epi = vtk_thr(surface, 0, "POINTS", "phie_phi", 0.5)
 
-        endo = Method.vtk_thr(surface, 1, "POINTS", "phie_phi", 0.5)
+        endo = vtk_thr(surface, 1, "POINTS", "phie_phi", 0.5)
 
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputData(endo)
@@ -1131,7 +1126,7 @@ def ra_generate_fiber(model, args, job):
         writer.SetInputData(endo)
         writer.Write()
 
-        CT_PMs = Method.vtk_thr(endo, 2, "CELLS", "elemTag", pectinate_muscle, crista_terminalis)
+        CT_PMs = vtk_thr(endo, 2, "CELLS", "elemTag", pectinate_muscle, crista_terminalis)
 
         writer = vtk.vtkUnstructuredGridWriter()
         if args.ofmt == 'vtk':
@@ -1305,7 +1300,7 @@ def ra_generate_fiber(model, args, job):
             geo_filter.Update()
             la_surf = geo_filter.GetOutput()
 
-            la_epi = Method.vtk_thr(la_surf, 2, "CELLS", "elemTag", left_atrial_wall_epi, 99)
+            la_epi = vtk_thr(la_surf, 2, "CELLS", "elemTag", left_atrial_wall_epi, 99)
 
             df = pd.read_csv(meshname + "_LA_vol_surf/rings_centroids.csv")
 

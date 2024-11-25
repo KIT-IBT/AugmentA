@@ -46,6 +46,8 @@ from ra_generate_fiber import ra_generate_fiber
 import Methods_RA as Method
 import pandas as pd
 
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -120,13 +122,13 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     mitral_valve_epi = int(tag_dict["mitral_valve_epi"])
     tricuspid_valve_epi = int(tag_dict["tricuspid_valve_epi"])
 
-    # la_epi = Method.vtk_thr(la, 0 "CELLS", "elemTag", left_atrial_wall_epi)
+    # la_epi = vtk_thr(la, 0 "CELLS", "elemTag", left_atrial_wall_epi)
     geo_filter_la = vtk.vtkGeometryFilter()
     geo_filter_la.SetInputData(la_epi)
     geo_filter_la.Update()
     la_epi_surface = geo_filter_la.GetOutput()
 
-    # ra_epi = Method.vtk_thr(la, 0 "CELLS", "elemTag", left_atrial_wall_epi)
+    # ra_epi = vtk_thr(la, 0 "CELLS", "elemTag", left_atrial_wall_epi)
 
     geo_filter_ra = vtk.vtkGeometryFilter()
     geo_filter_ra.SetInputData(ra_epi)
@@ -137,10 +139,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     IVC_p = np.array(df["IVC"])
     TV_p = np.array(df["TV"])
 
-    ra_septum = Method.vtk_thr(ra_epi, 2, "CELLS", "elemTag", right_atrial_septum_epi, right_atrial_septum_epi)
-    la_wall = Method.vtk_thr(la_epi, 2, "CELLS", "elemTag", left_atrial_wall_epi, left_atrial_wall_epi)
-    mv_la = Method.vtk_thr(la_epi, 2, "CELLS", "elemTag", mitral_valve_epi, mitral_valve_epi)
-    tv_ra = Method.vtk_thr(ra_epi, 2, "CELLS", "elemTag", tricuspid_valve_epi, tricuspid_valve_epi)
+    ra_septum = vtk_thr(ra_epi, 2, "CELLS", "elemTag", right_atrial_septum_epi, right_atrial_septum_epi)
+    la_wall = vtk_thr(la_epi, 2, "CELLS", "elemTag", left_atrial_wall_epi, left_atrial_wall_epi)
+    mv_la = vtk_thr(la_epi, 2, "CELLS", "elemTag", mitral_valve_epi, mitral_valve_epi)
+    tv_ra = vtk_thr(ra_epi, 2, "CELLS", "elemTag", tricuspid_valve_epi, tricuspid_valve_epi)
 
     # Find middle and upper posterior bridges points
 
@@ -361,10 +363,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     #     la_ra_usg = append_filter.GetOutput()
     # else:
     #     la_ra_usg_vol = append_filter.GetOutput()
-    #     ra_epi = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 11,18)
-    #     ra_BB = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_right,bachmann_bundel_right)
-    #     la_epi = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 61,70)
-    #     la_BB = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_left,bachmann_bundel_left)
+    #     ra_epi = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 11,18)
+    #     ra_BB = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_right,bachmann_bundel_right)
+    #     la_epi = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 61,70)
+    #     la_BB = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_left,bachmann_bundel_left)
 
     #     append_filter = vtk.vtkAppendFilter()
     #     append_filter.AddInputData(la_epi)
