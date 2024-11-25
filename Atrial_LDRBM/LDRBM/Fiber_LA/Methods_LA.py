@@ -898,11 +898,8 @@ def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
 
 def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_epi):
     # Extract the LAA
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(epi)
-    thresh.ThresholdBetween(left_atrial_appendage_epi, left_atrial_appendage_epi)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
-    thresh.Update()
+    thresh = get_threshold_between(epi, left_atrial_appendage_epi, left_atrial_appendage_epi,
+                                   "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
 
     LAA = thresh.GetOutput()
 
@@ -954,27 +951,15 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
             LAA_pt_far_from_LIPV = LAA_pts_border[i]
 
     # Extract the MV
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(epi)
-    thresh.ThresholdBetween(mitral_valve_epi, mitral_valve_epi)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
-    thresh.Update()
+    thresh = get_threshold_between(epi, mitral_valve_epi, mitral_valve_epi, "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+                                   "elemTag")
 
     MV = thresh.GetOutput()
-    # MV_pts = vtk.util.numpy_support.vtk_to_numpy(MV.GetPoints().GetData())
-
-    # tree = cKDTree(LAA_pts)
-    # max_dist = np.sqrt(np.sum((df["MV"].to_numpy()-df["LAA"].to_numpy())**2, axis=0))
-    # dd, ii = tree.query(MV_pts, distance_upper_bound=max_dist)
-
-    # inf_appendage_basis_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ii[np.argmin(dd)])[0])
 
     # Get the closest point to the inferior appendage base in the MV
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(MV)
     loc.BuildLocator()
-
-    # bb_mv_id = int(MV.GetPointData().GetArray('Global_ids').GetTuple(loc.FindClosestPoint(epi.GetPoint(bb_mv_id)))[0])
 
     bb_mv = MV.GetPoint(loc.FindClosestPoint(bb_mv_laa))
     thresh = get_threshold_between(epi, left_atrial_appendage_epi, left_atrial_appendage_epi,

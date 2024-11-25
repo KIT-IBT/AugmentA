@@ -25,6 +25,8 @@ specific language governing permissions and limitations
 under the License.  
 """
 import os
+from logging import warning
+
 import numpy as np
 from glob import glob
 import pandas as pd
@@ -37,7 +39,7 @@ import argparse
 from scipy.spatial import cKDTree
 
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold
+from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -140,10 +142,14 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         LA_tag = id_vec[int(LAA_id)]
         RA_tag = id_vec[int(RAA_id)]
 
-        thr = vtk.vtkThreshold()
-        thr.SetInputData(mesh_conn)
-        thr.ThresholdBetween(LA_tag, LA_tag)
-        thr.Update()
+        #thr = vtk.vtkThreshold()
+        #thr.SetInputData(mesh_conn)
+        #thr.ThresholdBetween(LA_tag, LA_tag)
+        #thr.Update()
+
+        warning("WARNING: Should be checkt for functionality extract_rings l151")
+        thr = get_threshold_between(mesh_conn, LA_tag, LA_tag, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
+
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputConnection(thr.GetOutputPort())
         geo_filter.Update()

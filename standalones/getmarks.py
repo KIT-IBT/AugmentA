@@ -36,6 +36,8 @@ import function
 from sklearn.neighbors import NearestNeighbors
 import argparse
 
+from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
+
 
 def parser():
     parser = argparse.ArgumentParser(description='Generate landmarks for fitting SSM.')
@@ -69,44 +71,21 @@ def get_landmarks(mesh, prealigned=1, scale=1):
 
     model_polydata = function.to_polydata(model)
 
-    thr = vtk.vtkThreshold()
-    thr.SetInputData(model)
-    thr.AllScalarsOff()
-    thr.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
-    thr.ThresholdBetween(5, 5)
-    thr.Update()
+    thr = get_threshold_between(model, 5, 5, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     rsv = thr.GetOutput()
 
-    thr = vtk.vtkThreshold()
-    thr.SetInputData(model)
-    thr.AllScalarsOff()
-    thr.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
-    thr.ThresholdBetween(4, 4)
-    thr.Update()
+    thr = get_threshold_between(model, 4, 4,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag" )
     riv = thr.GetOutput()
 
-    thr = vtk.vtkThreshold()
-    thr.SetInputData(model)
-    thr.AllScalarsOff()
-    thr.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
-    thr.ThresholdBetween(3, 3)
-    thr.Update()
+
+    thr=get_threshold_between(model,3,3,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     lsv = thr.GetOutput()
 
-    thr = vtk.vtkThreshold()
-    thr.SetInputData(model)
-    thr.AllScalarsOff()
-    thr.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
-    thr.ThresholdBetween(2, 2)
-    thr.Update()
+
+    thr=get_threshold_between(model,2,2,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     liv = thr.GetOutput()
 
-    thr = vtk.vtkThreshold()
-    thr.SetInputData(model)
-    thr.AllScalarsOff()
-    thr.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
-    thr.ThresholdBetween(1, 1)
-    thr.Update()
+    thr=get_threshold_between(model,1,1,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     mv = thr.GetOutput()
 
     rsv_points = vtk.util.numpy_support.vtk_to_numpy(rsv.GetPoints().GetData())
