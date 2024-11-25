@@ -33,45 +33,30 @@ from vtk.util import numpy_support
 from scipy.spatial.distance import cosine
 import collections
 
+from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
+    get_threshold_between
+
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
 def mark_LA_endo_elemTag(model, tag, tao_mv, tao_lpv, tao_rpv, max_phie_ab_tau_lpv, max_phie_r2_tau_lpv):
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    thresh.ThresholdByUpper(tao_mv)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r")
-    thresh.Update()
+    thresh = get_upper_threshold(model, tao_mv, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r")
 
     MV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    thresh.ThresholdByUpper(max_phie_r2_tau_lpv + 0.01)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r2")
-    thresh.Update()
+    thresh2 = get_upper_threshold(model, max_phie_r2_tau_lpv + 0.01, "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+                                  "phie_r2")
 
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputConnection(thresh.GetOutputPort())
-    thresh.ThresholdByLower(max_phie_ab_tau_lpv + 0.01)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_ab")
-    thresh.Update()
+    thresh = get_lower_threshold(thresh2.GetOutputPort(), max_phie_ab_tau_lpv + 0.01,
+                                 "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_ab", source_is_input_connection=True)
 
     LAA_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    thresh.ThresholdByLower(tao_lpv)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
-    thresh.Update()
+    thresh = get_lower_threshold(model, tao_lpv, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
 
     LPV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    thresh.ThresholdByUpper(tao_rpv)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
-    thresh.Update()
+    thresh = get_upper_threshold(model, tao_rpv, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
 
     RPV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
@@ -991,40 +976,8 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     # bb_mv_id = int(MV.GetPointData().GetArray('Global_ids').GetTuple(loc.FindClosestPoint(epi.GetPoint(bb_mv_id)))[0])
 
     bb_mv = MV.GetPoint(loc.FindClosestPoint(bb_mv_laa))
-
-    if int(vtk_version) >= 9:
-        thresh = vtk.vtkThreshold()
-        thresh.SetInputData(epi)
-        thresh.ThresholdBetween(left_atrial_appendage_epi, left_atrial_appendage_epi)
-        thresh.InvertOn()
-        thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
-        thresh.Update()
-    else:
-        thresh = vtk.vtkThreshold()
-        thresh.SetInputData(epi)
-        thresh.ThresholdByLower(left_atrial_appendage_epi - 1)
-        thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
-        thresh.Update()
-
-        low_LAA = thresh.GetOutput()
-
-        thresh = vtk.vtkThreshold()
-        thresh.SetInputData(epi)
-        thresh.ThresholdByUpper(left_atrial_appendage_epi + 1)
-        thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
-        thresh.Update()
-
-        up_LAA = thresh.GetOutput()
-
-        thresh = vtk.vtkAppendFilter()
-        thresh.AddInputData(low_LAA)
-        thresh.AddInputData(up_LAA)
-        thresh.MergePointsOn()
-        thresh.Update()
-
-    # inf_appendage_basis_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, inf_appendage_basis_id)
-    # sup_appendage_basis_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, sup_appendage_basis_id)
-    # bb_mv_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, bb_mv_id)
+    thresh = get_threshold_between(epi, left_atrial_appendage_epi, left_atrial_appendage_epi,
+                                   "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(thresh.GetOutput())
@@ -1172,14 +1125,10 @@ def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
 def find_tau(model, ub, lb, low_up, scalar):
     k = 1
     while ub - lb > 0.01:
-        thresh = vtk.vtkThreshold()
-        thresh.SetInputData(model)
         if low_up == "low":
-            thresh.ThresholdByLower((ub + lb) / 2)
+            thresh = get_lower_threshold(model, (ub + lb) / 2, "vtkDataObject::FIELD_ASSOCIATION_CELLS", scalar)
         else:
-            thresh.ThresholdByUpper((ub + lb) / 2)
-        thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", scalar)
-        thresh.Update()
+            thresh = get_upper_threshold(model, (ub + lb) / 2, "vtkDataObject::FIELD_ASSOCIATION_CELLS", scalar)
 
         connect = vtk.vtkConnectivityFilter()
         connect.SetInputData(thresh.GetOutput())

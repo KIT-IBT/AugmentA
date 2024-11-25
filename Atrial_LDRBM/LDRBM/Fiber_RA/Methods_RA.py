@@ -30,6 +30,8 @@ from vtk.util import numpy_support
 from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 
+import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
+
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
@@ -337,29 +339,8 @@ def generate_sheet_dir(args, model, job):
 
 
 def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(model)
-    if mode == 0:
-        thresh.ThresholdByUpper(thr1)
-    elif mode == 1:
-        thresh.ThresholdByLower(thr1)
-    elif mode == 2:
-        if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1, thr2)
-        else:
-            thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-            thresh.Update()
-            thr = thresh.GetOutput()
-            thresh = vtk.vtkThreshold()
-            thresh.SetInputData(thr)
-            thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
-    thresh.Update()
-
-    output = thresh.GetOutput()
-
-    return output
+    return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
+                                                                               thr2)
 
 
 def creat_tube_around_spline(points_data, radius):

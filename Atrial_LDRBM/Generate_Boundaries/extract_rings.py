@@ -37,6 +37,7 @@ import argparse
 from scipy.spatial import cKDTree
 
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -896,11 +897,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     meshNew = dsa.WrapDataObject(top_cut)
     meshNew.PointData.append(to_delete, "delete")
 
-    thresh = vtk.vtkThreshold()
-    thresh.SetInputData(meshNew.VTKObject)
-    thresh.ThresholdByLower(0)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
-    thresh.Update()
+    thresh = get_lower_threshold(meshNew.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
 
     geo_filter = vtk.vtkGeometryFilter()
     geo_filter.SetInputConnection(thresh.GetOutputPort())
