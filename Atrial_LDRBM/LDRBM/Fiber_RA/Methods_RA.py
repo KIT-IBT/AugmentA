@@ -32,6 +32,7 @@ from scipy.spatial import cKDTree
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
+
 def smart_reader(path):
     extension = str(path).split(".")[-1]
 
@@ -63,8 +64,9 @@ def smart_reader(path):
 
 def downsample_path(points_data, step):
     # down sampling
-    path_all = np.asarray([points_data[i] for i in range(len(points_data)) if i % step == 0 or i == len(points_data) - 1])
-   
+    path_all = np.asarray(
+        [points_data[i] for i in range(len(points_data)) if i % step == 0 or i == len(points_data) - 1])
+
     # fit a spline
     spline_points = vtk.vtkPoints()
     for i in range(len(path_all)):
@@ -78,92 +80,92 @@ def downsample_path(points_data, step):
     points_data = vtk.util.numpy_support.vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
     return points_data
 
-def move_surf_along_normals(mesh, eps, direction):
 
+def move_surf_along_normals(mesh, eps, direction):
     extract_surf = vtk.vtkGeometryFilter()
     extract_surf.SetInputData(mesh)
     extract_surf.Update()
     polydata = extract_surf.GetOutput()
-    
+
     normalGenerator = vtk.vtkPolyDataNormals()
     normalGenerator.SetInputData(polydata)
     normalGenerator.ComputeCellNormalsOff()
     normalGenerator.ComputePointNormalsOn()
     normalGenerator.ConsistencyOn()
-    normalGenerator.SplittingOff() 
+    normalGenerator.SplittingOff()
     normalGenerator.Update()
-    
+
     PointNormalArray = numpy_support.vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
     atrial_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
-    
-    atrial_points = atrial_points + eps*direction*PointNormalArray
-    
+
+    atrial_points = atrial_points + eps * direction * PointNormalArray
+
     vtkPts = vtk.vtkPoints()
     vtkPts.SetData(numpy_support.numpy_to_vtk(atrial_points))
     polydata.SetPoints(vtkPts)
-    
+
     mesh = vtk.vtkUnstructuredGrid()
     mesh.DeepCopy(polydata)
-    
+
     return mesh
-    
+
+
 def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
-    
     extract_surf = vtk.vtkGeometryFilter()
     extract_surf.SetInputData(endo)
     extract_surf.Update()
-    
+
     reverse = vtk.vtkReverseSense()
     reverse.ReverseCellsOn()
     reverse.ReverseNormalsOn()
     reverse.SetInputConnection(extract_surf.GetOutputPort())
     reverse.Update()
-    
+
     endo = vtk.vtkUnstructuredGrid()
     endo.DeepCopy(reverse.GetOutput())
-    #endo.DeepCopy(extract_surf.GetOutputPort())
-            
+    # endo.DeepCopy(extract_surf.GetOutputPort())
+
     endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
     epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
-    
+
     tree = cKDTree(epi_pts)
-    dd, ii = tree.query(endo_pts, distance_upper_bound = max_dist)#, n_jobs=-1)
-    
-    endo_ids = np.where(dd!=np.inf)[0]
+    dd, ii = tree.query(endo_pts, distance_upper_bound=max_dist)  # , n_jobs=-1)
+
+    endo_ids = np.where(dd != np.inf)[0]
     epi_ids = ii[endo_ids]
     lines = vtk.vtkCellArray()
-    
+
     for i in range(len(endo_ids)):
         line = vtk.vtkLine()
-        line.GetPointIds().SetId(0,i);
-        line.GetPointIds().SetId(1,len(endo_ids)+i);
+        line.GetPointIds().SetId(0, i);
+        line.GetPointIds().SetId(1, len(endo_ids) + i);
         lines.InsertNextCell(line)
-    
+
     points = np.vstack((endo_pts[endo_ids], epi_pts[epi_ids]))
     polydata = vtk.vtkUnstructuredGrid()
     vtkPts = vtk.vtkPoints()
     vtkPts.SetData(numpy_support.numpy_to_vtk(points))
     polydata.SetPoints(vtkPts)
     polydata.SetCells(3, lines)
-    
-    fibers = np.zeros((len(endo_ids),3),dtype="float32")
-    fibers[:,0] = 1
-    
+
+    fibers = np.zeros((len(endo_ids), 3), dtype="float32")
+    fibers[:, 0] = 1
+
     tag = np.ones((len(endo_ids),), dtype=int)
     tag[:] = 100
-    
+
     meshNew = dsa.WrapDataObject(polydata)
     meshNew.CellData.append(tag, "elemTag")
     meshNew.CellData.append(fibers, "fiber")
-    fibers = np.zeros((len(endo_ids),3),dtype="float32")
-    fibers[:,1] = 1
+    fibers = np.zeros((len(endo_ids), 3), dtype="float32")
+    fibers[:, 1] = 1
     meshNew.CellData.append(fibers, "sheet")
-    bilayer_1=meshNew.VTKObject
+    bilayer_1 = meshNew.VTKObject
 
     if args.debug:
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/test_LA_RA_bilayer.vtu") # Has three arrays :)
-        #writer.SetFileTypeToBinary() # 'vtkmodules.vtkIOXML.vtkXMLUnstructuredGridWriter' object has no attribute 'SetFileTypeToBinary'
+        writer.SetFileName(job.ID + "/result_RA/test_LA_RA_bilayer.vtu")  # Has three arrays :)
+        # writer.SetFileTypeToBinary() # 'vtkmodules.vtkIOXML.vtkXMLUnstructuredGridWriter' object has no attribute 'SetFileTypeToBinary'
         writer.SetInputData(bilayer_1)
         writer.Write()
 
@@ -178,16 +180,16 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     appendFilter.AddInputData(test)
     appendFilter.MergePointsOn()
     appendFilter.Update()
-    
+
     bilayer = appendFilter.GetOutput()
 
     if args.ofmt == 'vtk':
         writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtk")
+        writer.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtk")
         writer.SetFileTypeToBinary()
     else:
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtu") # Has elemTag! :)
+        writer.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  # Has elemTag! :)
     writer.SetInputData(bilayer)
     writer.Write()
 
@@ -198,8 +200,8 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
 
     return bilayer
 
-def write_bilayer( args, job):
-    
+
+def write_bilayer(args, job):
     # if args.ofmt == 'vtk':
     #     writer = vtk.vtkUnstructuredGridWriter()
     #     writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtk")
@@ -216,42 +218,48 @@ def write_bilayer( args, job):
     bilayer = reader.GetOutput()
 
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
-    with open(job.ID+'/result_RA/LA_RA_bilayer_with_fiber.pts',"w") as f:
+    with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.pts', "w") as f:
         f.write("{}\n".format(len(pts)))
         for i in range(len(pts)):
             f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
-    
+
     tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
-    with open(job.ID+'/result_RA/LA_RA_bilayer_with_fiber.elem',"w") as f:
+    with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.elem', "w") as f:
         f.write("{}\n".format(bilayer.GetNumberOfCells()))
         for i in range(bilayer.GetNumberOfCells()):
             cell = bilayer.GetCell(i)
             if cell.GetNumberOfPoints() == 2:
                 f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_epi[i]))
             elif cell.GetNumberOfPoints() == 3:
-                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), tag_epi[i]))
+                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
+                                                  cell.GetPointIds().GetId(2), tag_epi[i]))
             elif cell.GetNumberOfPoints() == 4:
-                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), tag_epi[i]))
+                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
+                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3),
+                                                     tag_epi[i]))
             else:
-                print("strange "+ str(cell.GetNumberOfPoints()))
+                print("strange " + str(cell.GetNumberOfPoints()))
     el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
     sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
-    
-    with open(job.ID+'/result_RA/LA_RA_bilayer_with_fiber.lon',"w") as f:
+
+    with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.lon', "w") as f:
         f.write("2\n")
         for i in range(len(el_epi)):
-            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2], sheet_epi[i][0], sheet_epi[i][1], sheet_epi[i][2]))
+            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
+                                                                         sheet_epi[i][0], sheet_epi[i][1],
+                                                                         sheet_epi[i][2]))
     print('Done...')
-def generate_sheet_dir(args, model, job):
 
+
+def generate_sheet_dir(args, model, job):
     fiber = model.GetCellData().GetArray('fiber')
     fiber = vtk.util.numpy_support.vtk_to_numpy(fiber)
 
-    fiber = np.where(fiber == [0,0,0], [1,0,0], fiber).astype("float32")
-    
+    fiber = np.where(fiber == [0, 0, 0], [1, 0, 0], fiber).astype("float32")
+
     print('reading done!')
-    
+
     '''
     extract the surface
     '''
@@ -259,19 +267,18 @@ def generate_sheet_dir(args, model, job):
     geo_filter.SetInputData(model)
     geo_filter.Update()
     surface = geo_filter.GetOutput()
-    
+
     cleaner = vtk.vtkCleanPolyData()
     cleaner.SetInputData(surface)
     cleaner.Update()
     cln_surface = cleaner.GetOutput()
-    
+
     # meshNew = dsa.WrapDataObject(cln_surface)
     # writer = vtk.vtkPolyDataWriter()
     # writer.SetFileName("test_model_surface.vtk")
     # writer.SetInputData(meshNew.VTKObject)
     # writer.Write()
-    
-    
+
     '''
     calculate normals of surface cells
     '''
@@ -282,13 +289,13 @@ def generate_sheet_dir(args, model, job):
     normals.Update()
     normal_vectors = normals.GetOutput().GetCellData().GetArray('Normals')
     normal_vectors = vtk.util.numpy_support.vtk_to_numpy(normal_vectors)
-    
+
     # print('Normal vectors: \n', normal_vectors, '\n')
     print('Number of normals: ', len(normal_vectors))
-    print('2nd norm of vectors: ', np.linalg.norm(normal_vectors[0],ord=2), '\n')
-    
+    print('2nd norm of vectors: ', np.linalg.norm(normal_vectors[0], ord=2), '\n')
+
     if args.mesh_type == "vol":
-        
+
         '''
         calculate the centers of surface mesh cells
         '''
@@ -298,8 +305,7 @@ def generate_sheet_dir(args, model, job):
         center_surface = filter_cell_centers.GetOutput().GetPoints()
         center_surface_array = vtk.util.numpy_support.vtk_to_numpy(center_surface.GetData())
         print('Number of center_surface: ', len(center_surface_array), '\n')
-        
-        
+
         '''
         calculate the centers of volume mesh cells
         '''
@@ -309,35 +315,34 @@ def generate_sheet_dir(args, model, job):
         center_volume = filter_cell_centers.GetOutput().GetPoints().GetData()
         center_volume = vtk.util.numpy_support.vtk_to_numpy(center_volume)
         print('Number of center_volume: ', len(center_volume), '\n')
-        
-        
+
         '''
         Mapping
         '''
-        normals = np.ones([len(center_volume), 3], dtype = float)
+        normals = np.ones([len(center_volume), 3], dtype=float)
         kDTree = vtk.vtkKdTree()
         kDTree.BuildLocatorFromPoints(center_surface)
-        
+
         for i in range(len(center_volume)):
             id_list = vtk.vtkIdList()
             kDTree.FindClosestNPoints(1, center_volume[i], id_list)
             index = id_list.GetId(0)
             normals[i] = normal_vectors[index]
-        
+
         print('Mapping done!')
         '''
         calculate the sheet
         '''
-    
+
     elif args.mesh_type == "bilayer":
         normals = normal_vectors
-    
+
     sheet = np.cross(normals, fiber)
-    sheet = np.where(sheet == [0,0,0], [1,0,0], sheet).astype("float32")
+    sheet = np.where(sheet == [0, 0, 0], [1, 0, 0], sheet).astype("float32")
     # normalize
     abs_sheet = np.linalg.norm(sheet, axis=1, keepdims=True)
     sheet_norm = sheet / abs_sheet
-    
+
     '''
     writing
     '''
@@ -346,43 +351,45 @@ def generate_sheet_dir(args, model, job):
     # sheet_data.SetNumberOfComponents(3)
     # sheet_data.SetName("sheet")
     # model.GetCellData().AddArray(sheet_data)
-    
+
     meshNew = dsa.WrapDataObject(model)
     meshNew.CellData.append(fiber, "fiber")
     meshNew.CellData.append(sheet_norm, "sheet")
     if args.debug:
         writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/model_with_sheet.vtk")
+        writer.SetFileName(job.ID + "/result_RA/model_with_sheet.vtk")
         writer.SetInputData(meshNew.VTKObject)
         writer.Write()
         print('writing... done!')
-    
+
     return meshNew.VTKObject
-             
-def vtk_thr(model,mode,points_cells,array,thr1,thr2="None"):
+
+
+def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
     if mode == 0:
         thresh.ThresholdByUpper(thr1)
     elif mode == 1:
         thresh.ThresholdByLower(thr1)
-    elif mode ==2:
+    elif mode == 2:
         if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1,thr2)
+            thresh.ThresholdBetween(thr1, thr2)
         else:
             thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
             thresh.Update()
             thr = thresh.GetOutput()
             thresh = vtk.vtkThreshold()
             thresh.SetInputData(thr)
             thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
     thresh.Update()
-    
+
     output = thresh.GetOutput()
-    
+
     return output
+
 
 def creat_tube_around_spline(points_data, radius):
     # Creat a points set
@@ -452,14 +459,14 @@ def dijkstra_path(polydata, StartVertex, EndVertex):
     points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
     return points_data
 
+
 def dijkstra_path_coord(polydata, StartVertex, EndVertex):
-    
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(polydata)
     loc.BuildLocator()
     StartVertex = loc.FindClosestPoint(StartVertex)
     EndVertex = loc.FindClosestPoint(EndVertex)
-    
+
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(polydata)
 
@@ -469,6 +476,7 @@ def dijkstra_path_coord(polydata, StartVertex, EndVertex):
     points_data = path.GetOutput().GetPoints().GetData()
     points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
     return points_data
+
 
 def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point):
     point_start = np.asarray(polydata.GetPoint(StartVertex))
@@ -492,7 +500,7 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     meshExtractFilter1.SetImplicitFunction(plane)
     meshExtractFilter1.Update()
 
-    point_moved = point_start - 2*args.scale * norm_1
+    point_moved = point_start - 2 * args.scale * norm_1
     plane2 = vtk.vtkPlane()
     plane2.SetNormal(-norm_1[0], -norm_1[1], -norm_1[2])
     plane2.SetOrigin(point_moved[0], point_moved[1], point_moved[2])
@@ -501,7 +509,7 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     meshExtractFilter2.SetInputData(meshExtractFilter1.GetOutput())
     meshExtractFilter2.SetImplicitFunction(plane2)
     meshExtractFilter2.Update()
-    
+
     band = meshExtractFilter2.GetOutput()
     geo_filter = vtk.vtkGeometryFilter()
     geo_filter.SetInputData(band)
@@ -512,14 +520,13 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     band = cln.GetOutput()
 
     if args.debug:
-        writer_vtk(band, '{}_surf/'.format(args.mesh) + "band_"+ str(StartVertex)+ "_" + str(EndVertex) + ".vtk")
+        writer_vtk(band, '{}_surf/'.format(args.mesh) + "band_" + str(StartVertex) + "_" + str(EndVertex) + ".vtk")
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(band)
     loc.BuildLocator()
     StartVertex = loc.FindClosestPoint(point_start)
     EndVertex = loc.FindClosestPoint(point_end)
-
 
     points_data = dijkstra_path(band, StartVertex, EndVertex)
     return points_data
@@ -548,6 +555,7 @@ def creat_tube(center1, center2, radius):
     tube.Update()
     return tube
 
+
 def find_elements_around_path_within_radius(mesh, points_data, radius):
     locator = vtk.vtkStaticPointLocator()
     locator.SetDataSet(mesh)
@@ -572,11 +580,11 @@ def find_elements_around_path_within_radius(mesh, points_data, radius):
         id_set.add(mesh_cell_id_list.GetId(i))
 
     return id_set
-    
+
+
 def get_element_ids_around_path_within_radius(mesh, points_data, radius):
-    
     gl_ids = vtk.util.numpy_support.vtk_to_numpy(mesh.GetCellData().GetArray('Global_ids'))
-    
+
     locator = vtk.vtkStaticPointLocator()
     locator.SetDataSet(mesh)
     locator.BuildLocator()
@@ -594,14 +602,15 @@ def get_element_ids_around_path_within_radius(mesh, points_data, radius):
         mesh.GetPointCells(mesh_id_list.GetId(i), mesh_cell_temp_id_list)
         for j in range(mesh_cell_temp_id_list.GetNumberOfIds()):
             mesh_cell_id_list.InsertNextId(mesh_cell_temp_id_list.GetId(j))
-    
+
     ids = []
-    
+
     for i in range(mesh_cell_id_list.GetNumberOfIds()):
         index = mesh_cell_id_list.GetId(i)
         ids.append(gl_ids[index])
 
     return ids
+
 
 def assign_element_tag_around_path_within_radius(mesh, points_data, radius, tag, element_tag):
     locator = vtk.vtkStaticPointLocator()
@@ -929,8 +938,9 @@ def get_endo_ct_intersection_cells(endo, ct):
 
     return endo_ct
 
-def get_connection_point_la_and_ra_surface(appen_point, la_mv_surface, la_rpv_inf_surface, la_epi_surface, ra_epi_surface):
 
+def get_connection_point_la_and_ra_surface(appen_point, la_mv_surface, la_rpv_inf_surface, la_epi_surface,
+                                           ra_epi_surface):
     loc_mv = vtk.vtkPointLocator()
     loc_mv.SetDataSet(la_mv_surface)
     loc_mv.BuildLocator()
@@ -985,6 +995,7 @@ def get_connection_point_la_and_ra_surface(appen_point, la_mv_surface, la_rpv_in
     ra_connect_point = ra_epi_surface.GetPoint(ra_connect_point_id)
 
     return la_connect_point, ra_connect_point
+
 
 def get_connection_point_la_and_ra(appen_point):
     la_mv_surface = smart_reader('../../Generate_Boundaries/LA/result/la_mv_surface.vtk')
@@ -1048,6 +1059,7 @@ def get_connection_point_la_and_ra(appen_point):
 
     return la_connect_point, ra_connect_point
 
+
 def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
     la_mv_surface = smart_reader('../../Generate_Boundaries/LA/result/la_mv_surface.vtk')
     la_lpv_inf_surface = smart_reader('../../Generate_Boundaries/LA/result/la_lpv_inf_surface.vtk')
@@ -1081,6 +1093,7 @@ def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
 
     return bb_left, appendage_basis
 
+
 def create_free_bridge_semi_auto(la_epi, ra_epi, ra_point, radius):
     loc_la_epi = vtk.vtkPointLocator()
     loc_la_epi.SetDataSet(la_epi)
@@ -1098,6 +1111,7 @@ def create_free_bridge_semi_auto(la_epi, ra_epi, ra_point, radius):
     fiber_direction = end - start
     fiber_direction_norm = normalize_vector(fiber_direction)
     return tube, sphere_a, sphere_b, fiber_direction_norm
+
 
 def creat_center_line(start_end_point):
     spline_points = vtk.vtkPoints()
@@ -1118,32 +1132,34 @@ def creat_center_line(start_end_point):
 
     return points
 
+
 def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
     meshNew = dsa.WrapDataObject(tube.GetOutput())
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(job.ID+"/bridges/" + str(name) + "_tube.obj")
+    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_tube.obj")
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
     meshNew = dsa.WrapDataObject(sphere_1.GetOutput())
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(job.ID+"/bridges/" + str(name) + "_sphere_1.obj")
+    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_1.obj")
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
     meshNew = dsa.WrapDataObject(sphere_2.GetOutput())
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(job.ID+"/bridges/" + str(name) + "_sphere_2.obj")
+    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_2.obj")
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
 
-def create_pts(array_points,array_name,mesh_dir):
-    f = open("{}{}.pts".format(mesh_dir,array_name), "w")
+def create_pts(array_points, array_name, mesh_dir):
+    f = open("{}{}.pts".format(mesh_dir, array_name), "w")
     f.write("0 0 0\n")
     for i in range(len(array_points)):
         f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
     f.close()
+
 
 def to_polydata(mesh):
     geo_filter = vtk.vtkGeometryFilter()
@@ -1152,7 +1168,8 @@ def to_polydata(mesh):
     polydata = geo_filter.GetOutput()
     return polydata
 
-def writer_vtk(mesh,filename):
+
+def writer_vtk(mesh, filename):
     writer = vtk.vtkPolyDataWriter()
     writer.SetFileName(filename)
     writer.SetInputData(to_polydata(mesh))

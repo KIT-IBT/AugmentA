@@ -37,43 +37,44 @@ from ra_generate_fiber import ra_generate_fiber
 import Methods_RA as Method
 from create_bridges import add_free_bridge
 
+
 def parser():
     # Generate the standard command line parser
     parser = tools.standard_parser()
     # Add arguments    
     parser.add_argument('--mesh',
-                    type=str,
-                    default="",
-                    help='path to meshname')
+                        type=str,
+                        default="",
+                        help='path to meshname')
     parser.add_argument('--ifmt',
-                    type=str,
-                    default="vtk",
-                    help='input mesh format')
+                        type=str,
+                        default="vtk",
+                        help='input mesh format')
     parser.add_argument('--mesh_type',
                         default='bilayer',
                         choices=['vol',
                                  'bilayer'],
                         help='Mesh type')
     parser.add_argument('--debug',
-                    type=int,
-                    default=1,
-                    help='path to meshname')
+                        type=int,
+                        default=1,
+                        help='path to meshname')
     parser.add_argument('--scale',
-                    type=int,
-                    default=1,
-                    help='normal unit is mm, set scaling factor if different')
+                        type=int,
+                        default=1,
+                        help='normal unit is mm, set scaling factor if different')
     parser.add_argument('--ofmt',
                         default='vtu',
-                        choices=['vtu','vtk'],
+                        choices=['vtu', 'vtk'],
                         help='Output mesh format')
     parser.add_argument('--normals_outside',
-                    type=int,
-                    default=0,
-                    help='set to 1 if surface normals are pointing outside') # expects normals to be pointing inside
+                        type=int,
+                        default=0,
+                        help='set to 1 if surface normals are pointing outside')  # expects normals to be pointing inside
     parser.add_argument('--add_bridges',
-                    type=int,
-                    default=1,
-                    help='set to 1 to compute and add interatrial bridges, 0 otherwise')
+                        type=int,
+                        default=1,
+                        help='set to 1 to compute and add interatrial bridges, 0 otherwise')
     parser.add_argument('--just_bridges',
                         type=int,
                         default=0,
@@ -85,61 +86,65 @@ def parser():
 
     return parser
 
+
 def jobID(args):
     ID = '{}_fibers'.format(args.mesh)
     return ID
 
+
 @tools.carpexample(parser, jobID)
 def run(args, job):
-    
-    RA_mesh = args.mesh+'_surf/RA'
-    
+    RA_mesh = args.mesh + '_surf/RA'
+
     if args.mesh_type == "bilayer":
         reader = vtk.vtkPolyDataReader()
     else:
         reader = vtk.vtkUnstructuredGridReader()
-    reader.SetFileName(RA_mesh+'.vtk')
+    reader.SetFileName(RA_mesh + '.vtk')
     reader.Update()
     RA = reader.GetOutput()
-    
+
     if args.normals_outside:
         reverse = vtk.vtkReverseSense()
         reverse.ReverseCellsOn()
         reverse.ReverseNormalsOn()
         reverse.SetInputConnection(reader.GetOutputPort())
         reverse.Update()
-    
+
         RA = reverse.GetOutput()
-    
+
     pts = numpy_support.vtk_to_numpy(RA.GetPoints().GetData())
     # cells = numpy_support.vtk_to_numpy(RA.GetPolys().GetData())
     # cells = cells.reshape(int(len(cells)/4),4)[:,1:]
-    
-    with open(RA_mesh+'.pts',"w") as f:
+
+    with open(RA_mesh + '.pts', "w") as f:
         f.write("{}\n".format(len(pts)))
         for i in range(len(pts)):
             f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
-    
-    with open(RA_mesh+'.elem',"w") as f:
-            f.write("{}\n".format(RA.GetNumberOfCells()))
-            for i in range(RA.GetNumberOfCells()):
-                cell = RA.GetCell(i)
-                if cell.GetNumberOfPoints() == 2:
-                    f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), 1))
-                elif cell.GetNumberOfPoints() == 3:
-                    f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), 1))
-                elif cell.GetNumberOfPoints() == 4:
-                    f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), 1))
-    
-    fibers = np.zeros((RA.GetNumberOfCells(),6))
-    fibers[:,0]=1
-    fibers[:,4]=1
-    
-    with open(RA_mesh+'.lon',"w") as f:
+
+    with open(RA_mesh + '.elem', "w") as f:
+        f.write("{}\n".format(RA.GetNumberOfCells()))
+        for i in range(RA.GetNumberOfCells()):
+            cell = RA.GetCell(i)
+            if cell.GetNumberOfPoints() == 2:
+                f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), 1))
+            elif cell.GetNumberOfPoints() == 3:
+                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
+                                                  cell.GetPointIds().GetId(2), 1))
+            elif cell.GetNumberOfPoints() == 4:
+                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
+                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), 1))
+
+    fibers = np.zeros((RA.GetNumberOfCells(), 6))
+    fibers[:, 0] = 1
+    fibers[:, 4] = 1
+
+    with open(RA_mesh + '.lon', "w") as f:
         f.write("2\n")
         for i in range(len(fibers)):
-            f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3],fibers[i][4],fibers[i][5]))
-    
+            f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3], fibers[i][4],
+                                                 fibers[i][5]))
+
     start_time = datetime.datetime.now()
     print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
     if args.laplace:
@@ -151,7 +156,7 @@ def run(args, job):
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
     print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
-    
+
     start_time = datetime.datetime.now()
     print('[Step 2] Generating fibers... ' + str(start_time))
 
@@ -175,6 +180,7 @@ def run(args, job):
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
     print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+
 
 if __name__ == '__main__':
     run()

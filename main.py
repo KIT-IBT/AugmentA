@@ -35,6 +35,7 @@ from pipeline import AugmentA
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
+
 def parser():
     # Generate the standard command line parser
     parser = argparse.ArgumentParser(description='AugmentA: Patient-specific Augmented Atrial model Generation Tool')
@@ -64,7 +65,7 @@ def parser():
                         help='set to 1 to proceed with the fitting of a given SSM, 0 otherwise')
     parser.add_argument('--atrium',
                         default="LA",
-                        choices=['LA','RA','LA_RA'],
+                        choices=['LA', 'RA', 'LA_RA'],
                         help='write LA or RA')
     parser.add_argument('--SSM_file',
                         type=str,
@@ -96,7 +97,7 @@ def parser():
                         help='set to 1 to compute and add interatrial bridges, 0 otherwise')
     parser.add_argument('--ofmt',
                         default='vtu',
-                        choices=['vtu','vtk'],
+                        choices=['vtu', 'vtk'],
                         help='Output mesh format')
     parser.add_argument('--find_appendage',
                         type=int,
@@ -108,18 +109,19 @@ def parser():
                         help='set to 1 to debug step by step, 0 otherwise')
     return parser
 
-def run():
 
+def run():
     args = parser().parse_args()
 
     # In case both atria are given process LA first and RA later
     if args.atrium == 'LA_RA':
-        #args.atrium = 'LA'
+        # args.atrium = 'LA'
         AugmentA(args)
-        #args.atrium = 'RA'
-        #AugmentA(args)
+        # args.atrium = 'RA'
+        # AugmentA(args)
     else:
         AugmentA(args)
-    
+
+
 if __name__ == '__main__':
     run()

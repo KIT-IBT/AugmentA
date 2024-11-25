@@ -9,10 +9,11 @@ import sys
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import smart_reader
 
+
 def separate_epi_endo(path, atrium):
     extension = path.split('.')[-1]
-    meshname = path[:-(len(extension)+1)]
-    
+    meshname = path[:-(len(extension) + 1)]
+
     with open('Atrial_LDRBM/element_tag.csv') as f:
         tag_dict = {}
         reader = csv.DictReader(f)
@@ -41,7 +42,7 @@ def separate_epi_endo(path, atrium):
     geo_filter.Update()
 
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname+"_{}.obj".format(atrium))
+    writer.SetFileName(meshname + "_{}.obj".format(atrium))
     writer.SetInputData(geo_filter.GetOutput())
     writer.Write()
 
@@ -60,7 +61,7 @@ def separate_epi_endo(path, atrium):
     la_epi = geo_filter.GetOutput()
 
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname+"_{}_epi.obj".format(atrium))
+    writer.SetFileName(meshname + "_{}_epi.obj".format(atrium))
     writer.SetInputData(la_epi)
     writer.Write()
 
@@ -79,6 +80,6 @@ def separate_epi_endo(path, atrium):
     la_endo = geo_filter.GetOutput()
 
     writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname+"_{}_endo.obj".format(atrium))
+    writer.SetFileName(meshname + "_{}_endo.obj".format(atrium))
     writer.SetInputData(la_endo)
     writer.Write()

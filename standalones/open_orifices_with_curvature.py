@@ -24,7 +24,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import os,sys
+import os, sys
 import numpy as np
 import pathlib
 from glob import glob
@@ -42,6 +42,7 @@ import pymeshfix
 from pymeshfix import _meshfix
 import pyvista as pv
 import collections
+
 pv.set_plot_theme('dark')
 
 sys.path.append('./Atrial_LDRBM/Generate_Boundaries')
@@ -49,8 +50,8 @@ from extract_rings import label_atrial_orifices
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
-def parser():
 
+def parser():
     parser = argparse.ArgumentParser(description='Cut veins detected as high curvature areas')
     parser.add_argument('--mesh',
                         type=str,
@@ -95,8 +96,9 @@ def parser():
 
     return parser
 
-def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cutting_radius=7.5, max_cutting_radius=17.5,  LAA="", RAA="", debug=0):
 
+def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cutting_radius=7.5,
+                                 max_cutting_radius=17.5, LAA="", RAA="", debug=0):
     meshname = meshpath.split("/")[-1]
     full_path = meshpath[:-len(meshname)]
 
@@ -105,22 +107,22 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     meshfix = pymeshfix.MeshFix(meshin)
     meshfix.repair()
     meshfix.mesh.save("{}/{}_clean.vtk".format(full_path, atrium))
-    pv.save_meshio("{}/{}_clean.obj".format(full_path, atrium),meshfix.mesh, "obj")
+    pv.save_meshio("{}/{}_clean.obj".format(full_path, atrium), meshfix.mesh, "obj")
 
     # Compute surface curvature
-    os.system("meshtool query curvature -msh={}/{}_clean.obj -size={}".format(full_path, atrium, size*scale))
+    os.system("meshtool query curvature -msh={}/{}_clean.obj -size={}".format(full_path, atrium, size * scale))
 
     # Verify if the mesh curvature is not nan
 
     mesh_with_data = smart_reader(meshpath)
-    
+
     curv = np.loadtxt('{}/{}_clean.curv.dat'.format(full_path, atrium))
 
     mesh_clean = smart_reader("{}/{}_clean.vtk".format(full_path, atrium))
-    
+
     # Map point data to cleaned mesh
     mesh = point_array_mapper(mesh_with_data, mesh_clean, "all")
-    
+
     model = dsa.WrapDataObject(mesh)
 
     model.PointData.append(curv, "curv")
@@ -136,7 +138,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     apex = None
     if not MRI:
 
-        valve = vtk_thr(model,0,"POINTS","valve",0.5)
+        valve = vtk_thr(model, 0, "POINTS", "valve", 0.5)
         valve = extract_largest_region(valve)
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
@@ -149,20 +151,20 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         valve_pts = vtk.util.numpy_support.vtk_to_numpy(valve.GetPoints().GetData())
         max_dist = 0
         for l in range(len(valve_pts)):
-            if np.sqrt(np.sum((valve_center-valve_pts[l])**2, axis=0)) > max_dist:
-                max_dist = np.sqrt(np.sum((valve_center-valve_pts[l])**2, axis=0))
-        
-        if max_dist > max_cutting_radius*2:
-            print("Valve bigger than {} cm".format(max_cutting_radius*2))
-        el_to_del_tot = find_elements_within_radius(model,valve_center,max_cutting_radius)
+            if np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0)) > max_dist:
+                max_dist = np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0))
+
+        if max_dist > max_cutting_radius * 2:
+            print("Valve bigger than {} cm".format(max_cutting_radius * 2))
+        el_to_del_tot = find_elements_within_radius(model, valve_center, max_cutting_radius)
 
         model_new_el = vtk.vtkIdList()
         cell_id_all = list(range(model.GetNumberOfCells()))
-        el_diff =  list(set(cell_id_all).difference(el_to_del_tot))
-        
+        el_diff = list(set(cell_id_all).difference(el_to_del_tot))
+
         for var in el_diff:
             model_new_el.InsertNextId(var)
-        
+
         extract = vtk.vtkExtractCells()
         extract.SetInputData(model)
         extract.SetCellList(model_new_el)
@@ -171,7 +173,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputConnection(extract.GetOutputPort())
         geo_filter.Update()
-        
+
         cleaner = vtk.vtkCleanPolyData()
         cleaner.SetInputConnection(geo_filter.GetOutputPort())
         cleaner.Update()
@@ -179,10 +181,10 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         model = cleaner.GetOutput()
 
     else:
-        valve = vtk_thr(model,0,"POINTS","curv",0.05)
+        valve = vtk_thr(model, 0, "POINTS", "curv", 0.05)
         valve = extract_largest_region(valve)
 
-        if debug and atrium =='RA':
+        if debug and atrium == 'RA':
             writer_vtk(valve, "{}/{}_clean_with_curv_".format(full_path, atrium) + "valve.vtk")
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
@@ -195,19 +197,19 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         valve_pts = vtk.util.numpy_support.vtk_to_numpy(valve.GetPoints().GetData())
         max_dist = 0
         for l in range(len(valve_pts)):
-            if np.sqrt(np.sum((valve_center-valve_pts[l])**2, axis=0)) > max_dist:
-                max_dist = np.sqrt(np.sum((valve_center-valve_pts[l])**2, axis=0))
-        
+            if np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0)) > max_dist:
+                max_dist = np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0))
+
         # Cutting valve with fixed radius to ensure that it is the biggest ring
-        el_to_del_tot = find_elements_within_radius(model,valve_center,max_cutting_radius)
+        el_to_del_tot = find_elements_within_radius(model, valve_center, max_cutting_radius)
 
         model_new_el = vtk.vtkIdList()
         cell_id_all = list(range(model.GetNumberOfCells()))
-        el_diff =  list(set(cell_id_all).difference(el_to_del_tot))
-        
+        el_diff = list(set(cell_id_all).difference(el_to_del_tot))
+
         for var in el_diff:
             model_new_el.InsertNextId(var)
-        
+
         extract = vtk.vtkExtractCells()
         extract.SetInputData(model)
         extract.SetCellList(model_new_el)
@@ -216,7 +218,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputConnection(extract.GetOutputPort())
         geo_filter.Update()
-        
+
         cleaner = vtk.vtkCleanPolyData()
         cleaner.SetInputConnection(geo_filter.GetOutputPort())
         cleaner.Update()
@@ -226,7 +228,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     # model = smart_reader("{}/{}_valve.vtk".format(full_path, atrium))
     cellid = vtk.vtkIdFilter()
     cellid.CellIdsOn()
-    cellid.SetInputData(model) 
+    cellid.SetInputData(model)
     cellid.PointIdsOn()
     if int(vtk_version) >= 9:
         cellid.SetPointIdsArrayName('Ids')
@@ -234,9 +236,9 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     else:
         cellid.SetIdsArrayName('Ids')
     cellid.Update()
-    
+
     model = cellid.GetOutput()
-    
+
     writer = vtk.vtkPolyDataWriter()
     writer.SetFileName("{}/{}_curv.vtk".format(full_path, atrium))
     writer.SetInputData(model)
@@ -244,18 +246,18 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     writer.Write()
 
     curv = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('curv'))
-    
+
     Gl_pt_id = list(vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('Ids')))
     Gl_cell_id = list(vtk.util.numpy_support.vtk_to_numpy(model.GetCellData().GetArray('Ids')))
-    
+
     if not MRI:
-        low_v = vtk_thr(model,1,"POINTS","bi",0.5)
+        low_v = vtk_thr(model, 1, "POINTS", "bi", 0.5)
 
         pts_low_v = set(list(vtk.util.numpy_support.vtk_to_numpy(low_v.GetPointData().GetArray('Ids'))))
 
-        high_v = vtk_thr(model,0,"POINTS","bi",0.5001)
+        high_v = vtk_thr(model, 0, "POINTS", "bi", 0.5001)
 
-    high_c = vtk_thr(model,0,"POINTS","curv",np.median(curv)*1.15)#(np.min(curv)+np.max(curv))/2)
+    high_c = vtk_thr(model, 0, "POINTS", "curv", np.median(curv) * 1.15)  # (np.min(curv)+np.max(curv))/2)
 
     writer = vtk.vtkUnstructuredGridWriter()
     writer.SetFileName("{}/{}_h_curv.vtk".format(full_path, atrium))
@@ -268,21 +270,21 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     connect.SetExtractionModeToAllRegions()
     connect.Update()
     num = connect.GetNumberOfExtractedRegions()
-    
+
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(high_c)
     connect.SetExtractionModeToSpecifiedRegions()
-    
+
     rings = []
-    
+
     el_to_del_tot = set()
     old_max = 0
 
-    if MRI:            
+    if MRI:
         cc = pv.PolyData(valve_center)
         p = pv.Plotter(notebook=False)
         p.add_mesh(meshfix.mesh, 'r')
-        p.add_text('Select the appendage apex and close the window',position='lower_left')
+        p.add_text('Select the appendage apex and close the window', position='lower_left')
         p.add_mesh(cc, color='w', point_size=30., render_points_as_spheres=True)
         p.enable_point_picking(meshfix.mesh, use_mesh=True)
 
@@ -304,7 +306,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         p = pv.Plotter(notebook=False)
         mesh_from_vtk = pv.PolyData("{}/{}_clean.vtk".format(full_path, atrium))
         p.add_mesh(mesh_from_vtk, 'r')
-        p.add_text('Select the transeptal punture and close the window',position='lower_left')
+        p.add_text('Select the transeptal punture and close the window', position='lower_left')
         p.enable_point_picking(meshfix.mesh, use_mesh=True)
 
         p.show()
@@ -313,31 +315,32 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             loc = vtk.vtkPointLocator()
             loc.SetDataSet(model)
             loc.BuildLocator()
-            transeptal_punture_id = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('Ids'))[loc.FindClosestPoint(p.picked_point)]
+            transeptal_punture_id = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('Ids'))[
+                loc.FindClosestPoint(p.picked_point)]
         p.close()
 
     for i in range(num):
         connect.AddSpecifiedRegion(i)
         connect.Update()
         surface = connect.GetOutput()
-        
+
         # Clean unused points
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputData(surface)
         geo_filter.Update()
         surface = geo_filter.GetOutput()
-        
+
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
         cln.Update()
         surface = cln.GetOutput()
-                            
+
         pt_high_c = list(vtk.util.numpy_support.vtk_to_numpy(surface.GetPointData().GetArray('Ids')))
         curv_s = vtk.util.numpy_support.vtk_to_numpy(surface.GetPointData().GetArray('curv'))
-        
+
         if not MRI:
             if transeptal_punture_id not in pt_high_c:
-                if len(set(pt_high_c).intersection(pts_low_v))>0: # the region is both high curvature and low voltage
+                if len(set(pt_high_c).intersection(pts_low_v)) > 0:  # the region is both high curvature and low voltage
                     pt_max_curv = np.asarray(model.GetPoint(Gl_pt_id.index(pt_high_c[np.argmax(curv_s)])))
                     el_low_vol = set()
                     connect2 = vtk.vtkConnectivityFilter()
@@ -345,14 +348,14 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                     connect2.SetExtractionModeToAllRegions()
                     connect2.Update()
                     num2 = connect2.GetNumberOfExtractedRegions()
-                    
+
                     connect2.SetExtractionModeToSpecifiedRegions()
-                    
+
                     for ii in range(num2):
                         connect2.AddSpecifiedRegion(ii)
                         connect2.Update()
                         surface2 = connect2.GetOutput()
-                        
+
                         # Clean unused points
                         geo_filter = vtk.vtkGeometryFilter()
                         geo_filter.SetInputData(surface2)
@@ -364,7 +367,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                         cln.Update()
                         surface2 = cln.GetOutput()
                         pt_surf_2 = list(vtk.util.numpy_support.vtk_to_numpy(surface2.GetPointData().GetArray('Ids')))
-                        if len(set(pt_high_c).intersection(pt_surf_2))>0:
+                        if len(set(pt_high_c).intersection(pt_surf_2)) > 0:
 
                             for el in vtk.util.numpy_support.vtk_to_numpy(surface2.GetCellData().GetArray('Ids')):
                                 el_low_vol.add(Gl_cell_id.index(el))
@@ -373,10 +376,10 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                         connect2.Update()
 
                     model_new_el = vtk.vtkIdList()
-                    
+
                     for var in el_low_vol:
                         model_new_el.InsertNextId(var)
-                    
+
                     extract = vtk.vtkExtractCells()
                     extract.SetInputData(model)
                     extract.SetCellList(model_new_el)
@@ -385,30 +388,30 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                     geo_filter = vtk.vtkGeometryFilter()
                     geo_filter.SetInputConnection(extract.GetOutputPort())
                     geo_filter.Update()
-                    
+
                     cleaner = vtk.vtkCleanPolyData()
                     cleaner.SetInputConnection(geo_filter.GetOutputPort())
                     cleaner.Update()
 
                     loc_low_V = cleaner.GetOutput()  # local low voltage area
-                    
+
                     loc_low_V = extract_largest_region(loc_low_V)
-            
+
                     loc_low_V_pts = vtk.util.numpy_support.vtk_to_numpy(loc_low_V.GetPoints().GetData())
 
                     max_dist = 0
                     for l in range(len(loc_low_V_pts)):
-                        if np.sqrt(np.sum((pt_max_curv-loc_low_V_pts[l])**2, axis=0)) > max_dist:
-                            max_dist = np.sqrt(np.sum((pt_max_curv-loc_low_V_pts[l])**2, axis=0))
+                        if np.sqrt(np.sum((pt_max_curv - loc_low_V_pts[l]) ** 2, axis=0)) > max_dist:
+                            max_dist = np.sqrt(np.sum((pt_max_curv - loc_low_V_pts[l]) ** 2, axis=0))
 
-                    el_to_del = find_elements_within_radius(model,pt_max_curv,min_cutting_radius*2*scale)
+                    el_to_del = find_elements_within_radius(model, pt_max_curv, min_cutting_radius * 2 * scale)
 
                     el_to_del_tot = el_to_del_tot.union(set(el_to_del))
-                    
-                
-                else: # Possible appendage
 
-                    if np.max(curv_s) > old_max: # The max curvature without low voltage should be the appendage
+
+                else:  # Possible appendage
+
+                    if np.max(curv_s) > old_max:  # The max curvature without low voltage should be the appendage
                         old_max = np.max(curv_s)
                         apex = np.asarray(model.GetPoint(Gl_pt_id.index(pt_high_c[np.argmax(curv_s)])))
         else:
@@ -421,11 +424,11 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     model_new_el = vtk.vtkIdList()
     cell_id_all = list(range(model.GetNumberOfCells()))
-    el_diff =  list(set(cell_id_all).difference(el_to_del_tot))
-    
+    el_diff = list(set(cell_id_all).difference(el_to_del_tot))
+
     for var in el_diff:
         model_new_el.InsertNextId(var)
-    
+
     extract = vtk.vtkExtractCells()
     extract.SetInputData(model)
     extract.SetCellList(model_new_el)
@@ -434,20 +437,20 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     geo_filter = vtk.vtkGeometryFilter()
     geo_filter.SetInputConnection(extract.GetOutputPort())
     geo_filter.Update()
-    
+
     cleaner = vtk.vtkCleanPolyData()
     cleaner.SetInputConnection(geo_filter.GetOutputPort())
     cleaner.Update()
 
     model = cleaner.GetOutput()
-    
+
     model = extract_largest_region(model)
 
     writer = vtk.vtkPolyDataWriter()
     writer.SetFileName("{}/{}_cutted.vtk".format(full_path, atrium))
     writer.SetInputData(model)
     writer.Write()
-    
+
     if debug:
         if apex is not None:
             point_cloud = pv.PolyData(apex)
@@ -457,7 +460,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             p.add_mesh(mesh_from_vtk, 'r')
             p.add_mesh(point_cloud, color='w', point_size=30., render_points_as_spheres=True)
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
-            p.add_text('Select the appendage apex and close the window',position='lower_left')
+            p.add_text('Select the appendage apex and close the window', position='lower_left')
             p.show()
 
             if p.picked_point is not None:
@@ -468,7 +471,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
             p.add_mesh(mesh_from_vtk, 'r')
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
-            p.add_text('Select the appendage apex and close the window',position='lower_left')
+            p.add_text('Select the appendage apex and close the window', position='lower_left')
             p.show()
 
             if p.picked_point is not None:
@@ -484,19 +487,21 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         LAA = apex_id
     elif atrium == "RA":
         RAA = apex_id
-    
-    label_atrial_orifices("{}/{}_cutted.vtk".format(full_path, atrium),LAA,RAA)
+
+    label_atrial_orifices("{}/{}_cutted.vtk".format(full_path, atrium), LAA, RAA)
 
     return apex_id
 
-def run():
 
+def run():
     args = parser().parse_args()
 
-    apex_id = open_orifices_with_curvature(args.mesh, args.atrium, args.MRI, args.scale, args.size, args.min_cutting_radius, args.max_cutting_radius, args.LAA, args.RAA, args.debug)
-        
-def smart_reader(path):
+    apex_id = open_orifices_with_curvature(args.mesh, args.atrium, args.MRI, args.scale, args.size,
+                                           args.min_cutting_radius, args.max_cutting_radius, args.LAA, args.RAA,
+                                           args.debug)
 
+
+def smart_reader(path):
     extension = str(path).split(".")[-1]
 
     if extension == "vtk":
@@ -524,30 +529,32 @@ def smart_reader(path):
 
     return output
 
-def vtk_thr(model,mode,points_cells,array,thr1,thr2="None"):
+
+def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
     if mode == 0:
         thresh.ThresholdByUpper(thr1)
     elif mode == 1:
         thresh.ThresholdByLower(thr1)
-    elif mode ==2:
+    elif mode == 2:
         if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1,thr2)
+            thresh.ThresholdBetween(thr1, thr2)
         else:
             thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
             thresh.Update()
             thr = thresh.GetOutput()
             thresh = vtk.vtkThreshold()
             thresh.SetInputData(thr)
             thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
     thresh.Update()
-    
+
     output = thresh.GetOutput()
-    
+
     return output
+
 
 def find_elements_within_radius(mesh, points_data, radius):
     locator = vtk.vtkStaticPointLocator()
@@ -570,6 +577,7 @@ def find_elements_within_radius(mesh, points_data, radius):
 
     return id_set
 
+
 def extract_largest_region(mesh):
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(mesh)
@@ -589,46 +597,49 @@ def extract_largest_region(mesh):
 
     return res
 
+
 def point_array_mapper(mesh1, mesh2, idat):
-    
     pts1 = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPoints().GetData())
     pts2 = vtk.util.numpy_support.vtk_to_numpy(mesh2.GetPoints().GetData())
-    
+
     tree = cKDTree(pts1)
 
     dd, ii = tree.query(pts2, n_jobs=-1)
-    
+
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
+            data = vtk.util.numpy_support.vtk_to_numpy(
+                mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
             if isinstance(data[0], collections.Sized):
-                data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+                data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
             else:
                 data2 = np.zeros((len(pts2),), dtype=data.dtype)
-            
+
             data2 = data[ii]
             data2 = np.where(np.isnan(data2), 10000, data2)
-            
+
             meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
     else:
         data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
         if isinstance(data[0], collections.Sized):
-            data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+            data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
             data2 = np.zeros((len(pts2),), dtype=data.dtype)
-        
+
         data2 = data[ii]
         meshNew.PointData.append(data2, idat)
-    
+
     return meshNew.VTKObject
 
-def create_pts(array_points,array_name,mesh_dir):
-    f = open("{}{}.pts".format(mesh_dir,array_name), "w")
+
+def create_pts(array_points, array_name, mesh_dir):
+    f = open("{}{}.pts".format(mesh_dir, array_name), "w")
     f.write("0 0 0\n")
     for i in range(len(array_points)):
         f.write("{} {} {}\n".format(array_points[i][0], array_points[i][1], array_points[i][2]))
     f.close()
+
 
 def to_polydata(mesh):
     geo_filter = vtk.vtkGeometryFilter()
@@ -637,11 +648,13 @@ def to_polydata(mesh):
     polydata = geo_filter.GetOutput()
     return polydata
 
-def writer_vtk(mesh,filename):
+
+def writer_vtk(mesh, filename):
     writer = vtk.vtkPolyDataWriter()
     writer.SetFileName(filename)
     writer.SetInputData(to_polydata(mesh))
     writer.Write()
+
 
 if __name__ == '__main__':
     run()

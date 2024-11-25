@@ -46,7 +46,6 @@ from ra_generate_fiber import ra_generate_fiber
 import Methods_RA as Method
 import pandas as pd
 
-
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -72,7 +71,6 @@ def parser():
                         default=1,
                         help='normal unit is mm, set scaling factor if different')
 
-
     return parser
 
 
@@ -83,15 +81,13 @@ def jobID(args):
 
 @tools.carpexample(parser, jobID)
 def run(args, job):
+    la_epi = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
 
-    la_epi = Method.smart_reader(job.ID+"/result_LA/LA_epi_with_fiber.vtu")
-
-    model = Method.smart_reader(job.ID+"/result_RA/RA_epi_with_fiber.vtu")
+    model = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
 
     df = pd.read_csv(args.mesh + "_surf/rings_centroids.csv")
 
     CS_p = np.array(df["CS"])
-
 
     print('[Step 3] Generate Bridges and Bilayer... ')
 
@@ -704,6 +700,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
                 f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
                                                                              sheet_epi[i][0], sheet_epi[i][1],
                                                                              sheet_epi[i][2]))
+
 
 if __name__ == '__main__':
     run()

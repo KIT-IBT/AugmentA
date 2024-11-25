@@ -24,7 +24,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import os,sys
+import os, sys
 import numpy as np
 import pathlib
 from glob import glob
@@ -42,6 +42,7 @@ import pymeshfix
 from pymeshfix import _meshfix
 import pyvista as pv
 import collections
+
 pv.set_plot_theme('dark')
 
 sys.path.append('../Atrial_LDRBM/Generate_Boundaries')
@@ -49,13 +50,13 @@ import extract_rings
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
+
 # def create_sphere(value):
 #     radius = int(value)
 #     sphere = pv.Sphere(center=center, radius=radius)
 #     p.add_mesh(sphere, name='sphere', show_edges=True)
 #     return
 def parser():
-
     parser = argparse.ArgumentParser(description='Cut veins manually')
     parser.add_argument('--mesh',
                         type=str,
@@ -99,8 +100,9 @@ def parser():
                         help='set to 1 if the input is an MRI segmentation')
     return parser
 
-def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_radius=7.5, max_cutting_radius=17.5,  LAA="", RAA="", debug=0):
 
+def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_radius=7.5, max_cutting_radius=17.5,
+                           LAA="", RAA="", debug=0):
     meshname = meshpath.split("/")[-1]
     full_path = meshpath[:-len(meshname)]
 
@@ -109,26 +111,28 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     meshfix = pymeshfix.MeshFix(meshin)
     meshfix.repair()
     meshfix.mesh.save("{}/{}_clean.vtk".format(full_path, atrium))
-    pv.save_meshio("{}/{}_clean.obj".format(full_path, atrium),meshfix.mesh, "obj")
+    pv.save_meshio("{}/{}_clean.obj".format(full_path, atrium), meshfix.mesh, "obj")
 
     mesh_with_data = smart_reader(meshpath)
 
     mesh_clean = smart_reader("{}/{}_clean.vtk".format(full_path, atrium))
-    
+
     # Map point data to cleaned mesh
     mesh = point_array_mapper(mesh_with_data, mesh_clean, "all")
 
     if atrium == "LA":
-        orifices = ['mitral valve', 'left inferior pulmonary vein', 'left superior pulmonary vein','right inferior pulmonary vein','right superior pulmonary vein']
+        orifices = ['mitral valve', 'left inferior pulmonary vein', 'left superior pulmonary vein',
+                    'right inferior pulmonary vein', 'right superior pulmonary vein']
     else:
-        orifices = ['tricuspid valve', 'inferior vena cava', 'superior vena cava','coronary sinus']
+        orifices = ['tricuspid valve', 'inferior vena cava', 'superior vena cava', 'coronary sinus']
 
     for r in orifices:
         picked_pt = None
         while picked_pt is None:
             p = pv.Plotter(notebook=False)
-            p.add_mesh(meshfix.mesh,'r')
-            p.add_text('Select the center of the {} and close the window to cut, otherwise just close'.format(r),position='lower_left')
+            p.add_mesh(meshfix.mesh, 'r')
+            p.add_text('Select the center of the {} and close the window to cut, otherwise just close'.format(r),
+                       position='lower_left')
             p.enable_point_picking(meshfix.mesh, use_mesh=True)
             p.show()
 
@@ -141,11 +145,11 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
 
         model_new_el = vtk.vtkIdList()
         cell_id_all = list(range(mesh.GetNumberOfCells()))
-        el_diff =  list(set(cell_id_all).difference(el_to_del_tot))
-        
+        el_diff = list(set(cell_id_all).difference(el_to_del_tot))
+
         for var in el_diff:
             model_new_el.InsertNextId(var)
-        
+
         extract = vtk.vtkExtractCells()
         extract.SetInputData(mesh)
         extract.SetCellList(model_new_el)
@@ -154,7 +158,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputConnection(extract.GetOutputPort())
         geo_filter.Update()
-        
+
         cleaner = vtk.vtkCleanPolyData()
         cleaner.SetInputConnection(geo_filter.GetOutputPort())
         cleaner.Update()
@@ -167,7 +171,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     writer.SetFileName("{}/{}_cutted.vtk".format(full_path, atrium))
     writer.SetInputData(model)
     writer.Write()
-    
+
     p = pv.Plotter(notebook=False)
     mesh_from_vtk = pv.PolyData("{}/{}_cutted.vtk".format(full_path, atrium))
     p.add_mesh(mesh_from_vtk, 'r')
@@ -191,18 +195,19 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         RAA = apex_id
 
     meshpath = "{}/{}_cutted".format(full_path, atrium)
-    extract_rings.run(["--mesh",meshpath,"--LAA",str(LAA),"--RAA",str(RAA)])
+    extract_rings.run(["--mesh", meshpath, "--LAA", str(LAA), "--RAA", str(RAA)])
 
     return apex_id
 
+
 def run():
-
     args = parser().parse_args()
-    
-    apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, args.scale, args.size, args.min_cutting_radius, args.max_cutting_radius, args.LAA, args.RAA, args.debug)
-        
-def smart_reader(path):
 
+    apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, args.scale, args.size, args.min_cutting_radius,
+                                     args.max_cutting_radius, args.LAA, args.RAA, args.debug)
+
+
+def smart_reader(path):
     extension = str(path).split(".")[-1]
 
     if extension == "vtk":
@@ -230,30 +235,32 @@ def smart_reader(path):
 
     return output
 
-def vtk_thr(model,mode,points_cells,array,thr1,thr2="None"):
+
+def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
     if mode == 0:
         thresh.ThresholdByUpper(thr1)
     elif mode == 1:
         thresh.ThresholdByLower(thr1)
-    elif mode ==2:
+    elif mode == 2:
         if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1,thr2)
+            thresh.ThresholdBetween(thr1, thr2)
         else:
             thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
             thresh.Update()
             thr = thresh.GetOutput()
             thresh = vtk.vtkThreshold()
             thresh.SetInputData(thr)
             thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
     thresh.Update()
-    
+
     output = thresh.GetOutput()
-    
+
     return output
+
 
 def find_elements_within_radius(mesh, points_data, radius):
     locator = vtk.vtkStaticPointLocator()
@@ -276,6 +283,7 @@ def find_elements_within_radius(mesh, points_data, radius):
 
     return id_set
 
+
 def extract_largest_region(mesh):
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(mesh)
@@ -295,39 +303,41 @@ def extract_largest_region(mesh):
 
     return res
 
+
 def point_array_mapper(mesh1, mesh2, idat):
-    
     pts1 = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPoints().GetData())
     pts2 = vtk.util.numpy_support.vtk_to_numpy(mesh2.GetPoints().GetData())
-    
+
     tree = cKDTree(pts1)
 
     dd, ii = tree.query(pts2, n_jobs=-1)
-    
+
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
+            data = vtk.util.numpy_support.vtk_to_numpy(
+                mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
             if isinstance(data[0], collections.Sized):
-                data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+                data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
             else:
                 data2 = np.zeros((len(pts2),), dtype=data.dtype)
-            
+
             data2 = data[ii]
             data2 = np.where(np.isnan(data2), 10000, data2)
-            
+
             meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
     else:
         data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
         if isinstance(data[0], collections.Sized):
-            data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+            data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
             data2 = np.zeros((len(pts2),), dtype=data.dtype)
-        
+
         data2 = data[ii]
         meshNew.PointData.append(data2, idat)
-    
+
     return meshNew.VTKObject
+
 
 if __name__ == '__main__':
     run()

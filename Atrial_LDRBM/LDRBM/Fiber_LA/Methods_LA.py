@@ -35,6 +35,7 @@ import collections
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
+
 def smart_reader(path):
     extension = str(path).split(".")[-1]
 
@@ -63,214 +64,220 @@ def smart_reader(path):
 
     return output
 
-def vtk_thr(model,mode,points_cells,array,thr1,thr2="None"):
+
+def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
     if mode == 0:
         thresh.ThresholdByUpper(thr1)
     elif mode == 1:
         thresh.ThresholdByLower(thr1)
-    elif mode ==2:
+    elif mode == 2:
         if int(vtk_version) >= 9:
-            thresh.ThresholdBetween(thr1,thr2)
+            thresh.ThresholdBetween(thr1, thr2)
         else:
             thresh.ThresholdByUpper(thr1)
-            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+            thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
             thresh.Update()
             thr = thresh.GetOutput()
             thresh = vtk.vtkThreshold()
             thresh.SetInputData(thr)
             thresh.ThresholdByLower(thr2)
-    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_"+points_cells, array)
+    thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_" + points_cells, array)
     thresh.Update()
-    
+
     output = thresh.GetOutput()
-    
+
     return output
-        
- 
-def mark_LA_endo_elemTag(model,tag,tao_mv,tao_lpv,tao_rpv,max_phie_ab_tau_lpv,max_phie_r2_tau_lpv):
-    
+
+
+def mark_LA_endo_elemTag(model, tag, tao_mv, tao_lpv, tao_rpv, max_phie_ab_tau_lpv, max_phie_r2_tau_lpv):
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
     thresh.ThresholdByUpper(tao_mv)
     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r")
     thresh.Update()
-    
+
     MV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
-    
+
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
-    thresh.ThresholdByUpper(max_phie_r2_tau_lpv+0.01)
+    thresh.ThresholdByUpper(max_phie_r2_tau_lpv + 0.01)
     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r2")
     thresh.Update()
-    
+
     thresh = vtk.vtkThreshold()
     thresh.SetInputConnection(thresh.GetOutputPort())
-    thresh.ThresholdByLower(max_phie_ab_tau_lpv+0.01)
+    thresh.ThresholdByLower(max_phie_ab_tau_lpv + 0.01)
     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_ab")
     thresh.Update()
-    
+
     LAA_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
-    
+
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
     thresh.ThresholdByLower(tao_lpv)
     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
     thresh.Update()
-    
+
     LPV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
-    
+
     thresh = vtk.vtkThreshold()
     thresh.SetInputData(model)
     thresh.ThresholdByUpper(tao_rpv)
     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
     thresh.Update()
-    
+
     RPV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
-    
+
     meshNew = dsa.WrapDataObject(model)
     meshNew.CellData.append(tag, "elemTag")
     endo = meshNew.VTKObject
 
-def move_surf_along_normals(mesh, eps, direction):
 
+def move_surf_along_normals(mesh, eps, direction):
     extract_surf = vtk.vtkGeometryFilter()
     extract_surf.SetInputData(mesh)
     extract_surf.Update()
-    
+
     # reverse = vtk.vtkReverseSense()
     # reverse.ReverseCellsOn()
     # reverse.ReverseNormalsOn()
     # reverse.SetInputConnection(extract_surf.GetOutputPort())
     # reverse.Update()
-    
+
     # polydata = reverse.GetOutput()
     polydata = extract_surf.GetOutput()
-    
+
     normalGenerator = vtk.vtkPolyDataNormals()
     normalGenerator.SetInputData(polydata)
     normalGenerator.ComputeCellNormalsOff()
     normalGenerator.ComputePointNormalsOn()
     normalGenerator.ConsistencyOn()
     normalGenerator.AutoOrientNormalsOff()
-    normalGenerator.SplittingOff() 
+    normalGenerator.SplittingOff()
     normalGenerator.Update()
-    
+
     PointNormalArray = numpy_support.vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
     atrial_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
-    
-    atrial_points = atrial_points + eps*direction*PointNormalArray
-    
+
+    atrial_points = atrial_points + eps * direction * PointNormalArray
+
     vtkPts = vtk.vtkPoints()
     vtkPts.SetData(numpy_support.numpy_to_vtk(atrial_points))
     polydata.SetPoints(vtkPts)
-    
+
     mesh = vtk.vtkUnstructuredGrid()
     mesh.DeepCopy(polydata)
-    
+
     return mesh
-    
+
+
 def generate_bilayer(endo, epi):
-    
     extract_surf = vtk.vtkGeometryFilter()
     extract_surf.SetInputData(epi)
     extract_surf.Update()
-    
+
     reverse = vtk.vtkReverseSense()
     reverse.ReverseCellsOn()
     reverse.ReverseNormalsOn()
     reverse.SetInputConnection(extract_surf.GetOutputPort())
     reverse.Update()
-    
+
     epi = vtk.vtkUnstructuredGrid()
     epi.DeepCopy(reverse.GetOutput())
-            
+
     endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
     epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
-    
+
     tree = cKDTree(endo_pts)
     dd, ii = tree.query(epi_pts)
-    
+
     lines = vtk.vtkCellArray()
-    
+
     for i in range(len(endo_pts)):
         line = vtk.vtkLine()
-        line.GetPointIds().SetId(0,i);
-        line.GetPointIds().SetId(1,len(endo_pts)+ii[i]);
+        line.GetPointIds().SetId(0, i);
+        line.GetPointIds().SetId(1, len(endo_pts) + ii[i]);
         lines.InsertNextCell(line)
-    
-    points = np.concatenate((endo_pts, epi_pts[ii,:]), axis=0)
+
+    points = np.concatenate((endo_pts, epi_pts[ii, :]), axis=0)
     polydata = vtk.vtkUnstructuredGrid()
     vtkPts = vtk.vtkPoints()
     vtkPts.SetData(numpy_support.numpy_to_vtk(points))
     polydata.SetPoints(vtkPts)
     polydata.SetCells(3, lines)
-    
-    fibers = np.zeros((len(endo_pts),3),dtype="float32")
-    fibers[:,0] = 1
-    
-    tag = np.ones((len(endo_pts),1), dtype=int)
-    tag[:,] = 100
-    
+
+    fibers = np.zeros((len(endo_pts), 3), dtype="float32")
+    fibers[:, 0] = 1
+
+    tag = np.ones((len(endo_pts), 1), dtype=int)
+    tag[:, ] = 100
+
     meshNew = dsa.WrapDataObject(polydata)
     meshNew.CellData.append(tag, "elemTag")
     meshNew.CellData.append(fibers, "fiber")
-    fibers = np.zeros((len(endo_pts),3),dtype="float32")
-    fibers[:,1] = 1
+    fibers = np.zeros((len(endo_pts), 3), dtype="float32")
+    fibers[:, 1] = 1
     meshNew.CellData.append(fibers, "sheet")
-    
+
     appendFilter = vtk.vtkAppendFilter()
     appendFilter.AddInputData(endo)
     appendFilter.AddInputData(epi)
     appendFilter.AddInputData(meshNew.VTKObject)
     appendFilter.MergePointsOn()
     appendFilter.Update()
-    
+
     bilayer = appendFilter.GetOutput()
-    
+
     return bilayer
 
+
 def write_bilayer(bilayer, args, job):
-    
     if args.ofmt == 'vtk':
         writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_LA/LA_bilayer_with_fiber.vtk")
+        writer.SetFileName(job.ID + "/result_LA/LA_bilayer_with_fiber.vtk")
         writer.SetFileTypeToBinary()
     else:
         writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_LA/LA_bilayer_with_fiber.vtu")
+        writer.SetFileName(job.ID + "/result_LA/LA_bilayer_with_fiber.vtu")
     writer.SetInputData(bilayer)
     writer.Write()
-    
+
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
-    with open(job.ID+'/result_LA/LA_bilayer_with_fiber.pts',"w") as f:
+    with open(job.ID + '/result_LA/LA_bilayer_with_fiber.pts', "w") as f:
         f.write("{}\n".format(len(pts)))
         for i in range(len(pts)):
             f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
-    
+
     tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
-    with open(job.ID+'/result_LA/LA_bilayer_with_fiber.elem',"w") as f:
+    with open(job.ID + '/result_LA/LA_bilayer_with_fiber.elem', "w") as f:
         f.write("{}\n".format(bilayer.GetNumberOfCells()))
         for i in range(bilayer.GetNumberOfCells()):
             cell = bilayer.GetCell(i)
             if cell.GetNumberOfPoints() == 2:
                 f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_epi[i]))
             elif cell.GetNumberOfPoints() == 3:
-                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), tag_epi[i]))
+                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
+                                                  cell.GetPointIds().GetId(2), tag_epi[i]))
             elif cell.GetNumberOfPoints() == 4:
-                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), tag_epi[i]))
-    
+                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
+                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3),
+                                                     tag_epi[i]))
+
     el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
     sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
-    
-    with open(job.ID+'/result_LA/LA_bilayer_with_fiber.lon',"w") as f:
+
+    with open(job.ID + '/result_LA/LA_bilayer_with_fiber.lon', "w") as f:
         f.write("2\n")
         for i in range(len(el_epi)):
-            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2], sheet_epi[i][0], sheet_epi[i][1], sheet_epi[i][2]))
+            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
+                                                                         sheet_epi[i][0], sheet_epi[i][1],
+                                                                         sheet_epi[i][2]))
     print('Done..')
-                
+
+
 def creat_tube_around_spline(points_data, radius):
     # Creat a points set
     spline_points = vtk.vtkPoints()
@@ -413,9 +420,8 @@ def creat_tube(center1, center2, radius):
 
 
 def get_element_ids_around_path_within_radius(mesh, points_data, radius):
-    
     gl_ids = vtk.util.numpy_support.vtk_to_numpy(mesh.GetCellData().GetArray('Global_ids'))
-    
+
     locator = vtk.vtkStaticPointLocator()
     locator.SetDataSet(mesh)
     locator.BuildLocator()
@@ -433,14 +439,15 @@ def get_element_ids_around_path_within_radius(mesh, points_data, radius):
         mesh.GetPointCells(mesh_id_list.GetId(i), mesh_cell_temp_id_list)
         for j in range(mesh_cell_temp_id_list.GetNumberOfIds()):
             mesh_cell_id_list.InsertNextId(mesh_cell_temp_id_list.GetId(j))
-    
+
     ids = []
-    
+
     for i in range(mesh_cell_id_list.GetNumberOfIds()):
         index = mesh_cell_id_list.GetId(i)
         ids.append(gl_ids[index])
 
     return ids
+
 
 def assign_element_tag_around_path_within_radius(mesh, points_data, radius, tag, element_tag):
     locator = vtk.vtkStaticPointLocator()
@@ -832,24 +839,25 @@ def get_connection_point_la_and_ra(appen_point):
 
     return la_connect_point, ra_connect_point
 
+
 def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
-    
     pts1 = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPoints().GetData())
     pts2 = vtk.util.numpy_support.vtk_to_numpy(mesh2.GetPoints().GetData())
-    
+
     tree = cKDTree(pts1)
 
-    dd, ii = tree.query(pts2) # n_jobs=-1)
-    
+    dd, ii = tree.query(pts2)  # n_jobs=-1)
+
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
+            data = vtk.util.numpy_support.vtk_to_numpy(
+                mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
             if isinstance(data[0], collections.Sized):
-                data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+                data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
             else:
                 data2 = np.zeros((len(pts2),), dtype=data.dtype)
-            
+
             data2 = data[ii]
             data2 = np.where(np.isnan(data2), 10000, data2)
             # ghosts = np.zeros(meshNew.GetNumberOfPoints(), dtype=np.uint8)
@@ -860,65 +868,68 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
     else:
         data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
         if isinstance(data[0], collections.Sized):
-            data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+            data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
             data2 = np.zeros((len(pts2),), dtype=data.dtype)
-        
+
         data2 = data[ii]
         meshNew.PointData.append(data2, idat)
-    
+
     writer = vtk.vtkUnstructuredGridWriter()
-    writer.SetFileName("{}_with_data.vtk".format(mesh2_name.split('.vtk')[0]))# It can happen that the relative directory is given
+    writer.SetFileName(
+        "{}_with_data.vtk".format(mesh2_name.split('.vtk')[0]))  # It can happen that the relative directory is given
     writer.SetFileTypeToBinary()
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
     return meshNew.VTKObject
 
+
 def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
-    
     filter_cell_centers = vtk.vtkCellCenters()
     filter_cell_centers.SetInputData(mesh1)
     filter_cell_centers.Update()
     centroids1 = filter_cell_centers.GetOutput().GetPoints()
     centroids1_array = vtk.util.numpy_support.vtk_to_numpy(centroids1.GetData())
-    
+
     filter_cell_centers = vtk.vtkCellCenters()
     filter_cell_centers.SetInputData(mesh2)
     filter_cell_centers.Update()
     centroids2 = filter_cell_centers.GetOutput().GetPoints()
     pts2 = vtk.util.numpy_support.vtk_to_numpy(centroids2.GetData())
-    
+
     tree = cKDTree(centroids1_array)
 
-    dd, ii = tree.query(pts2)#, n_jobs=-1)
-    
+    dd, ii = tree.query(pts2)  # , n_jobs=-1)
+
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetCellData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetCellData().GetArray(mesh1.GetCellData().GetArrayName(i)))
+            data = vtk.util.numpy_support.vtk_to_numpy(
+                mesh1.GetCellData().GetArray(mesh1.GetCellData().GetArrayName(i)))
             if isinstance(data[0], collections.Sized):
-                data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+                data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
             else:
                 data2 = np.zeros((len(pts2),), dtype=data.dtype)
-            
+
             data2 = data[ii]
             meshNew.PointData.append(data2, mesh1.GetCellData().GetArrayName(i))
     else:
         data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetCellData().GetArray(idat))
         if isinstance(data[0], collections.Sized):
-            data2 = np.zeros((len(pts2),len(data[0])), dtype=data.dtype)
+            data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
             data2 = np.zeros((len(pts2),), dtype=data.dtype)
-        
+
         data2 = data[ii]
         meshNew.CellData.append(data2, idat)
-    
+
     # writer = vtk.vtkUnstructuredGridWriter()
     # writer.SetFileName("{}_with_data.vtk".format(mesh2_name.split('.')[0]))
     # writer.SetInputData(meshNew.VTKObject)
     # writer.Write()
-    
+
     return meshNew.VTKObject
+
 
 def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
     la_mv_surface = smart_reader('../../Generate_Boundaries/LA/result/la_mv_surface.vtk')
@@ -953,6 +964,7 @@ def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
 
     return bb_left, appendage_basis
 
+
 def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_epi):
     # Extract the LAA
     thresh = vtk.vtkThreshold()
@@ -960,40 +972,40 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     thresh.ThresholdBetween(left_atrial_appendage_epi, left_atrial_appendage_epi)
     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
     thresh.Update()
-    
+
     LAA = thresh.GetOutput()
-   
+
     min_r2_cell_LAA = np.argmin(vtk.util.numpy_support.vtk_to_numpy(LAA.GetCellData().GetArray('phie_r2')))
-    
+
     ptIds = vtk.vtkIdList()
-  
+
     LAA.GetCellPoints(min_r2_cell_LAA, ptIds)
-    #sup_appendage_basis_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
+    # sup_appendage_basis_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
     sup_appendage_basis = LAA.GetPoint(ptIds.GetId(0))
-    
+
     max_r2_cell_LAA = np.argmax(vtk.util.numpy_support.vtk_to_numpy(LAA.GetCellData().GetArray('phie_r2')))
-    
+
     ptIds = vtk.vtkIdList()
-  
+
     LAA.GetCellPoints(max_r2_cell_LAA, ptIds)
-    #bb_mv_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
+    # bb_mv_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
     bb_mv_laa = LAA.GetPoint(ptIds.GetId(0))
-    
+
     max_v_cell_LAA = np.argmax(vtk.util.numpy_support.vtk_to_numpy(LAA.GetCellData().GetArray('phie_v')))
-    
+
     ptIds = vtk.vtkIdList()
-  
+
     LAA.GetCellPoints(max_v_cell_LAA, ptIds)
-    
-    #inf_appendage_basis_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
+
+    # inf_appendage_basis_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
 
     inf_appendage_basis = LAA.GetPoint(ptIds.GetId(0))
-    
+
     # Extract the border of the LAA
     geo_filter = vtk.vtkGeometryFilter()
     geo_filter.SetInputConnection(thresh.GetOutputPort())
     geo_filter.Update()
-    
+
     boundaryEdges = vtk.vtkFeatureEdges()
     boundaryEdges.SetInputData(geo_filter.GetOutput())
     boundaryEdges.BoundaryEdgesOn()
@@ -1001,13 +1013,13 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     boundaryEdges.ManifoldEdgesOff()
     boundaryEdges.NonManifoldEdgesOff()
     boundaryEdges.Update()
-    
+
     LAA_border = boundaryEdges.GetOutput()
     LAA_pts_border = vtk.util.numpy_support.vtk_to_numpy(LAA_border.GetPoints().GetData())
     max_dist = 0
     for i in range(len(LAA_pts_border)):
-        if np.sqrt(np.sum((LAA_pts_border[i]-df["LIPV"].to_numpy())**2, axis=0)) > max_dist:
-            max_dist = np.sqrt(np.sum((LAA_pts_border[i]-df["LIPV"].to_numpy())**2, axis=0))
+        if np.sqrt(np.sum((LAA_pts_border[i] - df["LIPV"].to_numpy()) ** 2, axis=0)) > max_dist:
+            max_dist = np.sqrt(np.sum((LAA_pts_border[i] - df["LIPV"].to_numpy()) ** 2, axis=0))
             LAA_pt_far_from_LIPV = LAA_pts_border[i]
 
     # Extract the MV
@@ -1016,25 +1028,25 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     thresh.ThresholdBetween(mitral_valve_epi, mitral_valve_epi)
     thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
     thresh.Update()
-    
+
     MV = thresh.GetOutput()
     # MV_pts = vtk.util.numpy_support.vtk_to_numpy(MV.GetPoints().GetData())
-    
+
     # tree = cKDTree(LAA_pts)
     # max_dist = np.sqrt(np.sum((df["MV"].to_numpy()-df["LAA"].to_numpy())**2, axis=0))
     # dd, ii = tree.query(MV_pts, distance_upper_bound=max_dist)
-    
+
     # inf_appendage_basis_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ii[np.argmin(dd)])[0])
-    
+
     # Get the closest point to the inferior appendage base in the MV
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(MV)
     loc.BuildLocator()
-    
-    #bb_mv_id = int(MV.GetPointData().GetArray('Global_ids').GetTuple(loc.FindClosestPoint(epi.GetPoint(bb_mv_id)))[0])
+
+    # bb_mv_id = int(MV.GetPointData().GetArray('Global_ids').GetTuple(loc.FindClosestPoint(epi.GetPoint(bb_mv_id)))[0])
 
     bb_mv = MV.GetPoint(loc.FindClosestPoint(bb_mv_laa))
-    
+
     if int(vtk_version) >= 9:
         thresh = vtk.vtkThreshold()
         thresh.SetInputData(epi)
@@ -1045,7 +1057,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     else:
         thresh = vtk.vtkThreshold()
         thresh.SetInputData(epi)
-        thresh.ThresholdByLower(left_atrial_appendage_epi-1)
+        thresh.ThresholdByLower(left_atrial_appendage_epi - 1)
         thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
         thresh.Update()
 
@@ -1053,7 +1065,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
 
         thresh = vtk.vtkThreshold()
         thresh.SetInputData(epi)
-        thresh.ThresholdByUpper(left_atrial_appendage_epi+1)
+        thresh.ThresholdByUpper(left_atrial_appendage_epi + 1)
         thresh.SetInputArrayToProcess(0, 0, 0, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
         thresh.Update()
 
@@ -1065,23 +1077,24 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
         thresh.MergePointsOn()
         thresh.Update()
 
-    #inf_appendage_basis_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, inf_appendage_basis_id)
-    #sup_appendage_basis_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, sup_appendage_basis_id)
-    #bb_mv_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, bb_mv_id)
-    
+    # inf_appendage_basis_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, inf_appendage_basis_id)
+    # sup_appendage_basis_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, sup_appendage_basis_id)
+    # bb_mv_id = get_in_surf1_closest_point_in_surf2(thresh.GetOutput(), epi, bb_mv_id)
+
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(thresh.GetOutput())
-    #loc.SetDataSet(epi)
+    # loc.SetDataSet(epi)
     loc.BuildLocator()
     LAA_pt_far_from_LIPV_id = loc.FindClosestPoint(LAA_pt_far_from_LIPV)
     inf_appendage_basis_id = loc.FindClosestPoint(inf_appendage_basis)
     sup_appendage_basis_id = loc.FindClosestPoint(sup_appendage_basis)
     bb_mv_id = loc.FindClosestPoint(bb_mv)
 
-    bb_left = get_wide_bachmann_path_left(thresh.GetOutput(), inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id, LAA_pt_far_from_LIPV_id)
-    #bb_left = get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id, LAA_pt_far_from_LIPV_id)
-    #bb_left = savgol_filter(bb_left, 5, 2, mode='interp', axis =0)
-    
+    bb_left = get_wide_bachmann_path_left(thresh.GetOutput(), inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id,
+                                          LAA_pt_far_from_LIPV_id)
+    # bb_left = get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id, LAA_pt_far_from_LIPV_id)
+    # bb_left = savgol_filter(bb_left, 5, 2, mode='interp', axis =0)
+
     # new = []
     # diff = 1000
     # for n in range(len(bb_left)):
@@ -1091,31 +1104,28 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
 
     # tck, u = interpolate.splprep([new[:,0],new[:,1],new[:,2]], s=100)
     # x_knots, y_knots, z_knots = interpolate.splev(tck[0], tck)
-    
-    #u_fine = np.linspace(0,1,len(bb_left))
-    #x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
+
+    # u_fine = np.linspace(0,1,len(bb_left))
+    # x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
 
     # bb_left = np.array([x_knots, y_knots, z_knots]).T
-    #bb_left = np.array([x_fine, y_fine, z_fine]).T
-    
-    
-    
-    
-    #u_fine = np.linspace(0,1,len(bb_left))
-    #x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
-    #new_points = splev(u, tck)
-    #window_width = 1000
-    #cumsum_vec = np.cumsum(np.insert(data, 0, 0)) 
-    #ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
+    # bb_left = np.array([x_fine, y_fine, z_fine]).T
+
+    # u_fine = np.linspace(0,1,len(bb_left))
+    # x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
+    # new_points = splev(u, tck)
+    # window_width = 1000
+    # cumsum_vec = np.cumsum(np.insert(data, 0, 0))
+    # ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
 
     # pts = vtk.vtkPoints()
     # for n in range(len(bb_left)):
     #     pts.InsertNextPoint(bb_left[n])
-    
+
     # smoothingIterations = 15
     # passBand = 0.001
     # featureAngle = 120.0
-    
+
     # smoother = vtk.vtkWindowedSincPolyDataFilter()
     # smoother.SetInputConnection(discrete->GetOutputPort())
     # smoother.SetNumberOfIterations(smoothingIterations)
@@ -1126,7 +1136,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     # smoother.NonManifoldSmoothingOn()
     # smoother.NormalizeCoordinatesOn()
     # smoother.Update()
-  
+
     # Smooth the path fitting a spline?
     # new = []
     # diff = 1000
@@ -1145,24 +1155,24 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
 
     # # mesh.VPos = final
     # bb_left = np.array(new)
-    
-    return bb_left, thresh.GetOutput().GetPoint(inf_appendage_basis_id), thresh.GetOutput().GetPoint(sup_appendage_basis_id), thresh.GetOutput().GetPoint(LAA_pt_far_from_LIPV_id)
-    #return bb_left, epi.GetPoint(inf_appendage_basis_id), epi.GetPoint(sup_appendage_basis_id), epi.GetPoint(LAA_pt_far_from_LIPV_id)
+
+    return bb_left, thresh.GetOutput().GetPoint(inf_appendage_basis_id), thresh.GetOutput().GetPoint(
+        sup_appendage_basis_id), thresh.GetOutput().GetPoint(LAA_pt_far_from_LIPV_id)
+    # return bb_left, epi.GetPoint(inf_appendage_basis_id), epi.GetPoint(sup_appendage_basis_id), epi.GetPoint(LAA_pt_far_from_LIPV_id)
+
 
 def get_in_surf1_closest_point_in_surf2(surf1, surf2, pt_id_in_surf2):
-    
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(surf1)
     loc.BuildLocator()
     return loc.FindClosestPoint(surf2.GetPoint(pt_id_in_surf2))
-    
+
 
 def get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id, LAA_pt_far_from_LIPV_id):
-    
     geo_filter = vtk.vtkGeometryFilter()
     geo_filter.SetInputData(epi)
     geo_filter.Update()
-    
+
     bb_1_points = dijkstra_path(geo_filter.GetOutput(), sup_appendage_basis_id, LAA_pt_far_from_LIPV_id)
     bb_2_points = dijkstra_path(geo_filter.GetOutput(), LAA_pt_far_from_LIPV_id, inf_appendage_basis_id)
     bb_3_points = dijkstra_path(geo_filter.GetOutput(), inf_appendage_basis_id, bb_mv_id)
@@ -1172,6 +1182,7 @@ def get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis
     # bb_left = dijkstra_path(geo_filter.GetOutput(), sup_appendage_basis_id, bb_mv_id)
 
     return bb_left
+
 
 def creat_center_line(start_end_point):
     spline_points = vtk.vtkPoints()
@@ -1196,22 +1207,23 @@ def creat_center_line(start_end_point):
 def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
     meshNew = dsa.WrapDataObject(tube.GetOutput())
     writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(job.ID+"/bridges/" + str(name) + "_tube.vtk")
+    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_tube.vtk")
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
     meshNew = dsa.WrapDataObject(sphere_1.GetOutput())
     writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(job.ID+"/bridges/" + str(name) + "_sphere_1.vtk")
+    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_1.vtk")
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
 
     meshNew = dsa.WrapDataObject(sphere_2.GetOutput())
     writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(job.ID+"/bridges/" + str(name) + "_sphere_2.vtk")
+    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_2.vtk")
     writer.SetInputData(meshNew.VTKObject)
     writer.Write()
-    
+
+
 def find_tau(model, ub, lb, low_up, scalar):
     k = 1
     while ub - lb > 0.01:
@@ -1229,11 +1241,11 @@ def find_tau(model, ub, lb, low_up, scalar):
         connect.SetExtractionModeToAllRegions()
         connect.Update()
         num = connect.GetNumberOfExtractedRegions()
-        
+
         print("Iteration: ", k)
         print("Value of tao: ", (ub + lb) / 2)
-        print("Number of regions: ", num,  "\n")
-        
+        print("Number of regions: ", num, "\n")
+
         if low_up == "low":
             if num == 1:
                 ub = (ub + lb) / 2
@@ -1246,24 +1258,25 @@ def find_tau(model, ub, lb, low_up, scalar):
                 ub = (ub + lb) / 2
 
         k += 1
-    
+
     if low_up == "low":
         return lb
     else:
         return ub
 
+
 def distinguish_PVs(connect, PVs, df, name1, name2):
     num = connect.GetNumberOfExtractedRegions()
     connect.SetExtractionModeToSpecifiedRegions()
-    
+
     centroid1 = df[name1].to_numpy()
     centroid2 = df[name2].to_numpy()
-    
+
     for i in range(num):
         connect.AddSpecifiedRegion(i)
         connect.Update()
         single_PV = connect.GetOutput()
-        
+
         # Clean unused points
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputData(single_PV)
@@ -1274,81 +1287,81 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
         cln.SetInputData(surface)
         cln.Update()
         surface = cln.GetOutput()
-        
+
         if name1.startswith("L"):
             phie_v = np.max(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
         elif name1.startswith("R"):
             phie_v = np.min(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
 
-        if name1.startswith("L") and phie_v>0.04:# 0.025
+        if name1.startswith("L") and phie_v > 0.04:  # 0.025
             found, val = optimize_shape_PV(surface, 10, 0)
             if found:
-                single_PV = vtk_thr(single_PV, 1,"CELLS", "phie_v", val)
+                single_PV = vtk_thr(single_PV, 1, "CELLS", "phie_v", val)
                 geo_filter = vtk.vtkGeometryFilter()
                 geo_filter.SetInputData(single_PV)
                 geo_filter.Update()
                 surface = geo_filter.GetOutput()
-        elif name1.startswith("R") and phie_v<0.9: # 0.975
+        elif name1.startswith("R") and phie_v < 0.9:  # 0.975
             found, val = optimize_shape_PV(surface, 10, 1)
             if found:
-                single_PV = vtk_thr(single_PV, 0,"CELLS", "phie_v", val)
+                single_PV = vtk_thr(single_PV, 0, "CELLS", "phie_v", val)
                 geo_filter = vtk.vtkGeometryFilter()
                 geo_filter.SetInputData(single_PV)
                 geo_filter.Update()
                 surface = geo_filter.GetOutput()
-        
+
         centerOfMassFilter = vtk.vtkCenterOfMass()
         centerOfMassFilter.SetInputData(surface)
         centerOfMassFilter.SetUseScalarsAsWeights(False)
         centerOfMassFilter.Update()
-        
+
         c_mass = centerOfMassFilter.GetCenter()
-        
-        centroid1_d = np.sqrt(np.sum((np.array(centroid1) - np.array(c_mass))**2, axis=0))
-        centroid2_d = np.sqrt(np.sum((np.array(centroid2) - np.array(c_mass))**2, axis=0))
-        
+
+        centroid1_d = np.sqrt(np.sum((np.array(centroid1) - np.array(c_mass)) ** 2, axis=0))
+        centroid2_d = np.sqrt(np.sum((np.array(centroid2) - np.array(c_mass)) ** 2, axis=0))
+
         if centroid1_d < centroid2_d:
             PVs[name1] = vtk.util.numpy_support.vtk_to_numpy(single_PV.GetCellData().GetArray('Global_ids'))
         else:
             PVs[name2] = vtk.util.numpy_support.vtk_to_numpy(single_PV.GetCellData().GetArray('Global_ids'))
-        
+
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
- 
+
     return PVs
 
+
 def optimize_shape_PV(surface, num, bound):
-    
     if bound == 0:
         phie_v = np.max(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
     else:
         phie_v = np.min(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
-    
+
     arr = np.linspace(bound, phie_v, num)
 
     c_mass_l = []
     found = 0
-    for l in range(num-1):
+    for l in range(num - 1):
         if bound == 0:
-            out = vtk_thr(surface, 2,"CELLS", "phie_v", arr[l], arr[l+1])
+            out = vtk_thr(surface, 2, "CELLS", "phie_v", arr[l], arr[l + 1])
         else:
-            out = vtk_thr(surface, 2,"CELLS", "phie_v", arr[l+1], arr[l])
+            out = vtk_thr(surface, 2, "CELLS", "phie_v", arr[l + 1], arr[l])
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputData(out)
         geo_filter.Update()
-        
+
         centerOfMassFilter = vtk.vtkCenterOfMass()
         centerOfMassFilter.SetInputData(geo_filter.GetOutput())
         centerOfMassFilter.SetUseScalarsAsWeights(False)
         centerOfMassFilter.Update()
-        
+
         c_mass_l.append(centerOfMassFilter.GetCenter())
 
-    v1 = np.array(c_mass_l[0])-np.array(c_mass_l[1])
-    for l in range(1,num-2):
-        v2 = np.array(c_mass_l[l])-np.array(c_mass_l[l+1])
-        if 1-cosine(v1, v2) < 0:
+    v1 = np.array(c_mass_l[0]) - np.array(c_mass_l[1])
+    for l in range(1, num - 2):
+        v2 = np.array(c_mass_l[l]) - np.array(c_mass_l[l + 1])
+        if 1 - cosine(v1, v2) < 0:
             found = 1
             break
-    
-    return found, arr[l-1]
+
+    return found, arr[l - 1]

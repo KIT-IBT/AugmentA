@@ -27,16 +27,18 @@ under the License.
 import os
 import subprocess
 
+
 def generate_mesh(path, la_mesh_scale=1):
     # # generate mesh in vtk form
 
     subprocess.run(["meshtool",
                     "generate",
                     "mesh",
-                    #"-scale="  + str(la_mesh_scale),
-                    "-surf=" + str(path)+'.obj',
+                    # "-scale="  + str(la_mesh_scale),
+                    "-surf=" + str(path) + '.obj',
                     "-ofmt=vtk",
-                    "-outmsh="+ str(path)+'_vol'])
+                    "-outmsh=" + str(path) + '_vol'])
+
 
 if __name__ == '__main__':
     generate_mesh()

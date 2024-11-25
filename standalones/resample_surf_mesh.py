@@ -34,11 +34,12 @@ from vtk.util import numpy_support
 import os
 import numpy as np
 import pandas as pd
+
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
-def parser():
 
+def parser():
     parser = argparse.ArgumentParser(description='Generate boundaries.')
     parser.add_argument('--mesh',
                         type=str,
@@ -62,6 +63,7 @@ def parser():
                         help='set to 1 to predict location of the appendage apex using max curvature, else pick manually')
 
     return parser
+
 
 def find_elements_around_path_within_radius(mesh, points_data, radius):
     locator = vtk.vtkStaticPointLocator()
@@ -88,25 +90,25 @@ def find_elements_around_path_within_radius(mesh, points_data, radius):
 
     return id_set
 
-def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1, atrium='LA'):
 
+def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1,
+                       atrium='LA'):
     mesh_data = dict()
 
     ms = pymeshlab.MeshSet()
 
     ms.load_new_mesh('{}.obj'.format(meshname))
-    #ms.apply_filter('turn_into_a_pure_triangular_mesh')  # if polygonal mesh
-    #ms.save_current_mesh('{}.obj'.format(meshname))
+    # ms.apply_filter('turn_into_a_pure_triangular_mesh')  # if polygonal mesh
+    # ms.save_current_mesh('{}.obj'.format(meshname))
 
     ms.select_self_intersecting_faces()
 
     m = ms.current_mesh()
 
-    if apex_id>-1:
-        apex = m.vertex_matrix()[apex_id,:]
+    if apex_id > -1:
+        apex = m.vertex_matrix()[apex_id, :]
 
     self_intersecting_faces = m.selected_face_number()
-
 
     if self_intersecting_faces:
         reader = vtk.vtkOBJReader()
@@ -125,11 +127,11 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         # Clean the mesh from holes and self intersecting triangles
         meshin = pv.read('{}.obj'.format(meshname))
-        meshfix = pymeshfix.MeshFix(meshin) # Be careful with biatrial geometries as it might delete one chamber
+        meshfix = pymeshfix.MeshFix(meshin)  # Be careful with biatrial geometries as it might delete one chamber
         meshfix.repair()
         vol = meshfix.mesh.volume
-        
-        pv.save_meshio('{}_meshfix.obj'.format(meshname),meshfix.mesh, "obj")
+
+        pv.save_meshio('{}_meshfix.obj'.format(meshname), meshfix.mesh, "obj")
 
         reader = vtk.vtkOBJReader()
         reader.SetFileName('{}_meshfix.obj'.format(meshname))
@@ -137,12 +139,12 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         Mass = vtk.vtkMassProperties()
         Mass.SetInputData(reader.GetOutput())
-        Mass.Update() 
+        Mass.Update()
 
         print("Volume = ", Mass.GetVolume())
         print("Surface = ", Mass.GetSurfaceArea())
 
-        bd_ids = find_elements_around_path_within_radius(reader.GetOutput(), boundary_pts, 0.5*scale)
+        bd_ids = find_elements_around_path_within_radius(reader.GetOutput(), boundary_pts, 0.5 * scale)
 
         tot_cells = set(list(range(reader.GetOutput().GetNumberOfCells())))
         cells_no_bd = tot_cells - bd_ids
@@ -153,12 +155,12 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         extract.SetInputData(reader.GetOutput())
         extract.SetCellList(cell_ids_no_bd)
         extract.Update()
-        
+
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputData(extract.GetOutput())
         geo_filter.Update()
         earth = geo_filter.GetOutput()
-        
+
         cleaner = vtk.vtkCleanPolyData()
         cleaner.SetInputData(earth)
         cleaner.Update()
@@ -177,7 +179,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         writer.SetFileName('{}_cleaned.obj'.format(meshname))
         writer.Write()
 
-        mesh_data["vol"]=[vol]
+        mesh_data["vol"] = [vol]
 
         ms = pymeshlab.MeshSet()
 
@@ -189,7 +191,6 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         ms.load_new_mesh('{}.obj'.format(meshname))
 
-
     # compute the geometric measures of the current mesh
     # and save the results in the out_dict dictionary
     out_dict = ms.compute_geometric_measures()
@@ -197,59 +198,59 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     # get the average edge length from the dictionary
     avg_edge_length = out_dict['avg_edge_length']
 
-    tgt_edge_length = target_mesh_resolution*scale
+    tgt_edge_length = target_mesh_resolution * scale
 
-    loc_tgt_edge_length = target_mesh_resolution*scale
+    loc_tgt_edge_length = target_mesh_resolution * scale
     it = 1
-    print("Current resolution: {} mm".format(avg_edge_length/scale))
-    print("Target resolution: {} mm".format(tgt_edge_length/scale))
-    while avg_edge_length > tgt_edge_length*1.05 or avg_edge_length < tgt_edge_length*0.95 or it < 3 :
-        
+    print("Current resolution: {} mm".format(avg_edge_length / scale))
+    print("Target resolution: {} mm".format(tgt_edge_length / scale))
+    while avg_edge_length > tgt_edge_length * 1.05 or avg_edge_length < tgt_edge_length * 0.95 or it < 3:
+
         ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=loc_tgt_edge_length)
         if it == 1:
             ms.laplacian_smooth()
         out_dict = ms.compute_geometric_measures()
 
         avg_edge_length = out_dict['avg_edge_length']
-        print("Current resolution: {} mm".format(avg_edge_length/scale))
-        if avg_edge_length > tgt_edge_length*1.05:
-            loc_tgt_edge_length = tgt_edge_length*0.95
-            print("New target resolution: {} mm".format(loc_tgt_edge_length/scale))
-        elif avg_edge_length < tgt_edge_length*0.95:
-            loc_tgt_edge_length = tgt_edge_length*1.05
-            print("New target resolution: {} mm".format(loc_tgt_edge_length/scale))
+        print("Current resolution: {} mm".format(avg_edge_length / scale))
+        if avg_edge_length > tgt_edge_length * 1.05:
+            loc_tgt_edge_length = tgt_edge_length * 0.95
+            print("New target resolution: {} mm".format(loc_tgt_edge_length / scale))
+        elif avg_edge_length < tgt_edge_length * 0.95:
+            loc_tgt_edge_length = tgt_edge_length * 1.05
+            print("New target resolution: {} mm".format(loc_tgt_edge_length / scale))
         else:
             break
         it += 1
 
-
     mesh_data["avg_edge_length"] = [out_dict['avg_edge_length']]
-    mesh_data["surf"]=[out_dict['surface_area']]
+    mesh_data["surf"] = [out_dict['surface_area']]
 
     # Better to save as .ply
-    ms.save_current_mesh('{}_res.ply'.format(meshname), save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
+    ms.save_current_mesh('{}_res.ply'.format(meshname), save_vertex_color=False, save_vertex_normal=False,
+                         save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
     meshin = pv.read('{}_res.ply'.format(meshname))
 
-    if find_apex_with_curv and apex_id==-1:
+    if find_apex_with_curv and apex_id == -1:
         if self_intersecting_faces:
-            os.system("meshtool query curvature -msh={}_cleaned.obj -size={}".format(meshname, size*scale))
+            os.system("meshtool query curvature -msh={}_cleaned.obj -size={}".format(meshname, size * scale))
             curv = np.loadtxt('{}_cleaned.curv.dat'.format(meshname))
             mesh_curv = pv.read('{}_cleaned.obj'.format(meshname))
         else:
-            os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, size*scale))
+            os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, size * scale))
             curv = np.loadtxt('{}.curv.dat'.format(meshname))
             mesh_curv = pv.read('{}.obj'.format(meshname))
 
-        apex = mesh_curv.points[np.argmax(curv),:]
+        apex = mesh_curv.points[np.argmax(curv), :]
 
         point_cloud = pv.PolyData(apex)
 
         p = pv.Plotter(notebook=False)
 
-        p.add_mesh(meshin,color='r')
-        p.add_mesh(point_cloud, color='w', point_size=30.*scale, render_points_as_spheres=True)
+        p.add_mesh(meshin, color='r')
+        p.add_mesh(point_cloud, color='w', point_size=30. * scale, render_points_as_spheres=True)
         p.enable_point_picking(meshin, use_mesh=True)
-        p.add_text('Select the appendage apex and close the window',position='lower_left')
+        p.add_text('Select the appendage apex and close the window', position='lower_left')
 
         p.show()
 
@@ -257,30 +258,30 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
             print("Please pick a point as apex")
         else:
             apex = p.picked_point
-            print("Apex coordinates: ",apex)
+            print("Apex coordinates: ", apex)
 
-    elif find_apex_with_curv==0 and apex_id==-1:
+    elif find_apex_with_curv == 0 and apex_id == -1:
 
         p = pv.Plotter(notebook=False)
 
-        p.add_mesh(meshin,color='r')
+        p.add_mesh(meshin, color='r')
         p.enable_point_picking(meshin, use_mesh=True)
-        p.add_text('Select the appendage apex and close the window',position='lower_left') # Select the LAA first
+        p.add_text('Select the appendage apex and close the window', position='lower_left')  # Select the LAA first
 
         p.show()
         if p.picked_point is None:
             print("Please pick a point as apex")
         else:
             apex = p.picked_point
-            print("Apex coordinates: ",apex)
+            print("Apex coordinates: ", apex)
 
     tree = cKDTree(meshin.points.astype(np.double))
     dist, apex_id = tree.query(apex)
 
     if atrium == 'LA_RA':
-        mesh_data["LAA_id"] = [apex_id] # change accordingly
+        mesh_data["LAA_id"] = [apex_id]  # change accordingly
     else:
-        mesh_data["{}A_id".format(atrium)] = [apex_id] # change accordingly
+        mesh_data["{}A_id".format(atrium)] = [apex_id]  # change accordingly
 
     if atrium == 'LA_RA':
         atrium = 'RA'
@@ -312,18 +313,17 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         print("Volume = ", Mass.GetVolume())
         print("Surface = ", Mass.GetSurfaceArea())
-        mesh_data["vol_bi"] = Mass.GetVolume() # Biatrial volume
-
-
+        mesh_data["vol_bi"] = Mass.GetVolume()  # Biatrial volume
 
     fname = '{}_res_mesh_data.csv'.format(meshname)
     df = pd.DataFrame(mesh_data)
     df.to_csv(fname, float_format="%.2f", index=False)
 
-def run():
 
+def run():
     args = parser().parse_args()
     resample_surf_mesh(args.mesh, target_mesh_resolution, find_apex_with_curv, scale, size)
+
 
 if __name__ == '__main__':
     run()
