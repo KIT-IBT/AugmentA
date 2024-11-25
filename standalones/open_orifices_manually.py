@@ -35,6 +35,8 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from Atrial_LDRBM.Generate_Boundaries import extract_rings
+from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 
 pv.set_plot_theme('dark')
@@ -161,23 +163,12 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
 
     model = extract_largest_region(mesh)
 
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName(f"{full_path}/{atrium}_cutted.vtk")
-    writer.SetInputData(model)
-    writer.Write()
+    vtk_polydata_writer(f"{full_path}/{atrium}_cutted.vtk", model)
 
-    p = pv.Plotter(notebook=False)
     mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
-    p.add_mesh(mesh_from_vtk, 'r')
-    p.add_text('Select the atrial appendage apex', position='lower_left')
-    p.enable_point_picking(meshfix.mesh, use_picker=True)
 
-    p.show()
+    apex = pick_point(mesh_from_vtk, "atrial appendage apex")
 
-    if p.picked_point is not None:
-        apex = p.picked_point
-
-    p.close()
     model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(model)
