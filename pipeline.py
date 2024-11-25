@@ -266,7 +266,7 @@ def AugmentA(args):
             #     p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
             #
             # p.add_mesh(meshin,color='r')
-            # p.enable_point_picking(meshin, use_mesh=True)
+            # p.enable_point_picking(meshin, use_picker=True)
             # p.add_text('Select the appendage apex and close the window',position='lower_left')
             #
             # p.show()

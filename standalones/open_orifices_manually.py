@@ -25,6 +25,7 @@ specific language governing permissions and limitations
 under the License.  
 """
 import argparse
+import collections
 
 import numpy as np
 import pymeshfix
@@ -126,7 +127,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
             p.add_mesh(meshfix.mesh, 'r')
             p.add_text(f'Select the center of the {r} and close the window to cut, otherwise just close',
                        position='lower_left')
-            p.enable_point_picking(meshfix.mesh, use_mesh=True)
+            p.enable_point_picking(meshfix.mesh, use_picker=True)
             p.show()
 
             picked_pt = p.picked_point
@@ -169,7 +170,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
     mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
     p.add_mesh(mesh_from_vtk, 'r')
     p.add_text('Select the atrial appendage apex', position='lower_left')
-    p.enable_point_picking(meshfix.mesh, use_mesh=True)
+    p.enable_point_picking(meshfix.mesh, use_picker=True)
 
     p.show()
 
@@ -303,7 +304,7 @@ def point_array_mapper(mesh1, mesh2, idat):
 
     tree = cKDTree(pts1)
 
-    dd, ii = tree.query(pts2, n_jobs=-1)
+    dd, ii = tree.query(pts2, workers=-1)
 
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":

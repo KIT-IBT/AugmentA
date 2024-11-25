@@ -249,7 +249,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         p.add_mesh(meshin, color='r')
         p.add_mesh(point_cloud, color='w', point_size=30. * scale, render_points_as_spheres=True)
-        p.enable_point_picking(meshin, use_mesh=True)
+        p.enable_point_picking(meshin, use_picker=True)
         p.add_text('Select the appendage apex and close the window', position='lower_left')
 
         p.show()
@@ -265,7 +265,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         p = pv.Plotter(notebook=False)
 
         p.add_mesh(meshin, color='r')
-        p.enable_point_picking(meshin, use_mesh=True)
+        p.enable_point_picking(meshin, use_picker=True)
         p.add_text('Select the appendage apex and close the window', position='lower_left')  # Select the LAA first
 
         p.show()
@@ -288,7 +288,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         p = pv.Plotter(notebook=False)
 
         p.add_mesh(meshin, color='r')
-        p.enable_point_picking(meshin, use_mesh=True)
+        p.enable_point_picking(meshin, use_picker=True)
         p.add_text('Select the RA appendage apex and close the window', position='lower_left')
 
         p.show()

@@ -301,7 +301,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         p.add_mesh(meshfix.mesh, 'r')
         p.add_text('Select the appendage apex and close the window', position='lower_left')
         p.add_mesh(cc, color='w', point_size=30., render_points_as_spheres=True)
-        p.enable_point_picking(meshfix.mesh, use_mesh=True)
+        p.enable_point_picking(meshfix.mesh, use_picker=True)
 
         p.show()
 
@@ -322,7 +322,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_clean.vtk")
         p.add_mesh(mesh_from_vtk, 'r')
         p.add_text('Select the transeptal punture and close the window', position='lower_left')
-        p.enable_point_picking(meshfix.mesh, use_mesh=True)
+        p.enable_point_picking(meshfix.mesh, use_picker=True)
 
         p.show()
 
@@ -474,7 +474,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
             p.add_mesh(mesh_from_vtk, 'r')
             p.add_mesh(point_cloud, color='w', point_size=30., render_points_as_spheres=True)
-            p.enable_point_picking(meshfix.mesh, use_mesh=True)
+            p.enable_point_picking(meshfix.mesh, use_picker=True)
             p.add_text('Select the appendage apex and close the window', position='lower_left')
             p.show()
 
@@ -485,7 +485,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             p = pv.Plotter(notebook=False)
             mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
             p.add_mesh(mesh_from_vtk, 'r')
-            p.enable_point_picking(meshfix.mesh, use_mesh=True)
+            p.enable_point_picking(meshfix.mesh, use_picker=True)
             p.add_text('Select the appendage apex and close the window', position='lower_left')
             p.show()
 
