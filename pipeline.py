@@ -24,6 +24,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 
 EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
@@ -102,10 +103,7 @@ def AugmentA(args):
                 mesh_data = dict()
 
                 # Make sure that the mesh is a Polydata
-                geo_filter = vtk.vtkGeometryFilter()
-                geo_filter.SetInputData(smart_reader(args.mesh))
-                geo_filter.Update()
-                polydata = geo_filter.GetOutput()
+                polydata = apply_vtk_geom_filter(smart_reader(args.mesh))
 
                 mesh_from_vtk = pv.PolyData(polydata)
                 p = pv.Plotter(notebook=False)

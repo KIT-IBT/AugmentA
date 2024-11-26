@@ -37,6 +37,7 @@ import transformations as tf
 import argparse
 
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 
 
 def parser():
@@ -169,13 +170,7 @@ def vtkreader(meshname):
 
     reader.SetFileName(f'{meshname}.vtk')
     reader.Update()
-
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputConnection(reader.GetOutputPort())
-    geo_filter.Update()
-
-    polydata = geo_filter.GetOutput()
-    return polydata
+    return apply_vtk_geom_filter(reader.GetOutputPort(), True)
 
 
 if __name__ == '__main__':

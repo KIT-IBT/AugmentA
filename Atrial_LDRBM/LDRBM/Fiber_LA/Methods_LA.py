@@ -37,7 +37,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
@@ -566,7 +566,6 @@ def extract_largest_region(mesh):
 
     surface = apply_vtk_geom_filter(surface)
 
-
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
     cln.Update()
@@ -677,9 +676,7 @@ def get_connection_point_la_and_ra(appen_point):
     # ra
     la_epi_surface = apply_vtk_geom_filter(la_epi_surface)
 
-
     ra_epi_surface = apply_vtk_geom_filter(ra_epi_surface)
-
 
     loc_la_epi = vtk.vtkPointLocator()
     loc_la_epi.SetDataSet(la_epi_surface)
@@ -847,12 +844,9 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     inf_appendage_basis = LAA.GetPoint(ptIds.GetId(0))
 
     # Extract the border of the LAA
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputConnection(thresh.GetOutputPort())
-    geo_filter.Update()
 
     boundaryEdges = vtk.vtkFeatureEdges()
-    boundaryEdges.SetInputData(geo_filter.GetOutput())
+    boundaryEdges.SetInputData(apply_vtk_geom_filter(thresh.GetOutputPort(), True))
     boundaryEdges.BoundaryEdgesOn()
     boundaryEdges.FeatureEdgesOff()
     boundaryEdges.ManifoldEdgesOff()
@@ -1002,7 +996,6 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
         # Clean unused points
         surface = apply_vtk_geom_filter(single_PV)
 
-
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
         cln.Update()
@@ -1024,7 +1017,6 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
             if found:
                 single_PV = vtk_thr(single_PV, 0, "CELLS", "phie_v", val)
                 surface = apply_vtk_geom_filter(single_PV)
-
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
         centerOfMassFilter.SetInputData(surface)

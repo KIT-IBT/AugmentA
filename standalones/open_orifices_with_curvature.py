@@ -42,7 +42,7 @@ from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -331,12 +331,12 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                     extract.SetCellList(model_new_el)
                     extract.Update()
 
-                    geo_filter = vtk.vtkGeometryFilter()
-                    geo_filter.SetInputConnection(extract.GetOutputPort())
-                    geo_filter.Update()
+                    geo_port, _geo_filter = get_vtk_geom_filter_port(extract.GetOutputPort(), True)
+
+
 
                     cleaner = vtk.vtkCleanPolyData()
-                    cleaner.SetInputConnection(geo_filter.GetOutputPort())
+                    cleaner.SetInputConnection(geo_port)
                     cleaner.Update()
 
                     loc_low_V = cleaner.GetOutput()  # local low voltage area

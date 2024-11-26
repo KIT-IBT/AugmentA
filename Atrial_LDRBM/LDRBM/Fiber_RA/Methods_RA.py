@@ -35,7 +35,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -64,7 +64,6 @@ def downsample_path(points_data, step):
 def move_surf_along_normals(mesh, eps, direction):
     polydata = apply_vtk_geom_filter(mesh)
 
-
     normalGenerator = vtk.vtkPolyDataNormals()
     normalGenerator.SetInputData(polydata)
     normalGenerator.ComputeCellNormalsOff()
@@ -89,14 +88,12 @@ def move_surf_along_normals(mesh, eps, direction):
 
 
 def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
-    extract_surf = vtk.vtkGeometryFilter()
-    extract_surf.SetInputData(endo)
-    extract_surf.Update()
+    geo_port, _geo_filter=get_vtk_geom_filter_port(endo)
 
     reverse = vtk.vtkReverseSense()
     reverse.ReverseCellsOn()
     reverse.ReverseNormalsOn()
-    reverse.SetInputConnection(extract_surf.GetOutputPort())
+    reverse.SetInputConnection(geo_port)
     reverse.Update()
 
     endo = vtk.vtkUnstructuredGrid()
@@ -203,7 +200,6 @@ def generate_sheet_dir(args, model, job):
     extract the surface
     '''
     surface = apply_vtk_geom_filter(model)
-
 
     cleaner = vtk.vtkCleanPolyData()
     cleaner.SetInputData(surface)
@@ -732,7 +728,6 @@ def extract_largest_region(mesh):
 
     surface = apply_vtk_geom_filter(surface)
 
-
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
     cln.Update()
@@ -837,9 +832,7 @@ def get_connection_point_la_and_ra_surface(appen_point, la_mv_surface, la_rpv_in
     # ra
     la_epi_surface = apply_vtk_geom_filter(la_epi_surface)
 
-
     ra_epi_surface = apply_vtk_geom_filter(ra_epi_surface)
-
 
     loc_la_epi = vtk.vtkPointLocator()
     loc_la_epi.SetDataSet(la_epi_surface)
@@ -896,9 +889,7 @@ def get_connection_point_la_and_ra(appen_point):
     # ra
     la_epi_surface = apply_vtk_geom_filter(la_epi_surface)
 
-
     ra_epi_surface = apply_vtk_geom_filter(ra_epi_surface)
-
 
     loc_la_epi = vtk.vtkPointLocator()
     loc_la_epi.SetDataSet(la_epi_surface)

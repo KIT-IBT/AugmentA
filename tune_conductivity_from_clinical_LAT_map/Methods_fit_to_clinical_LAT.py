@@ -35,7 +35,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -90,11 +90,7 @@ def low_vol_LAT(args, path):
         vtk_xml_unstructured_grid_writer(f'{debug_dir}/low_vol.vtu', low_vol)
     # Endo
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(model)
-    geo_filter.Update()
-
-    endo = vtk_thr(geo_filter.GetOutput(), 1, "CELLS", "elemTag", 10)
+    endo = vtk_thr(apply_vtk_geom_filter(model), 1, "CELLS", "elemTag", 10)
 
     if args.debug:
         vtk_xml_unstructured_grid_writer(f'{debug_dir}/endo.vtu', endo)
@@ -232,12 +228,12 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
             extract.SetCellList(model_new_el)
             extract.Update()
 
-            geo_filter = vtk.vtkGeometryFilter()
-            geo_filter.SetInputConnection(extract.GetOutputPort())
-            geo_filter.Update()
+            geo_port, _geo_filter = get_vtk_geom_filter_port(extract.GetOutputPort(), True)
+
+
 
             cleaner = vtk.vtkCleanPolyData()
-            cleaner.SetInputConnection(geo_filter.GetOutputPort())
+            cleaner.SetInputConnection(geo_port)
             cleaner.Update()
 
             # Mesh of all elements which are not belonging to the clean band
@@ -261,12 +257,12 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
                 connect.AddSpecifiedRegion(n)
                 connect.Update()
 
-                geo_filter = vtk.vtkGeometryFilter()
-                geo_filter.SetInputConnection(connect.GetOutputPort())
-                geo_filter.Update()
+                geo_port, _geo_filter = get_vtk_geom_filter_port(connect.GetOutputPort(), True)
+
+
                 # Clean unused points
                 cln = vtk.vtkCleanPolyData()
-                cln.SetInputConnection(geo_filter.GetOutputPort())
+                cln.SetInputConnection(geo_port)
                 cln.Update()
                 surface = cln.GetOutput()
 
@@ -320,12 +316,12 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         connect.AddSpecifiedRegion(n)
         connect.Update()
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputConnection(connect.GetOutputPort())
-        geo_filter.Update()
+        geo_port, _geo_filter = get_vtk_geom_filter_port(connect.GetOutputPort(), True)
+
+
         # Clean unused points
         cln = vtk.vtkCleanPolyData()
-        cln.SetInputConnection(geo_filter.GetOutputPort())
+        cln.SetInputConnection(geo_port)
         cln.Update()
         surface = cln.GetOutput()
 
