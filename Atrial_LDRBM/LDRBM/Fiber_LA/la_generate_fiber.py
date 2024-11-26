@@ -473,11 +473,7 @@ def la_generate_fiber(model, args, job):
         epi_surf = vtk_thr(surf, 0, "CELLS", "phie_phi", 0.5)
         epi_surf_ids = vtk_to_numpy(epi_surf.GetCellData().GetArray('Global_ids'))
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(epi_surf)
-        geo_filter.Update()
-
-        epi_surf = geo_filter.GetOutput()
+        epi_surf = apply_vtk_geom_filter(epi_surf)
 
     if args.mesh_type == "bilayer":
         bb_left, LAA_basis_inf, LAA_basis_sup, LAA_far_from_LIPV = Method.compute_wide_BB_path_left(epi, df,

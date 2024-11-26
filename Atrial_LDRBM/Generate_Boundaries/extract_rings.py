@@ -182,8 +182,6 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         thr.Update()
         geo_port, _geo_filter = get_vtk_geom_filter_port(thr.GetOutputPort(), True)
 
-
-
         idFilter = vtk.vtkIdFilter()
         idFilter.SetInputConnection(geo_port)
         if int(vtk_version) >= 9:
@@ -308,7 +306,6 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
 
         # Clean unused points
         surface = apply_vtk_geom_filter(surface)
-
 
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
@@ -560,10 +557,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     meshExtractFilter.SetImplicitFunction(plane)
     meshExtractFilter.Update()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(meshExtractFilter.GetOutput())
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(meshExtractFilter.GetOutput())
 
     """
     here we will extract the feature edge 
@@ -693,16 +687,12 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
 
     surface = apply_vtk_geom_filter(model)
 
-
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(surface)
     meshExtractFilter.SetImplicitFunction(plane)
     meshExtractFilter.Update()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(meshExtractFilter.GetOutput())
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(meshExtractFilter.GetOutput())
 
     if debug:
         vtkWrite(surface, outdir + '/cutted_RA.vtk')
@@ -733,7 +723,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
 
     plane = initialize_plane(norm_1[0], tv_center)
 
-    plane2=initialize_plane(norm_2[0], tv_center)
+    plane2 = initialize_plane(norm_2[0], tv_center)
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(tv)
@@ -746,10 +736,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     meshExtractFilter2.SetImplicitFunction(plane2)
     meshExtractFilter2.Update()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(meshExtractFilter.GetOutput())
-    geo_filter.Update()
-    tv_f = geo_filter.GetOutput()
+    tv_f = apply_vtk_geom_filter(meshExtractFilter.GetOutput())
 
     tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_F.vtx'
@@ -760,10 +747,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
         f.write(f'{i}\n')
     f.close()
 
-    geo_filter2 = vtk.vtkGeometryFilter()
-    geo_filter2.SetInputData(meshExtractFilter2.GetOutput())
-    geo_filter2.Update()
-    tv_s = geo_filter2.GetOutput()
+    tv_s = apply_vtk_geom_filter(meshExtractFilter2.GetOutput())
 
     tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_S.vtx'
@@ -856,8 +840,6 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     thresh = get_lower_threshold(meshNew.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
 
     geo_port, _geo_filter = get_vtk_geom_filter_port(thresh.GetOutputPort(), True)
-
-
 
     mv_id = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))[0]
 

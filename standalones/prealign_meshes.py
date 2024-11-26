@@ -67,11 +67,8 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
         appendFilter.AddInputData(meshLA)
         appendFilter.AddInputData(meshRA)
         appendFilter.Update()
-        extract_surf = vtk.vtkGeometryFilter()
-        extract_surf.SetInputData(appendFilter.GetOutput())
-        extract_surf.Update()
 
-        mesh1 = extract_surf.GetOutput()
+        mesh1 = apply_vtk_geom_filter(appendFilter.GetOutput())
 
     elif case == "LA":
         names = ["MV", "RSPV", "LSPV", "RIPV", "LIPV"]  # Prealign MRI

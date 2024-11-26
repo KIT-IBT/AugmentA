@@ -73,11 +73,7 @@ def mark_LA_endo_elemTag(model, tag, tao_mv, tao_lpv, tao_rpv, max_phie_ab_tau_l
 
 
 def move_surf_along_normals(mesh, eps, direction):
-    extract_surf = vtk.vtkGeometryFilter()
-    extract_surf.SetInputData(mesh)
-    extract_surf.Update()
-
-    polydata = extract_surf.GetOutput()
+    polydata = apply_vtk_geom_filter(mesh)
 
     normalGenerator = vtk.vtkPolyDataNormals()
     normalGenerator.SetInputData(polydata)
@@ -104,14 +100,11 @@ def move_surf_along_normals(mesh, eps, direction):
 
 
 def generate_bilayer(endo, epi):
-    extract_surf = vtk.vtkGeometryFilter()
-    extract_surf.SetInputData(epi)
-    extract_surf.Update()
-
+    geo_port, _geo_filter = get_vtk_geom_filter_port(epi)
     reverse = vtk.vtkReverseSense()
     reverse.ReverseCellsOn()
     reverse.ReverseNormalsOn()
-    reverse.SetInputConnection(extract_surf.GetOutputPort())
+    reverse.SetInputConnection(geo_port)
     reverse.Update()
 
     epi = vtk.vtkUnstructuredGrid()
@@ -509,10 +502,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     connect.Update()
 
     # Clean unused points
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(connect.GetOutput())
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(connect.GetOutput())
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
@@ -526,10 +516,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     connect.Update()
 
     # Clean unused points
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(connect.GetOutput())
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(connect.GetOutput())
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
@@ -665,11 +652,7 @@ def get_connection_point_la_and_ra(appen_point):
     point_1_id_endo = loc_endo.FindClosestPoint(point_1)
     point_2_id_endo = loc_endo.FindClosestPoint(point_2)
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(endo)
-    geo_filter.Update()
-
-    bb_aux_l_points = dijkstra_path(geo_filter.GetOutput(), point_1_id_endo, point_2_id_endo)
+    bb_aux_l_points = dijkstra_path(apply_vtk_geom_filter(endo), point_1_id_endo, point_2_id_endo)
     length = len(bb_aux_l_points)
     la_connect_point = bb_aux_l_points[int(length * 0.5)]
 
@@ -798,12 +781,8 @@ def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
     point_l1 = la_mv_surface.GetPoint(point_l1_id)
     bb_mv_id = loc_epi.FindClosestPoint(point_l1)
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(epi)
-    geo_filter.Update()
-
-    bb_1_points = dijkstra_path(geo_filter.GetOutput(), lpv_sup_basis_id, appendage_basis_id)
-    bb_2_points = dijkstra_path(geo_filter.GetOutput(), appendage_basis_id, bb_mv_id)
+    bb_1_points = dijkstra_path(apply_vtk_geom_filter(epi), lpv_sup_basis_id, appendage_basis_id)
+    bb_2_points = dijkstra_path(apply_vtk_geom_filter(epi), appendage_basis_id, bb_mv_id)
     np.delete(bb_1_points, -1)
     bb_left = np.concatenate((bb_1_points, bb_2_points), axis=0)
 
@@ -900,13 +879,11 @@ def get_in_surf1_closest_point_in_surf2(surf1, surf2, pt_id_in_surf2):
 
 
 def get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id, LAA_pt_far_from_LIPV_id):
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(epi)
-    geo_filter.Update()
+    poly_mesh_epi = apply_vtk_geom_filter(epi)
 
-    bb_1_points = dijkstra_path(geo_filter.GetOutput(), sup_appendage_basis_id, LAA_pt_far_from_LIPV_id)
-    bb_2_points = dijkstra_path(geo_filter.GetOutput(), LAA_pt_far_from_LIPV_id, inf_appendage_basis_id)
-    bb_3_points = dijkstra_path(geo_filter.GetOutput(), inf_appendage_basis_id, bb_mv_id)
+    bb_1_points = dijkstra_path(poly_mesh_epi, sup_appendage_basis_id, LAA_pt_far_from_LIPV_id)
+    bb_2_points = dijkstra_path(poly_mesh_epi, LAA_pt_far_from_LIPV_id, inf_appendage_basis_id)
+    bb_3_points = dijkstra_path(poly_mesh_epi, inf_appendage_basis_id, bb_mv_id)
 
     np.delete(bb_1_points, -1)
     bb_left = np.concatenate((bb_1_points, bb_2_points, bb_3_points), axis=0)
@@ -1054,12 +1031,9 @@ def optimize_shape_PV(surface, num, bound):
             out = vtk_thr(surface, 2, "CELLS", "phie_v", arr[l], arr[l + 1])
         else:
             out = vtk_thr(surface, 2, "CELLS", "phie_v", arr[l + 1], arr[l])
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(out)
-        geo_filter.Update()
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
-        centerOfMassFilter.SetInputData(geo_filter.GetOutput())
+        centerOfMassFilter.SetInputData(apply_vtk_geom_filter(out))
         centerOfMassFilter.SetUseScalarsAsWeights(False)
         centerOfMassFilter.Update()
 

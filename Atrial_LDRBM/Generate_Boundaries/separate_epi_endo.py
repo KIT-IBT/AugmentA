@@ -1,9 +1,8 @@
 import csv
 import sys
 
-import vtk
-
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
@@ -37,11 +36,7 @@ def separate_epi_endo(path, atrium):
     else:
         raise ValueError("Atrium has to be LA or RA")
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(thresh.GetOutput())
-    geo_filter.Update()
-
-    vtk_obj_writer(meshname + f"_{atrium}.obj", geo_filter.GetOutput())
+    vtk_obj_writer(meshname + f"_{atrium}.obj", apply_vtk_geom_filter(thresh.GetOutput()))
     if atrium == "LA":
         thresh = get_threshold_between(model, left_atrial_wall_epi, left_atrial_wall_epi,
                                        "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
@@ -51,10 +46,7 @@ def separate_epi_endo(path, atrium):
     else:
         raise ValueError("Atrium has to be LA or RA")
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(thresh.GetOutput())
-    geo_filter.Update()
-    la_epi = geo_filter.GetOutput()
+    la_epi = apply_vtk_geom_filter(thresh.GetOutput())
 
     vtk_obj_writer(meshname + f"_{atrium}_epi.obj", la_epi)
     if atrium == "LA":
@@ -66,9 +58,6 @@ def separate_epi_endo(path, atrium):
     else:
         raise ValueError("Atrium has to be LA or RA")
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(thresh.GetOutput())
-    geo_filter.Update()
-    la_endo = geo_filter.GetOutput()
+    la_endo = apply_vtk_geom_filter(thresh.GetOutput())
 
     vtk_obj_writer(meshname + f"_{atrium}_endo.obj", la_endo)

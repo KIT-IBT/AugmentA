@@ -88,7 +88,7 @@ def move_surf_along_normals(mesh, eps, direction):
 
 
 def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
-    geo_port, _geo_filter=get_vtk_geom_filter_port(endo)
+    geo_port, _geo_filter = get_vtk_geom_filter_port(endo)
 
     reverse = vtk.vtkReverseSense()
     reverse.ReverseCellsOn()
@@ -401,11 +401,9 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     meshExtractFilter2.Update()
 
     band = meshExtractFilter2.GetOutput()
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(band)
-    geo_filter.Update()
+
     cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(geo_filter.GetOutput())
+    cln.SetInputData(apply_vtk_geom_filter(band))
     cln.Update()
     band = cln.GetOutput()
 
@@ -671,10 +669,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     connect.Update()
 
     # Clean unused points
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(connect.GetOutput())
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(connect.GetOutput())
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
@@ -688,10 +683,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     connect.Update()
 
     # Clean unused points
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(connect.GetOutput())
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(connect.GetOutput())
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
@@ -821,11 +813,7 @@ def get_connection_point_la_and_ra_surface(appen_point, la_mv_surface, la_rpv_in
     point_1_id = loc.FindClosestPoint(point_1)
     point_2_id = loc.FindClosestPoint(point_2)
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(la_epi_surface)
-    geo_filter.Update()
-
-    bb_aux_l_points = dijkstra_path(geo_filter.GetOutput(), point_1_id, point_2_id)
+    bb_aux_l_points = dijkstra_path(apply_vtk_geom_filter(la_epi_surface), point_1_id, point_2_id)
     length = len(bb_aux_l_points)
     la_connect_point = bb_aux_l_points[int(length * 0.5)]
 
@@ -878,11 +866,7 @@ def get_connection_point_la_and_ra(appen_point):
     point_1_id_endo = loc_endo.FindClosestPoint(point_1)
     point_2_id_endo = loc_endo.FindClosestPoint(point_2)
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(endo)
-    geo_filter.Update()
-
-    bb_aux_l_points = dijkstra_path(geo_filter.GetOutput(), point_1_id_endo, point_2_id_endo)
+    bb_aux_l_points = dijkstra_path(apply_vtk_geom_filter(endo), point_1_id_endo, point_2_id_endo)
     length = len(bb_aux_l_points)
     la_connect_point = bb_aux_l_points[int(length * 0.5)]
 
@@ -930,12 +914,10 @@ def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
     point_l1 = la_mv_surface.GetPoint(point_l1_id)
     bb_mv_id = loc_epi.FindClosestPoint(point_l1)
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(epi)
-    geo_filter.Update()
+    epi_polydata = apply_vtk_geom_filter(epi)
 
-    bb_1_points = dijkstra_path(geo_filter.GetOutput(), lpv_sup_basis_id, appendage_basis_id)
-    bb_2_points = dijkstra_path(geo_filter.GetOutput(), appendage_basis_id, bb_mv_id)
+    bb_1_points = dijkstra_path(epi_polydata, lpv_sup_basis_id, appendage_basis_id)
+    bb_2_points = dijkstra_path(epi_polydata, appendage_basis_id, bb_mv_id)
     np.delete(bb_1_points, -1)
     bb_left = np.concatenate((bb_1_points, bb_2_points), axis=0)
 

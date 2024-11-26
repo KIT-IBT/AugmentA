@@ -72,9 +72,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     la_epi_surface = apply_vtk_geom_filter(la_epi)
 
-
     ra_epi_surface = apply_vtk_geom_filter(ra_epi)
-
 
     SVC_p = np.array(df["SVC"])
     IVC_p = np.array(df["IVC"])
@@ -122,7 +120,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     loc.BuildLocator()
     point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p + TV_p * 0.1))  # adapt this value if CS is too low
 
-
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(ra_septum)
     loc.BuildLocator()
@@ -155,10 +152,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         la_e = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
         la_e = apply_vtk_geom_filter(la_e)
 
-
         ra_e = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
         ra_e = apply_vtk_geom_filter(ra_e)
-
 
         append_filter = vtk.vtkAppendFilter()
         append_filter.AddInputData(la_e)
@@ -238,10 +233,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         extract.SetCellList(earth_cell_ids)
         extract.Update()
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(extract.GetOutput())
-        geo_filter.Update()
-        earth = geo_filter.GetOutput()
+        earth = apply_vtk_geom_filter(extract.GetOutput())
 
         cleaner = vtk.vtkCleanPolyData()
         cleaner.SetInputData(earth)
@@ -322,10 +314,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         extract.SetCellList(earth_cell_ids)
         extract.Update()
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(extract.GetOutput())
-        geo_filter.Update()
-        earth = geo_filter.GetOutput()
+        earth = apply_vtk_geom_filter(extract.GetOutput())
 
         cleaner = vtk.vtkCleanPolyData()
         cleaner.SetInputData(earth)

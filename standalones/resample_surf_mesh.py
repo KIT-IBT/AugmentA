@@ -38,6 +38,7 @@ from scipy.spatial import cKDTree
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -67,6 +68,7 @@ def parser():
                         help='set to 1 to predict location of the appendage apex using max curvature, else pick manually')
 
     return parser
+
 
 def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1,
                        atrium='LA'):
@@ -133,10 +135,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         extract.SetCellList(cell_ids_no_bd)
         extract.Update()
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(extract.GetOutput())
-        geo_filter.Update()
-        earth = geo_filter.GetOutput()
+        earth = apply_vtk_geom_filter(extract.GetOutput())
 
         cleaner = vtk.vtkCleanPolyData()
         cleaner.SetInputData(earth)

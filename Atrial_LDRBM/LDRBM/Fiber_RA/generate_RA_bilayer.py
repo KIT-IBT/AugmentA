@@ -15,6 +15,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
 
 parser = argparse.ArgumentParser(description='Create Right Atrium.')
 
@@ -36,7 +37,6 @@ def run(args):
     reader.Update()
     ra_endo = reader.GetOutput()
 
-
     reader = vtk.vtkUnstructuredGridReader()
     reader.SetFileName(args.mesh + "/RA_epi_with_fiber.vtk")
     reader.Update()
@@ -53,11 +53,7 @@ def run(args):
 
 
 def move_surf_along_normals(mesh, eps, direction):
-    extract_surf = vtk.vtkGeometryFilter()
-    extract_surf.SetInputData(mesh)
-    extract_surf.Update()
-
-    polydata = extract_surf.GetOutput()
+    polydata = apply_vtk_geom_filter(mesh)
 
     normalGenerator = vtk.vtkPolyDataNormals()
     normalGenerator.SetInputData(polydata)
@@ -83,14 +79,11 @@ def move_surf_along_normals(mesh, eps, direction):
 
 
 def generate_bilayer(endo, epi, max_dist=np.inf):
-    extract_surf = vtk.vtkGeometryFilter()
-    extract_surf.SetInputData(endo)
-    extract_surf.Update()
-
+    geo_port, _geo_filter = get_vtk_geom_filter_port(endo)
     reverse = vtk.vtkReverseSense()
     reverse.ReverseCellsOn()
     reverse.ReverseNormalsOn()
-    reverse.SetInputConnection(extract_surf.GetOutputPort())
+    reverse.SetInputConnection(geo_port)
     reverse.Update()
 
     endo = vtk.vtkUnstructuredGrid()
@@ -146,7 +139,7 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
 
 # Creates VTK and CARP files: .pts, .lon, .elem
 def write_bilayer(bilayer):
-    file_name=args.mesh + "/RA_bilayer_with_fiber"
+    file_name = args.mesh + "/RA_bilayer_with_fiber"
     vtk_unstructured_grid_writer(f"{file_name}.vtk", bilayer, store_binary=True)
 
     pts = vtk_to_numpy(bilayer.GetPoints().GetData())
