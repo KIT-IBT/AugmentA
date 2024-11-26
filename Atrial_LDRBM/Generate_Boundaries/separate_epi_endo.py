@@ -43,11 +43,7 @@ def separate_epi_endo(path, atrium):
     geo_filter.SetInputData(thresh.GetOutput())
     geo_filter.Update()
 
-    writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname + f"_{atrium}.obj")
-    writer.SetInputData(geo_filter.GetOutput())
-    writer.Write()
-
+    vtk_obj_writer(meshname + f"_{atrium}.obj", geo_filter.GetOutput())
     if atrium == "LA":
         thresh = get_threshold_between(model, left_atrial_wall_epi, left_atrial_wall_epi,
                                        "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
@@ -62,11 +58,7 @@ def separate_epi_endo(path, atrium):
     geo_filter.Update()
     la_epi = geo_filter.GetOutput()
 
-    writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname + f"_{atrium}_epi.obj")
-    writer.SetInputData(la_epi)
-    writer.Write()
-
+    vtk_obj_writer(meshname + f"_{atrium}_epi.obj", la_epi)
     if atrium == "LA":
         thresh = get_threshold_between(model, left_atrial_wall_endo, left_atrial_wall_endo,
                                        "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
@@ -81,7 +73,4 @@ def separate_epi_endo(path, atrium):
     geo_filter.Update()
     la_endo = geo_filter.GetOutput()
 
-    writer = vtk.vtkOBJWriter()
-    writer.SetFileName(meshname + f"_{atrium}_endo.obj")
-    writer.SetInputData(la_endo)
-    writer.Write()
+    vtk_obj_writer(meshname + f"_{atrium}_endo.obj", la_endo)

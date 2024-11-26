@@ -32,7 +32,7 @@ from scipy.spatial import cKDTree
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
-    vtk_xml_unstructured_grid_writer
+    vtk_xml_unstructured_grid_writer, vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -139,10 +139,7 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     bilayer_1 = meshNew.VTKObject
 
     if args.debug:
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/test_LA_RA_bilayer.vtu")  # Has three arrays :)
-        writer.SetInputData(bilayer_1)
-        writer.Write()
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/test_LA_RA_bilayer.vtu", bilayer_1)
 
     reader = vtk.vtkXMLUnstructuredGridReader()
     reader.SetFileName(job.ID + "/result_RA/test_LA_RA_bilayer.vtu")  #
@@ -172,16 +169,6 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
 
 
 def write_bilayer(args, job):
-    # if args.ofmt == 'vtk':
-    #     writer = vtk.vtkUnstructuredGridWriter()
-    #     writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtk")
-    #     writer.SetFileTypeToBinary()
-    # else:
-    #     writer = vtk.vtkXMLUnstructuredGridWriter()
-    #     writer.SetFileName(job.ID+"/result_RA/LA_RA_bilayer_with_fiber.vtu")
-    # writer.SetInputData(bilayer)
-    # writer.Write()
-
     reader = vtk.vtkXMLUnstructuredGridReader()
     reader.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  #
     reader.Update()
@@ -242,12 +229,6 @@ def generate_sheet_dir(args, model, job):
     cleaner.SetInputData(surface)
     cleaner.Update()
     cln_surface = cleaner.GetOutput()
-
-    # meshNew = dsa.WrapDataObject(cln_surface)
-    # writer = vtk.vtkPolyDataWriter()
-    # writer.SetFileName("test_model_surface.vtk")
-    # writer.SetInputData(meshNew.VTKObject)
-    # writer.Write()
 
     '''
     calculate normals of surface cells
@@ -1081,22 +1062,11 @@ def creat_center_line(start_end_point):
 
 def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
     meshNew = dsa.WrapDataObject(tube.GetOutput())
-    writer = vtk.vtkOBJWriter()
-    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_tube.obj")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
-
+    vtk_obj_writer(job.ID + "/bridges/" + str(name) + "_tube.obj", meshNew.VTKObject)
     meshNew = dsa.WrapDataObject(sphere_1.GetOutput())
-    writer = vtk.vtkOBJWriter()
-    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_1.obj")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
-
+    vtk_obj_writer(job.ID + "/bridges/" + str(name) + "_sphere_1.obj", meshNew.VTKObject)
     meshNew = dsa.WrapDataObject(sphere_2.GetOutput())
-    writer = vtk.vtkOBJWriter()
-    writer.SetFileName(job.ID + "/bridges/" + str(name) + "_sphere_2.obj")
-    writer.SetInputData(meshNew.VTKObject)
-    writer.Write()
+    vtk_obj_writer(job.ID + "/bridges/" + str(name) + "_sphere_2.obj", meshNew.VTKObject)
 
 
 def create_pts(array_points, array_name, mesh_dir):

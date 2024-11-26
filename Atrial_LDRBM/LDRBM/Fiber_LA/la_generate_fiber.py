@@ -481,52 +481,12 @@ def la_generate_fiber(model, args, job):
         el[LIPV_ids_endo] = v_grad_norm[LIPV_ids_endo]
         el[LSPV_ids_endo] = v_grad_norm[LSPV_ids_endo]
 
-        # for i in range(len(v_grad_norm)):
-        #     if v[i] <= 0.2:
-        #         el_endo[i] = v_grad_norm[i]
-
         end_time = datetime.datetime.now()
 
         meshNew = dsa.WrapDataObject(model)
         meshNew.CellData.append(tag, "elemTag")
         meshNew.CellData.append(el, "fiber")
         model = meshNew.VTKObject
-
-        # meshNew = dsa.WrapDataObject(endo)
-        # meshNew.CellData.append(tag_endo, "elemTag")
-        # meshNew.CellData.append(el_endo, "fiber")
-        # meshNew.CellData.append(sheet_endo, "sheet")
-        # if args.ofmt == 'vtk':
-        #     writer = vtk.vtkUnstructuredGridWriter()
-        #     writer.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtk")
-        #     writer.SetFileTypeToBinary()
-        # else:
-        #     writer = vtk.vtkXMLUnstructuredGridWriter()
-        #     writer.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtu")
-        # writer.SetInputData(meshNew.VTKObject)
-        # writer.Write()
-
-        # pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
-        # with open(job.ID+'/result_LA/LA_endo_with_fiber.pts',"w") as f:
-        #     f.write("{}\n".format(len(pts)))
-        #     for i in range(len(pts)):
-        #         f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
-
-        # with open(job.ID+'/result_LA/LA_endo_with_fiber.elem',"w") as f:
-        #     f.write("{}\n".format(endo.GetNumberOfCells()))
-        #     for i in range(endo.GetNumberOfCells()):
-        #         cell = endo.GetCell(i)
-        #         if cell.GetNumberOfPoints() == 2:
-        #             f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_endo[i]))
-        #         elif cell.GetNumberOfPoints() == 3:
-        #             f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), tag_endo[i]))
-        #         elif cell.GetNumberOfPoints() == 4:
-        #             f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), tag_endo[i]))
-
-        # with open(job.ID+'/result_LA/LA_endo_with_fiber.lon',"w") as f:
-        #     f.write("2\n")
-        #     for i in range(len(el_endo)):
-        #         f.write("{} {} {} {} {} {}\n".format(el_endo[i][0], el_endo[i][1], el_endo[i][2], sheet_endo[i][0], sheet_endo[i][1], sheet_endo[i][2]))
 
         running_time = end_time - start_time
 
@@ -546,16 +506,8 @@ def la_generate_fiber(model, args, job):
         epi_surf = vtk_thr(surf, 0, "CELLS", "phie_phi", 0.5)
         epi_surf_ids = vtk.util.numpy_support.vtk_to_numpy(epi_surf.GetCellData().GetArray('Global_ids'))
 
-        # epi_surf_id_list = vtk.vtkIdList()
-        # for i in epi_surf_ids:
-        #     epi_surf_id_list.InsertNextId(i)
-        # extract = vtk.vtkExtractCells()
-        # extract.SetInputData(surf)
-        # extract.SetCellList(epi_surf_id_list)
-        # extract.Update()
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputData(epi_surf)
-        # geo_filter.PassThroughCellIdsOn()
         geo_filter.Update()
 
         epi_surf = geo_filter.GetOutput()

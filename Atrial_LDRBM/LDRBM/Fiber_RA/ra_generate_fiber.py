@@ -730,14 +730,9 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.writer_vtk(TV_lat, f'{args.mesh}_surf/' + "TV_lat.vtk")
 
-    # writer = vtk.vtkPolyDataWriter()
-    # writer.SetFileName("TV_lat.vtk")
-    # writer.SetInputData(TV_lat)
-    # writer.Write()
 
     ct_points_data = Method.dijkstra_path(CT, point1_id, point2_id)
 
-    # np.savetxt("ct_points_data.txt", ct_points_data, fmt='%.4f')
 
     if args.debug:
         Method.create_pts(ct_points_data, 'ct_points_data', f'{args.mesh}_surf/')
@@ -754,10 +749,6 @@ def ra_generate_fiber(model, args, job):
 
     if args.debug:
         Method.create_pts(tv_points_data, 'tv_points_data', f'{args.mesh}_surf/')
-    # np.savetxt("tv_points_data.txt", tv_points_data, fmt='%.4f')
-
-    # np.savetxt("point3_id_new.txt", TV_lat.GetPoint(point3_id), fmt='%.4f')
-    # np.savetxt("point4_id_new.txt", TV_lat.GetPoint(point4_id), fmt='%.4f')
 
     print("Creating Pectinate muscle...")
 
@@ -805,180 +796,6 @@ def ra_generate_fiber(model, args, job):
 
     pm_ct_dis = int(len(ct_points_data) / pm_num)
     pm_tv_dis = int(len(tv_points_data) / pm_num)
-
-    # the first PM is the one to the appendage
-
-    # pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
-
-    # tag = Method.assign_element_tag_around_path_within_radius(mesh, pm, w_pm, tag, pectinate_muscle)
-    # fiber_endo = Method.assign_element_fiber_around_path_within_radius(mesh, pm, w_pm, fiber_endo, smooth=True)
-
-    # for i in range(pm_num):
-    #     pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
-    #     pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
-    #     pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
-    #     # pm = Method.dijkstra_path(surface, pm_point_1, pm_point_2)
-    #     # if i == 0:
-    #     #     pm = Method.dijkstra_path(surface, pm_point_1, pm_point_2)
-    #     # else:
-    #     #     pm = Method.dijkstra_path_on_a_plane(surface, pm_point_1, pm_point_2, center)
-    #     print("The ", i + 1, "th pm done")
-    #     tag = Method.assign_element_tag_around_path_within_radius(mesh, pm, w_pm, tag, pectinate_muscle)
-    #     print("The ", i + 1, "th pm's tag is done")
-    #     fiber_endo = Method.assign_element_fiber_around_path_within_radius(mesh, pm, w_pm, fiber_endo, smooth=True)
-    #     print("The ", i + 1, "th pm's fiber is done")
-
-    # print("Creating Pectinate muscle... done!")
-
-    # # Crista Terminalis
-    # print("Creating Crista Terminalis...")
-    # tag = Method.assign_element_tag_around_path_within_radius(mesh, ct_points_data, w_ct, tag, crista_terminalis)
-    # fiber_endo = Method.assign_element_fiber_around_path_within_radius(mesh, ct_points_data, w_ct, fiber_endo, smooth=True)
-    # print("Creating Crista Terminalis... done!")
-
-    # """
-    # over write the pm on the TV
-    # """
-    # for i in range(len(ab_grad)):
-    #     if r[i] >= tao_tv:
-    #         fiber_endo[i] = el[i]
-    #         if phie[i] <= 0.5:
-    #             tag[i] = tricuspid_valve_endo
-    #         else:
-    #             tag[i] = tricuspid_valve_epi
-
-    # # Bachmann-Bundle
-
-    # loc = vtk.vtkPointLocator()
-    # loc.SetDataSet(surface)
-    # loc.BuildLocator()
-
-    # # Bachmann-Bundle starting point
-    # bb_1_id = loc.FindClosestPoint(SVC_CT_pt)
-    # bb_2_id = loc.FindClosestPoint(TV_s.GetPoint(point4_id))
-
-    # bachmann_bundle_points_data = Method.dijkstra_path(surface, bb_1_id, bb_2_id)
-    # bb_step = 10
-    # bb_path = np.asarray([bachmann_bundle_points_data[i] for i in range(len(bachmann_bundle_points_data)) if i % bb_step == 0 or i == len(bachmann_bundle_points_data)-1])
-    # spline_points = vtk.vtkPoints()
-    # for i in range(len(bb_path)):
-    #     spline_points.InsertPoint(i, bb_path[i][0], bb_path[i][1], bb_path[i][2])
-
-    # # Fit a spline to the points
-    # spline = vtk.vtkParametricSpline()
-    # spline.SetPoints(spline_points)
-    # functionSource = vtk.vtkParametricFunctionSource()
-    # functionSource.SetParametricFunction(spline)
-    # functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    # functionSource.Update()
-
-    # bb_points = vtk.util.numpy_support.vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
-
-    # tag = Method.assign_element_tag_around_path_within_radius(model, bb_points, w_bb, tag, bachmann_bundel_right)
-    # el = Method.assign_element_fiber_around_path_within_radius(model, bb_points, w_bb, el, smooth=True)
-
-    # tag[SN_ids] = sinus_node
-
-    # for i in range(model.GetPointData().GetNumberOfArrays()-1, -1, -1):
-    #     model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
-
-    # for i in range(model.GetCellData().GetNumberOfArrays()-1, -1, -1):
-    #     model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
-
-    # meshNew = dsa.WrapDataObject(model)
-    # meshNew.CellData.append(tag, "elemTag")
-    # meshNew.CellData.append(el, "fiber")
-    # meshNew.CellData.append(sheet, "sheet")
-    # writer = vtk.vtkUnstructuredGridWriter()
-    # writer.SetFileName(job.ID+"/result_RA/RA_epi_with_fiber.vtk")
-    # writer.SetInputData(meshNew.VTKObject)
-    # writer.Write()
-
-    # # Bachmann_Bundle internal connection
-    # la_connect_point, ra_connect_point = Method.get_connection_point_la_and_ra(df["LAA"])
-    # la_connect_point = np.asarray(la_connect_point)
-    # ra_connect_point = np.asarray(ra_connect_point)
-
-    # la_epi = Method.smart_reader("/home/luca/IBT/AtrialLDRBM_la816/LDRBM/Fiber_LA/result_RA/LA_epi_with_fiber.vtk")
-    # la_appendage_basis_point = np.asarray(df["LAA_basis_inf"])
-    # length = len(bachmann_bundle_points_data)
-    # ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
-    # # TODO PLAN D
-    # geo_filter_la_epi = vtk.vtkGeometryFilter()
-    # geo_filter_la_epi.SetInputData(la_epi)
-    # geo_filter_la_epi.Update()
-    # la_epi = geo_filter_la_epi.GetOutput()
-
-    # geo_filter_ra_epi = vtk.vtkGeometryFilter()
-    # geo_filter_ra_epi.SetInputData(model)
-    # geo_filter_ra_epi.Update()
-    # ra_epi = geo_filter_ra_epi.GetOutput()
-
-    # loc_la_epi = vtk.vtkPointLocator()
-    # loc_la_epi.SetDataSet(la_epi)
-    # loc_la_epi.BuildLocator()
-
-    # loc_ra_epi = vtk.vtkPointLocator()
-    # loc_ra_epi.SetDataSet(ra_epi)
-    # loc_ra_epi.BuildLocator()
-
-    # ra_a_id = loc_ra_epi.FindClosestPoint(ra_bb_center)
-    # ra_b_id = loc_ra_epi.FindClosestPoint(ra_connect_point)
-    # la_c_id = loc_la_epi.FindClosestPoint(la_connect_point)
-    # la_d_id = loc_la_epi.FindClosestPoint(la_appendage_basis_point)
-    # path_1 = Method.dijkstra_path(ra_epi, ra_a_id, ra_b_id)
-    # path_2 = Method.dijkstra_path(la_epi, la_c_id, la_d_id)
-    # path_all_temp = np.vstack((path_1, path_2))
-    # # down sampling to smooth the path
-    # step = 10
-    # path_all = np.asarray([path_all_temp[i] for i in range(len(path_all_temp)) if i % step == 0 or i == len(path_all_temp)-1])
-
-    # # save points for bb fiber
-    # filename = job.ID+'/bridges/bb_fiber.dat'
-    # f = open(filename, 'wb')
-    # pickle.dump(path_all, f)
-    # f.close()
-
-    # # BB tube
-
-    # bb_tube = Method.creat_tube_around_spline(path_all, 2)
-    # sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * 1.02)
-    # sphere_b = Method.creat_sphere(ra_bb_center, 2 * 1.02)
-    # Method.smart_bridge_writer(bb_tube, sphere_a, sphere_b, "BB_intern_bridges")
-
-    # # tag = Method.assign_element_tag_around_path_within_radius(mesh, path_bb_ra, w_bb, tag, bachmann_bundel_right)
-    # # fiber_endo = Method.assign_element_fiber_around_path_within_radius(mesh, path_bb_ra, w_bb, fiber_endo,
-    # #                                                                  smooth=True)
-
-    # tag_data = vtk.util.numpy_support.numpy_to_vtk(tag, deep=True, array_type=vtk.VTK_INT)
-    # tag_data.SetNumberOfComponents(1)
-    # tag_data.SetName("elemTag")
-    # model.GetCellData().RemoveArray("elemTag")
-    # model.GetCellData().SetScalars(tag_data)
-
-    # #model.GetCellData().AddArray(tag_data)
-    # abs_el = np.linalg.norm(fiber_endo, axis=1, keepdims=True)
-    # interpolate_arr = np.asarray([0, 0, 1])
-    # index = np.argwhere(abs_el == 0)
-    # print('There is',len(index),'zero vector(s).')
-    # for var in index:
-    #     fiber_endo[var[0]] = interpolate_arr
-
-    # fiber_data = vtk.util.numpy_support.numpy_to_vtk(fiber_endo, deep=True, array_type=vtk.VTK_DOUBLE)
-    # fiber_data.SetNumberOfComponents(3)
-    # fiber_data.SetName("fiber")
-    # model.GetCellData().SetVectors(fiber_data)
-
-    # start_time = datetime.datetime.now()
-    # print('Writing as RA_with_fiber... ' + str(start_time))
-    # meshNew = dsa.WrapDataObject(mesh)
-    # writer = vtk.vtkUnstructuredGridWriter()
-    # writer.SetFileName(job.ID+"/result_RA/RA_with_fiber.vtk")
-    # writer.SetInputData(meshNew.VTKObject)
-    # writer.Write()
-    # end_time = datetime.datetime.now()
-    # running_time = end_time - start_time
-    # print('Writing as RA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
     # Pectinate muscle
     print("Creating Pectinate muscle 1")

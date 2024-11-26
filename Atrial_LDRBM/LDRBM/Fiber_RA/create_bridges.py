@@ -24,22 +24,21 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import numpy as np
-import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
-from vtk.util.numpy_support import vtk_to_numpy
-import datetime
-import Methods_RA as Method
 import csv
 import os
+import pickle
 import subprocess
+
+import numpy as np
 import pymesh
 import pymeshlab
-import pickle
-from numpy.linalg import norm
+import vtk
+from vtk.numpy_interface import dataset_adapter as dsa
 
+import Methods_RA as Method
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_obj_writer, \
+    vtk_unstructured_grid_writer
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -175,23 +174,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter.AddInputData(ra_e)
         append_filter.Update()  # la_ra_usg
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu")  # Good till here!
-        writer.SetInputData(append_filter.GetOutput())
-        writer.Write()
-
-        # append_filter = vtk.vtkAppendFilter() # same as above but names changed  to avoid overwriting
-        # append_filter.AddInputData(la_epi)
-        # append_filter.AddInputData(ra_epi)
-        # append_filter.Update()
-        #
-        # geo_filter = vtk.vtkGeometryFilter()
-        # geo_filter.SetInputData(append_filter.GetOutput())
-        # geo_filter.Update()
-        # writer = vtk.vtkOBJWriter()
-        # writer.SetFileName(job.ID+"/result_RA/la_ra_res.obj")
-        # writer.SetInputData(geo_filter.GetOutput())
-        # writer.Write()
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", append_filter.GetOutput())
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     for var in bridge_list:
@@ -296,11 +279,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         earth = cleaner.GetOutput()
 
         # meshNew = dsa.WrapDataObject(cleaner.GetOutput())
-        writer = vtk.vtkOBJWriter()
-        writer.SetFileName(job.ID + "/bridges/" + str(var) + "_earth.obj")
-        writer.SetInputData(earth)
-        writer.Write()
-
+        vtk_obj_writer(job.ID + "/bridges/" + str(var) + "_earth.obj", earth)
         # Here
 
         print("Extracted earth")
@@ -327,10 +306,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         la_ra_epi = append_filter.GetOutput()  # we lose this mesh, when defining the append filter later
 
         if args.debug and var == 'upper_posterior_bridge':
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/LA_RA_epi_with_holes.vtu")  # Still has element Tag
-            writer.SetInputData(la_ra_epi)
-            writer.Write()
+            # Still has element Tag
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_epi_with_holes.vtu", la_ra_epi)
 
     # Now extract earth from LA_endo as well
 
@@ -409,16 +386,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         la_endo_final = append_filter.GetOutput()  # we lose this mesh, when defining the append filter later
 
         if args.debug and var == 'upper_posterior_bridge':
-            writer = vtk.vtkXMLUnstructuredGridWriter()
-            writer.SetFileName(job.ID + "/result_RA/LA_endo_with_holes.vtu")  # Still has element Tag
-            writer.SetInputData(la_endo_final)
-            writer.Write()
-
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.MergePointsOn()
-    #     append_filter.SetTolerance(0.2*args.scale)
-    #     append_filter.AddInputData(append_filter.GetOutput())
-    # meshNew = dsa.WrapDataObject(extract.GetOutput())
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_endo_with_holes.vtu", la_endo_final)
 
     filename = job.ID + '/bridges/bb_fiber.dat'
     f = open(filename, 'rb')
@@ -459,24 +427,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         else:
             output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
             pymesh.save_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj", output_mesh_2, ascii=True)
-
-            # reader = vtk.vtkOBJReader()
-            # reader.SetFileName(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-            # reader.Update()
-
-            # output_mesh_2 = Method.extract_largest_region(reader.GetOutput())
-
-            # writer = vtk.vtkOBJWriter()
-            # writer.SetFileName(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-            # writer.SetInputData(output_mesh_2)
-            # writer.Write()
-
-            # mesh_D = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-
-            # output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
-
-            # pymesh.save_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj", output_mesh_2, ascii=True)
-
         print("Union between earth and bridges in " + var)
 
         ms = pymeshlab.MeshSet()
@@ -537,10 +487,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         meshNew.CellData.append(tag, "elemTag")
         meshNew.CellData.append(fiber, "fiber")
 
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/bridges/" + str(var) + "_union_mesh.vtk")  # we have the elemTags here
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
+        vtk_unstructured_grid_writer(job.ID + "/bridges/" + str(var) + "_union_mesh.vtk",
+                                     meshNew.VTKObject)  # we have the elemTags here
 
         if var == 'BB_intern_bridges':
             bb = meshNew.VTKObject
@@ -580,31 +528,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     bridges = append_filter.GetOutput()
 
     vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/append_bridges_2.vtu")  # Has elementTag! :, bridges)
-    # # Append all the bridges first
-    # if var == bridge_list[0]: # just define append_filter in the first iteration
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.AddInputData(meshNew.VTKObject)
-    #     append_filter.Update()
-    #     temp = append_filter.GetOutput()
-    # else:
-    #     append_filter.AddInputData(temp)
-    #     append_filter.AddInputData(meshNew.VTKObject)
-    #     append_filter.Update()
-    #     temp = append_filter.GetOutput()
-    #
-    # if args.debug and var == bridge_list[-1]:
-    #     writer = vtk.vtkXMLUnstructuredGridWriter()
-    #     writer.SetFileName(job.ID + "/result_RA/append_bridges_with_tag.vtu")
-    #     writer.SetInputData(temp)
-    #     writer.Write()
-
-    # append_filter.AddInputData(meshNew.VTKObject) # Check here if we still have the element tag
-    # append_filter.Update()
-
-    # writer = vtk.vtkXMLUnstructuredGridWriter()
-    # writer.SetFileName(job.ID + "/result_RA/LA_RA_with_bundles_with_" + str(var) + ".vtu") # Here we lose the elemTag
-    # writer.SetInputData(append_filter.GetOutput())
-    # writer.Write()
 
     reader = vtk.vtkXMLUnstructuredGridReader()
     reader.SetFileName(job.ID + "/result_RA/LA_RA_epi_with_holes.vtu")
@@ -647,7 +570,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter.AddInputData(ra_endo)
         append_filter.Update()
 
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/append_LA_endo_RA_endo.vtu")  # Has elemTag! :, append_filter.GetOutput())
+        vtk_xml_unstructured_grid_writer(
+            job.ID + "/result_RA/append_LA_endo_RA_endo.vtu")  # Has elemTag! :, append_filter.GetOutput())
         endo = Method.move_surf_along_normals(append_filter.GetOutput(), 0.1 * args.scale,
                                               1)  # # Warning: set -1 if pts normals are pointing outside
 

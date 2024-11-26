@@ -24,6 +24,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 
 EXAMPLE_DESCRIPTIVE_NAME = 'Tune conductivities to fit clinical LAT map'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
@@ -695,24 +696,22 @@ def run(args, job):
                 if len(active_border) > 0:  # Elements to clean
                     # For each area to clean, give to the active core the mean of conductivity of the active border
                     slow_CV[active_cleaned_cells] = slow_CV[active_cleaned_cells] * (
-                                (lats_to_fit[active_cleaned_cells] / (LAT_map[active_cleaned_cells])) ** 2)
+                            (lats_to_fit[active_cleaned_cells] / (LAT_map[active_cleaned_cells])) ** 2)
                     for k in range(len(active_to_interpolate)):
                         if len(active_border[k]) > 0:
                             slow_CV[active_to_interpolate[k]] = np.mean(slow_CV[active_border[k]])
                 else:  # No elements to clean
                     # sigma_new = sigma_old*(lat_simulated/lat_clinical)^2 for sigma = CV^2 see https://opencarp.org/documentation/examples/02_ep_tissue/03a_study_prep_tunecv
                     slow_CV[active_cells_band] = slow_CV[active_cells_band] * (
-                                (lats_to_fit[active_cells_band] / (LAT_map[active_cells_band])) ** 2)
+                            (lats_to_fit[active_cells_band] / (LAT_map[active_cells_band])) ** 2)
 
                 slow_CV = np.where(slow_CV > 3.5, 3.5, slow_CV)  # Set an upper bound in CV of 2.15 m/s
                 slow_CV = np.where(slow_CV < 0.15, 0.15, slow_CV)  # Set a lower bound in CV of 0.35 m/s
 
                 meshNew.CellData.append(slow_CV, "slow_CV")
-                writer = vtk.vtkXMLUnstructuredGridWriter()
-                writer.SetFileName(job.ID + f"/endo_cleaned_{l}.vtu")
-                writer.SetInputData(meshNew.VTKObject)
-                # writer.SetFileTypeToBinary()
-                writer.Write()
+
+                vtk_xml_unstructured_grid_writer(job.ID + f"/endo_cleaned_{l}.vtu", meshNew.VTKObject)
+
                 LAT_diff = RMSE
                 os.rename(simid + '/low_CV.dat', simid + '/low_CV_old.dat')
                 f = open(simid + '/low_CV.dat', 'w')
@@ -729,11 +728,8 @@ def run(args, job):
                 meshNew.CellData.append(LATs_diff, "LATs_diff")
                 meshNew.CellData.append(slow_CV_old, "slow_CV_old")
                 final_diff.append(LAT_diff)
-                writer = vtk.vtkXMLUnstructuredGridWriter()
-                writer.SetFileName(job.ID + f"/endo_cleaned_{l}.vtu")
-                writer.SetInputData(meshNew.VTKObject)
-                # writer.SetFileTypeToBinary()
-                writer.Write()
+
+                vtk.vtkXMLUnstructuredGridWriter(job.ID + f"/endo_cleaned_{l}.vtu", meshNew.VTKObject)
                 break
 
             err = RMSE
@@ -836,11 +832,7 @@ def run(args, job):
     meshNew.CellData.append(slow_CV, "slow_CV")
     meshNew.CellData.append(LATs_diff, "LATs_diff")
 
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(job.ID + "/endo_final.vtu")
-    writer.SetInputData(meshNew.VTKObject)
-    # writer.SetFileTypeToBinary()
-    writer.Write()
+    vtk_xml_unstructured_grid_writer(job.ID + "/endo_final.vtu", meshNew.VTKObject)
 
 
 if __name__ == '__main__':

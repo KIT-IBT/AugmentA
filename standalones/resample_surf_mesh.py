@@ -30,10 +30,13 @@ import pyvista as pv
 import vtk
 import argparse
 from scipy.spatial import cKDTree
+from urllib3.filepost import writer
 from vtk.util import numpy_support
 import os
 import numpy as np
 import pandas as pd
+
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
 
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -174,11 +177,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         cleaner.SetInputData(connect.GetOutput())
         cleaner.Update()
 
-        writer = vtk.vtkOBJWriter()
-        writer.SetInputData(cleaner.GetOutput())
-        writer.SetFileName(f'{meshname}_cleaned.obj')
-        writer.Write()
-
+        vtk_obj_writer(f'{meshname}_cleaned.obj', cleaner.GetOutput())
         mesh_data["vol"] = [vol]
 
         ms = pymeshlab.MeshSet()

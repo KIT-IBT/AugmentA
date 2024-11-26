@@ -48,7 +48,7 @@ import pandas as pd
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, \
-    vtk_unstructured_grid_writer
+    vtk_unstructured_grid_writer, vtk_obj_writer
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -210,7 +210,9 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter = vtk.vtkAppendFilter()
         append_filter.AddInputData(meshNew.VTKObject)
         append_filter.Update()
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu", append_filter.GetOutput())    elif args.mesh_type == "bilayer":
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu",
+                                         append_filter.GetOutput())
+    elif args.mesh_type == "bilayer":
 
         la_e = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
         geo_filter_la_epi = vtk.vtkGeometryFilter()
@@ -229,23 +231,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter.AddInputData(ra_e)
         append_filter.Update()  # la_ra_usg
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu")  # Good till here!
-        writer.SetInputData(append_filter.GetOutput())
-        writer.Write()
-
-        # append_filter = vtk.vtkAppendFilter()
-        # append_filter.AddInputData(la_epi)
-        # append_filter.AddInputData(ra_epi)
-        # append_filter.Update()
-        #
-        # geo_filter = vtk.vtkGeometryFilter()
-        # geo_filter.SetInputData(append_filter.GetOutput())
-        # geo_filter.Update()
-        # writer = vtk.vtkOBJWriter()
-        # writer.SetFileName(job.ID+"/result_RA/la_ra_res.obj")
-        # writer.SetInputData(geo_filter.GetOutput())
-        # writer.Write()
+        # Good till here!
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", append_filter.GetOutput())
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     for var in bridge_list:
@@ -276,102 +263,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
                         "-surf=" + job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj",
                         "-outmsh=" + job.ID + "/bridges/" + str(var) + "_bridge_resampled.vtk"])
 
-    # if args.mesh_type == "vol":
-
-    #     la_ra_usg = append_filter.GetOutput()
-    #     print('reading done!')
-
-    #     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
-    #     earth_cell_ids_list = []
-    #     for var in bridge_list:
-    #         reader = vtk.vtkUnstructuredGridReader()
-    #         reader.SetFileName(job.ID+"/bridges/"+str(var)+'_bridge_resampled.vtk')
-    #         reader.Update()
-    #         bridge_usg = reader.GetOutput()
-
-    #         geo_filter = vtk.vtkGeometryFilter()
-    #         geo_filter.SetInputData(bridge_usg)
-    #         geo_filter.Update()
-    #         bridge = geo_filter.GetOutput()
-
-    #         locator = vtk.vtkStaticPointLocator()
-    #         locator.SetDataSet(la_ra_usg)
-    #         locator.BuildLocator()
-
-    #         intersection_points = bridge_usg.GetPoints().GetData()
-    #         intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
-
-    #         earth_point_ids_temp = vtk.vtkIdList()
-    #         earth_point_ids = vtk.vtkIdList()
-    #         for i in range(len(intersection_points)):
-    #             locator.FindPointsWithinRadius(0.7*args.scale, intersection_points[i], earth_point_ids_temp)
-    #             for j in range(earth_point_ids_temp.GetNumberOfIds()):
-    #                 earth_point_ids.InsertNextId(earth_point_ids_temp.GetId(j))
-
-    #         earth_cell_ids_temp = vtk.vtkIdList()
-    #         earth_cell_ids = vtk.vtkIdList()
-    #         for i in range(earth_point_ids.GetNumberOfIds()):
-    #             la_ra_usg.GetPointCells(earth_point_ids.GetId(i),earth_cell_ids_temp)
-    #             for j in range(earth_cell_ids_temp.GetNumberOfIds()):
-    #                 earth_cell_ids.InsertNextId(earth_cell_ids_temp.GetId(j))
-    #                 earth_cell_ids_list += [earth_cell_ids_temp.GetId(j)]
-    #         extract = vtk.vtkExtractCells()
-    #         extract.SetInputData(la_ra_usg)
-    #         extract.SetCellList(earth_cell_ids)
-    #         extract.Update()
-
-    #         geo_filter = vtk.vtkGeometryFilter()
-    #         geo_filter.SetInputData(extract.GetOutput())
-    #         geo_filter.Update()
-    #         earth = geo_filter.GetOutput()
-
-    #         cleaner = vtk.vtkCleanPolyData()
-    #         cleaner.SetInputData(earth)
-    #         cleaner.Update()
-
-    #         # meshNew = dsa.WrapDataObject(cleaner.GetOutput())
-    #         writer = vtk.vtkOBJWriter()
-    #         writer.SetFileName(job.ID+"/bridges/"+str(var)+"_earth.obj")
-    #         writer.SetInputData(cleaner.GetOutput())
-    #         writer.Write()
-
-    #     print("Extracted earth")
-    #     cell_id_all = []
-    #     for i in range(la_ra_usg.GetNumberOfCells()):
-    #         cell_id_all.append(i)
-
-    #     la_diff =  list(set(cell_id_all).difference(set(earth_cell_ids_list)))
-    #     la_ra_new = vtk.vtkIdList()
-    #     for var in la_diff:
-    #         la_ra_new.InsertNextId(var)
-
-    #     extract = vtk.vtkExtractCells()
-    #     extract.SetInputData(la_ra_usg)
-    #     extract.SetCellList(la_ra_new)
-    #     extract.Update()
-
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.MergePointsOn()
-    #     #append_filter.SetTolerance(0.01*args.scale)
-    #     append_filter.AddInputData(extract.GetOutput())
-
-    # elif args.mesh_type == "bilayer":
-
-    # if args.mesh_type == "bilayer":
-    #     la_ra_usg = append_filter.GetOutput()
-    # else:
-    #     la_ra_usg_vol = append_filter.GetOutput()
-    #     ra_epi = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 11,18)
-    #     ra_BB = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_right,bachmann_bundel_right)
-    #     la_epi = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 61,70)
-    #     la_BB = vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_left,bachmann_bundel_left)
-
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.AddInputData(la_epi)
-    #     append_filter.AddInputData(ra_epi)
-    #     append_filter.AddInputData(la_BB)
-    #     append_filter.AddInputData(ra_BB)
-    #     append_filter.Update()
     la_ra_usg = append_filter.GetOutput()  # this has already elemTag
 
     print('reading done!')
@@ -386,31 +277,11 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         reader.Update()
         bridge_usg = reader.GetOutput()
 
-        # geo_filter = vtk.vtkGeometryFilter()
-        # geo_filter.SetInputData(bridge_usg)
-        # geo_filter.Update()
-        # bridge = geo_filter.GetOutput()
-
-        # reverse = vtk.vtkReverseSense()
-        # reverse.ReverseCellsOn()
-        # reverse.ReverseNormalsOn()
-        # reverse.SetInputConnection(cleaner.GetOutputPort())
-        # reverse.Update()
-
-        # earth = reverse.GetOutput()
-
-        # vbool = vtk.vtkBooleanOperationPolyDataFilter()
-        # vbool.SetOperationToDifference()
-        # vbool.SetInputData( 0, epi_surf )
-        # vbool.SetInputData( 1, bridge )
-
-        # vbool.Update()
 
         locator = vtk.vtkStaticPointLocator()
         locator.SetDataSet(la_ra_usg)
         locator.BuildLocator()
 
-        # intersection_points = vbool.GetOutput().GetPoints().GetData()
         intersection_points = bridge_usg.GetPoints().GetData()
         intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
 
@@ -444,11 +315,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         earth = cleaner.GetOutput()
 
         # meshNew = dsa.WrapDataObject(cleaner.GetOutput())
-        writer = vtk.vtkOBJWriter()
-        writer.SetFileName(job.ID + "/bridges/" + str(var) + "_earth.obj")
-        writer.SetInputData(earth)
-        writer.Write()
-
+        vtk_obj_writer(job.ID + "/bridges/" + str(var) + "_earth.obj", earth)
         # Here
 
         print("Extracted earth")
@@ -473,7 +340,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter.AddInputData(extract.GetOutput())
 
         if args.debug:
-            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/" + str(var) + "_append_earth.vtu", append_filter.AddInputData(extract.GetOutput()))
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/" + str(var) + "_append_earth.vtu",
+                                             append_filter.AddInputData(extract.GetOutput()))
     #     append_filter = vtk.vtkAppendFilter()
     #     append_filter.MergePointsOn()
     #     append_filter.SetTolerance(0.2*args.scale)
@@ -501,12 +369,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     print("Union between earth and bridges")
     for var in bridge_list:
 
-        # if args.mesh_type == "vol":
-        #     mesh_D = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_bridge_resampled.obj")
-        #     mesh_E = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_earth.obj")
-        #     output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="igl")
-        # elif args.mesh_type == "bilayer":
-        # Here
+
         mesh_D = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj")
         mesh_E = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_earth.obj")
         # # Warning: set -1 if pts normals are pointing outside
@@ -519,23 +382,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         else:
             output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
             pymesh.save_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj", output_mesh_2, ascii=True)
-
-            # reader = vtk.vtkOBJReader()
-            # reader.SetFileName(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-            # reader.Update()
-
-            # output_mesh_2 = Method.extract_largest_region(reader.GetOutput())
-
-            # writer = vtk.vtkOBJWriter()
-            # writer.SetFileName(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-            # writer.SetInputData(output_mesh_2)
-            # writer.Write()
-
-            # mesh_D = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-
-            # output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
-
-            # pymesh.save_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj", output_mesh_2, ascii=True)
 
         print("Union between earth and bridges in " + var)
 
@@ -594,7 +440,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         meshNew = dsa.WrapDataObject(bridge_union)
         meshNew.CellData.append(tag, "elemTag")
         meshNew.CellData.append(fiber, "fiber")
-        vtk_unstructured_grid_writer(job.ID + "/bridges/" + str(var) + "_union_mesh.vtu", meshNew.VTKObject)        append_filter.AddInputData(meshNew.VTKObject)  # Check here if we still have the element tag
+        vtk_unstructured_grid_writer(job.ID + "/bridges/" + str(var) + "_union_mesh.vtu", meshNew.VTKObject)
+        append_filter.AddInputData(meshNew.VTKObject)  # Check here if we still have the element tag
 
     append_filter.MergePointsOn()  # here we lose the tags
     append_filter.Update()

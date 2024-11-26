@@ -846,11 +846,6 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
         data2 = data[ii]
         meshNew.CellData.append(data2, idat)
 
-    # writer = vtk.vtkUnstructuredGridWriter()
-    # writer.SetFileName("{}_with_data.vtk".format(mesh2_name.split('.')[0]))
-    # writer.SetInputData(meshNew.VTKObject)
-    # writer.Write()
-
     return meshNew.VTKObject
 
 
