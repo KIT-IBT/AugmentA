@@ -231,8 +231,12 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         vtkWrite(geo_filter.GetOutput(), outdir + '/LA.vtk'.format(mesh))
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         centroids["LAA"] = LA_ap_point
+        array_name = "Ids"
+        if mesh_surf.GetPointData().GetArray(array_name) is not None:
+            #Remove previouse id so they match with indices
+            mesh_surf.GetPointData().RemoveArray(array_name)
         idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_filter.GetOutputPort())
+        idFilter.SetInputData(mesh_surf)
         if int(vtk_version) >= 9:
             idFilter.SetPointIdsArrayName('Ids')
             idFilter.SetCellIdsArrayName('Ids')
@@ -240,6 +244,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
             idFilter.SetIdsArrayName('Ids')
         idFilter.Update()
         LA = idFilter.GetOutput()
+
         LA_rings = detect_and_mark_rings(LA, LA_ap_point, outdir, debug)
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
         b_tag, centroids = mark_LA_rings(LAA_id, LA_rings, b_tag, centroids, outdir, LA)
