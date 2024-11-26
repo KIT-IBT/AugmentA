@@ -33,7 +33,7 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -48,16 +48,7 @@ def low_vol_LAT(args, path):
     bilayer_n_cells = model.GetNumberOfCells()
 
     # Transfer lat and bipolar voltage from points to elements
-    pt_cell = vtk.vtkPointDataToCellData()
-    pt_cell.SetInputData(model)
-    pt_cell.AddPointDataArray("bi")
-    pt_cell.AddPointDataArray("lat")
-    pt_cell.PassPointDataOn()
-    pt_cell.CategoricalDataOff()
-    pt_cell.ProcessAllArraysOff()
-    pt_cell.Update()
-
-    model = pt_cell.GetOutput()
+    model = convert_point_to_cell_data(model, ["bi"], ["lat"])
 
     # Create Points and Cells ids
     cellid = vtk.vtkIdFilter()

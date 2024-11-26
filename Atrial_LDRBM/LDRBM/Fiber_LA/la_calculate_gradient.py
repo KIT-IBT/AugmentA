@@ -28,6 +28,7 @@ import os
 
 import vtk
 
+from vtk_opencarp_helper_methods.vtk_methods.converters import convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer
 
 
@@ -35,10 +36,8 @@ def la_calculate_gradient(args, model, job):
     name_list = ['phi', 'r', 'v', 'ab']
 
     # change the result of Laplace from points data to cell data
-    pointDataToCellData = vtk.vtkPointDataToCellData()
-    pointDataToCellData.PassPointDataOn()
-    pointDataToCellData.SetInputData(model)
-    pointDataToCellData.Update()
+
+    model_cell_data = convert_point_to_cell_data(model, None)
 
     for var in name_list:
         print('Calculating the gradient of ' + str(var) + '...')
@@ -46,7 +45,7 @@ def la_calculate_gradient(args, model, job):
             # using the vtkGradientFilter to calculate the gradient
             if args.mesh_type == "vol":
                 gradientFilter = vtk.vtkGradientFilter()
-                gradientFilter.SetInputConnection(pointDataToCellData.GetOutputPort())
+                gradientFilter.SetInputData(model_cell_data)
                 gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS,
                                                       "phie_" + str(var))
                 gradientFilter.SetResultArrayName('grad_' + str(var))
@@ -54,7 +53,7 @@ def la_calculate_gradient(args, model, job):
                 LA_gradient = gradientFilter.GetOutput()
             else:
                 normalFilter = vtk.vtkPolyDataNormals()
-                normalFilter.SetInputConnection(pointDataToCellData.GetOutputPort())
+                normalFilter.SetInputData(model_cell_data)
                 normalFilter.ComputeCellNormalsOn()
                 normalFilter.ComputePointNormalsOff()
                 normalFilter.SplittingOff()

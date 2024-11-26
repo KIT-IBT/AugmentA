@@ -25,7 +25,7 @@ specific language governing permissions and limitations
 under the License.  
 """
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 
 EXAMPLE_DESCRIPTIVE_NAME = 'Tune conductivities to fit clinical LAT map'
@@ -586,15 +586,8 @@ def run(args, job):
             meshNew = dsa.WrapDataObject(new_endo)
             # Convert point to cell data
             meshNew.PointData.append(lats, "lat_s")
-            pt_cell = vtk.vtkPointDataToCellData()
-            pt_cell.SetInputData(meshNew.VTKObject)
-            pt_cell.AddPointDataArray("lat_s")
-            pt_cell.PassPointDataOn()
-            pt_cell.CategoricalDataOff()
-            pt_cell.ProcessAllArraysOff()
-            pt_cell.Update()
 
-            model = pt_cell.GetOutput()
+            model = convert_point_to_cell_data(meshNew.VTKObject, ["lat_s"])
             meshNew = dsa.WrapDataObject(model)
             # Extract all not fibrotic tissue (103 is not conductive)
             healthy_endo = Methods_fit_to_clinical_LAT.vtk_thr(model, 1, "CELLS", "elemTag", 102)
@@ -791,16 +784,11 @@ def run(args, job):
 
     meshNew = dsa.WrapDataObject(new_endo)
     meshNew.PointData.append(lats, "lat_s")
-    pt_cell = vtk.vtkPointDataToCellData()
-    pt_cell.SetInputData(meshNew.VTKObject)
-    pt_cell.AddPointDataArray("lat_s")
-    pt_cell.PassPointDataOn()
-    pt_cell.CategoricalDataOff()
-    pt_cell.ProcessAllArraysOff()
-    pt_cell.Update()
+
+    mesh_with_cell_data = convert_point_to_cell_data(meshNew.VTKObject, ["lat_s"])
 
     meshNew.CellData.append(LAT_map, "LAT_to_clean")
-    LATs_diff = vtk_to_numpy(pt_cell.GetOutput().GetCellData().GetArray('lat_s')) - LAT_map
+    LATs_diff = vtk_to_numpy(mesh_with_cell_data.GetCellData().GetArray('lat_s')) - LAT_map
     meshNew.CellData.append(slow_CV, "slow_CV")
     meshNew.CellData.append(LATs_diff, "LATs_diff")
 
