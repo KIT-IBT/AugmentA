@@ -24,21 +24,23 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import numpy as np
-import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
-import Methods_LA as Method
 import csv
 import datetime
-import pandas as pd
-from la_laplace import laplace_0_1
 import os
 
+import numpy as np
+import pandas as pd
+import vtk
+from vtk.numpy_interface import dataset_adapter as dsa
+
+import Methods_LA as Method
+from la_laplace import laplace_0_1
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -317,17 +319,9 @@ def la_generate_fiber(model, args, job):
     rpv_mean = np.mean([df["RIPV"].to_numpy(), df["RSPV"].to_numpy()], axis=0)
     mv_mean = df["MV"].to_numpy()
 
-    v1 = rpv_mean - mv_mean
-    v2 = lpv_mean - mv_mean
-    norm = np.cross(v2, v1)
-
-    norm = norm / np.linalg.norm(norm)
+    plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
 
     band_s = vtk_thr(epi, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv)
-
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm[0], norm[1], norm[2])
-    plane.SetOrigin(mv_mean[0], mv_mean[1], mv_mean[2])
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(band_s)

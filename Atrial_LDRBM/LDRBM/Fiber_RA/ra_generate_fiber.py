@@ -34,11 +34,13 @@ import pandas as pd
 import vtk
 from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
+
 import Methods_RA as Method
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -397,9 +399,7 @@ def ra_generate_fiber(model, args, job):
     n = np.linalg.norm(norm)
     norm_1 = norm / n  # Changed sign
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0], norm_1[1], norm_1[2])  # changed
-    plane.SetOrigin(df["TV"][0], df["TV"][1], df["TV"][2])
+    plane = initialize_plane(norm_1, df["TV"])
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(Method.to_polydata(RAW_S))
@@ -445,17 +445,12 @@ def ra_generate_fiber(model, args, job):
     k[RAW_low_ids] = ab_grad[RAW_low_ids]
 
     # calculate the norm vector
-    # v1 = np.array(IVC_SEPT_CT_pt) - np.array(IVC_CT_pt)
-    # v2 = np.array(df["TV"]) - np.array(df["IVC"])
-    # norm = np.cross(v1, v2)
     norm = np.array(df["SVC"]) - np.array(df["IVC"])
     # normalize norm
     n = np.linalg.norm(norm)
     norm_1 = norm / n
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0], norm_1[1], norm_1[2])
-    plane.SetOrigin(IVC_SEPT_CT_pt[0], IVC_SEPT_CT_pt[1], IVC_SEPT_CT_pt[2])
+    plane = initialize_plane(norm_1, IVC_SEPT_CT_pt)
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(no_TV_s)
@@ -661,9 +656,7 @@ def ra_generate_fiber(model, args, job):
     n = np.linalg.norm(norm)
     norm_1 = norm / n
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0], norm_1[1], norm_1[2])
-    plane.SetOrigin(df["TV"][0], df["TV"][1], df["TV"][2])
+    initialize_plane(norm_1, df["TV"])
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(TV_s)

@@ -36,8 +36,10 @@ from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 from vtk.numpy_interface import dataset_adapter as dsa
 
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
@@ -227,7 +229,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         centroids["LAA"] = LA_ap_point
         array_name = "Ids"
         if mesh_surf.GetPointData().GetArray(array_name) is not None:
-            #Remove previouse id so they match with indices
+            # Remove previouse id so they match with indices
             mesh_surf.GetPointData().RemoveArray(array_name)
         idFilter = vtk.vtkIdFilter()
         idFilter.SetInputData(mesh_surf)
@@ -529,16 +531,7 @@ def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
     rpv_mean = np.mean(RPVs_c, axis=0)
     mv_mean = rings[np.argmax([r.np for r in rings])].center
 
-    v1 = rpv_mean - mv_mean
-    v2 = lpv_mean - mv_mean
-    norm = np.cross(v1, v2)
-
-    # # normalize vector
-    norm = norm / np.linalg.norm(norm)
-
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm[0], norm[1], norm[2])
-    plane.SetOrigin(mv_mean[0], mv_mean[1], mv_mean[2])
+    plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
 
     appendFilter = vtk.vtkAppendPolyData()
     for r in [rings[i] for i in RPVs]:
@@ -568,16 +561,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     rpv_mean = np.mean(RPVs_c, axis=0)
     mv_mean = rings[np.argmax([r.np for r in rings])].center
 
-    v1 = rpv_mean - mv_mean
-    v2 = lpv_mean - mv_mean
-    norm = np.cross(v1, v2)
-
-    # # normalize vector
-    norm = norm / np.linalg.norm(norm)
-
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm[0], norm[1], norm[2])
-    plane.SetOrigin(mv_mean[0], mv_mean[1], mv_mean[2])
+    plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(LA)
@@ -713,18 +697,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
             ivc_center = np.array(r.center)
             ivc = r.vtk_polydata
 
-    # calculate the norm vector
-    v1 = tv_center - svc_center
-    v2 = tv_center - ivc_center
-    norm = np.cross(v1, v2)
-
-    # normalize norm
-    n = np.linalg.norm([norm], axis=1, keepdims=True)
-    norm_1 = norm / n
-
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0][0], norm_1[0][1], norm_1[0][2])
-    plane.SetOrigin(tv_center[0], tv_center[1], tv_center[2])
+    plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
 
     geo_filter = vtk.vtkGeometryFilter()
     geo_filter.SetInputData(model)
@@ -767,23 +740,12 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     """
     separate the tv into tv tv-f and tv-f
     """
-    # calculate the norm vector
-    v1 = svc_center - tv_center
-    v2 = ivc_center - tv_center
-    norm = np.cross(v2, v1)
-
-    # normalize norm
-    n = np.linalg.norm([norm], axis=1, keepdims=True)
-    norm_1 = norm / n
+    norm_1 = get_normalized_cross_product(tv_center, svc_center, ivc_center)
     norm_2 = - norm_1
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0][0], norm_1[0][1], norm_1[0][2])
-    plane.SetOrigin(tv_center[0], tv_center[1], tv_center[2])
+    plane = initialize_plane(norm_1[0], tv_center)
 
-    plane2 = vtk.vtkPlane()
-    plane2.SetNormal(norm_2[0][0], norm_2[0][1], norm_2[0][2])
-    plane2.SetOrigin(tv_center[0], tv_center[1], tv_center[2])
+    plane2=initialize_plane(norm_2[0], tv_center)
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(tv)

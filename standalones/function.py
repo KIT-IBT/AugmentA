@@ -29,7 +29,9 @@ import numpy as np
 import scipy.spatial as spatial
 import vtk
 
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 
 def to_polydata(mesh):
@@ -117,18 +119,11 @@ def find_points_on_mv(mv_points, center_lpv):
 
 
 def cut_a_band_from_model(polydata, point_1, point_2, point_3, width):
-    v1 = point_2 - point_1
-    v2 = point_3 - point_1
-    norm = np.cross(v1, v2)
-    #
-    # # normlize norm
-    n = np.linalg.norm([norm], axis=1, keepdims=True)
-    norm_1 = norm / n
+    norm_1 = get_normalized_cross_product(point_1, point_2, point_3)
 
     point_pass = point_1 + 0.5 * width * norm_1
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0][0], norm_1[0][1], norm_1[0][2])
-    plane.SetOrigin(point_pass[0][0], point_pass[0][1], point_pass[0][2])
+
+    plane = initialize_plane(norm_1[0], point_pass[0])
 
     meshExtractFilter1 = vtk.vtkExtractGeometry()
     meshExtractFilter1.SetInputData(polydata)
@@ -136,10 +131,8 @@ def cut_a_band_from_model(polydata, point_1, point_2, point_3, width):
     meshExtractFilter1.Update()
 
     point_moved = point_1 - 0.5 * width * norm_1
-    # print(point_moved[0][0])
-    plane2 = vtk.vtkPlane()
-    plane2.SetNormal(-norm_1[0][0], -norm_1[0][1], -norm_1[0][2])
-    plane2.SetOrigin(point_moved[0][0], point_moved[0][1], point_moved[0][2])
+
+    plane2 = initialize_plane(-norm_1[0], point_moved[0])
 
     meshExtractFilter2 = vtk.vtkExtractGeometry()
     meshExtractFilter2.SetInputData(meshExtractFilter1.GetOutput())
@@ -155,21 +148,10 @@ def cut_a_band_from_model(polydata, point_1, point_2, point_3, width):
 
 
 def cut_into_two_parts(polydata, point_1, point_2, point_3):
-    v1 = point_2 - point_1
-    v2 = point_3 - point_1
-    norm = np.cross(v1, v2)
-    #
-    # # normlize norm
-    n = np.linalg.norm([norm], axis=1, keepdims=True)
-    norm_1 = norm / n
+    norm_1 = get_normalized_cross_product(point_1, point_2, point_3)
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0][0], norm_1[0][1], norm_1[0][2])
-    plane.SetOrigin(point_1[0], point_1[1], point_1[2])
-
-    plane2 = vtk.vtkPlane()
-    plane2.SetNormal(-norm_1[0][0], -norm_1[0][1], -norm_1[0][2])
-    plane2.SetOrigin(point_1[0], point_1[1], point_1[2])
+    plane = initialize_plane(norm_1[0], point_1)
+    plane2 = initialize_plane(-norm_1[0], point_1)
 
     meshExtractFilter1 = vtk.vtkExtractGeometry()
     meshExtractFilter1.SetInputData(polydata)

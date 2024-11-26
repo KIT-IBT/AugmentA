@@ -30,10 +30,12 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_to_pts, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -387,17 +389,9 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     point_end = np.asarray(polydata.GetPoint(EndVertex))
     point_third = plane_point
 
-    v1 = point_start - point_end
-    v2 = point_start - point_third
-    norm = np.cross(v1, v2)
-    #
-    # # normlize norm
-    n = np.linalg.norm(norm)
-    norm_1 = norm / n
+    norm_1 = get_normalized_cross_product(point_start, point_end, point_third)
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0], norm_1[1], norm_1[2])
-    plane.SetOrigin(point_start[0], point_start[1], point_start[2])
+    plane = initialize_plane(norm_1, point_start)
 
     meshExtractFilter1 = vtk.vtkExtractGeometry()
     meshExtractFilter1.SetInputData(polydata)
@@ -405,9 +399,8 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     meshExtractFilter1.Update()
 
     point_moved = point_start - 2 * args.scale * norm_1
-    plane2 = vtk.vtkPlane()
-    plane2.SetNormal(-norm_1[0], -norm_1[1], -norm_1[2])
-    plane2.SetOrigin(point_moved[0], point_moved[1], point_moved[2])
+
+    plane2 = initialize_plane(-norm_1, point_moved)
 
     meshExtractFilter2 = vtk.vtkExtractGeometry()
     meshExtractFilter2.SetInputData(meshExtractFilter1.GetOutput())
@@ -666,17 +659,10 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     tv_ivc_center = get_mean_point(ra_ivc_surface)
     tv_svc_center = get_mean_point(ra_svc_surface)
 
-    v1 = tv_center - tv_ivc_center
-    v2 = tv_center - tv_svc_center
-    norm = np.cross(v1, v2)
-
-    n = np.linalg.norm([norm], axis=1, keepdims=True)
-    norm_1 = norm / n
+    norm_1 = get_normalized_cross_product(tv_center, tv_ivc_center, tv_svc_center)
     moved_center = tv_center - norm_1 * 5
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(-norm_1[0][0], -norm_1[0][1], -norm_1[0][2])
-    plane.SetOrigin(moved_center[0][0], moved_center[0][1], moved_center[0][2])
+    plane = initialize_plane(-norm_1[0], moved_center[0])
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(ra_tv_s_surface)
