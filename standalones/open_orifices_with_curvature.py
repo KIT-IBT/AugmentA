@@ -43,7 +43,7 @@ from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
-    cut_elements_from_mesh
+    cut_elements_from_mesh, find_elements_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 pv.set_plot_theme('dark')
@@ -424,29 +424,6 @@ def run():
 def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
     return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
                                                                                thr2)
-
-
-def find_elements_within_radius(mesh, points_data, radius):
-    locator = vtk.vtkStaticPointLocator()
-    locator.SetDataSet(mesh)
-    locator.BuildLocator()
-
-    mesh_id_list = vtk.vtkIdList()
-    locator.FindPointsWithinRadius(radius, points_data, mesh_id_list)
-
-    mesh_cell_id_list = vtk.vtkIdList()
-    mesh_cell_temp_id_list = vtk.vtkIdList()
-    for i in range(mesh_id_list.GetNumberOfIds()):
-        mesh.GetPointCells(mesh_id_list.GetId(i), mesh_cell_temp_id_list)
-        for j in range(mesh_cell_temp_id_list.GetNumberOfIds()):
-            mesh_cell_id_list.InsertNextId(mesh_cell_temp_id_list.GetId(j))
-
-    id_set = set()
-    for i in range(mesh_cell_id_list.GetNumberOfIds()):
-        id_set.add(mesh_cell_id_list.GetId(i))
-
-    return id_set
-
 
 def extract_largest_region(mesh):
     connect = vtk.vtkConnectivityFilter()

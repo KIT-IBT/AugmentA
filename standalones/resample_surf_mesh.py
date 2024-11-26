@@ -36,6 +36,7 @@ import os
 import numpy as np
 import pandas as pd
 
+from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
 
@@ -67,33 +68,6 @@ def parser():
                         help='set to 1 to predict location of the appendage apex using max curvature, else pick manually')
 
     return parser
-
-
-def find_elements_around_path_within_radius(mesh, points_data, radius):
-    locator = vtk.vtkStaticPointLocator()
-    locator.SetDataSet(mesh)
-    locator.BuildLocator()
-
-    mesh_id_list = vtk.vtkIdList()
-    for i in range(len(points_data)):
-        temp_result = vtk.vtkIdList()
-        locator.FindPointsWithinRadius(radius, points_data[i], temp_result)
-        for j in range(temp_result.GetNumberOfIds()):
-            mesh_id_list.InsertNextId(temp_result.GetId(j))
-
-    mesh_cell_id_list = vtk.vtkIdList()
-    mesh_cell_temp_id_list = vtk.vtkIdList()
-    for i in range(mesh_id_list.GetNumberOfIds()):
-        mesh.GetPointCells(mesh_id_list.GetId(i), mesh_cell_temp_id_list)
-        for j in range(mesh_cell_temp_id_list.GetNumberOfIds()):
-            mesh_cell_id_list.InsertNextId(mesh_cell_temp_id_list.GetId(j))
-
-    id_set = set()
-    for i in range(mesh_cell_id_list.GetNumberOfIds()):
-        id_set.add(mesh_cell_id_list.GetId(i))
-
-    return id_set
-
 
 def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1,
                        atrium='LA'):
