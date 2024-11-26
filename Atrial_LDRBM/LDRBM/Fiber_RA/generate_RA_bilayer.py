@@ -37,10 +37,6 @@ def run(args):
     reader.Update()
     ra_endo = reader.GetOutput()
 
-    # reader = vtk.vtkUnstructuredGridReader()
-    # reader.SetFileName(args.mesh + "/RA_endo_with_fiber.vtk")
-    # reader.Update()
-    # ra_endo = reader.GetOutput()
 
     reader = vtk.vtkUnstructuredGridReader()
     reader.SetFileName(args.mesh + "/RA_epi_with_fiber.vtk")
@@ -62,13 +58,6 @@ def move_surf_along_normals(mesh, eps, direction):
     extract_surf.SetInputData(mesh)
     extract_surf.Update()
 
-    # reverse = vtk.vtkReverseSense()
-    # reverse.ReverseCellsOn()
-    # reverse.ReverseNormalsOn()
-    # reverse.SetInputConnection(extract_surf.GetOutputPort())
-    # reverse.Update()
-
-    # polydata = reverse.GetOutput()
     polydata = extract_surf.GetOutput()
 
     normalGenerator = vtk.vtkPolyDataNormals()
@@ -76,7 +65,6 @@ def move_surf_along_normals(mesh, eps, direction):
     normalGenerator.ComputeCellNormalsOff()
     normalGenerator.ComputePointNormalsOn()
     normalGenerator.ConsistencyOn()
-    # normalGenerator.AutoOrientNormalsOn()
     normalGenerator.SplittingOff()
     normalGenerator.Update()
 

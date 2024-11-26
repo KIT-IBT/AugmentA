@@ -164,12 +164,6 @@ def AugmentA(args):
                 df = pd.DataFrame(mesh_data)
                 df.to_csv(fname, float_format="%.2f", index=False)
 
-                # print("Labelling atrial orifices")
-                # label_atrial_orifices(args.mesh,LAA,RAA)
-
-                # Label atrial orifices using apex id found in the resampling algorithm
-                # df = pd.read_csv('{}_mesh_data.csv'.format(meshname))
-
                 # Atrial orifices already open
                 print("Atrial orifices already open")
                 processed_mesh = meshname
@@ -251,51 +245,9 @@ def AugmentA(args):
             meshin = pv.read(f'{processed_mesh}.ply')
             pv.save_meshio(f'{processed_mesh}.obj', meshin, "obj")
 
-            # p = pv.Plotter(notebook=False)
-            #
-            # if args.use_curvature_to_open:
-            #     print("Propose appendage apex location using surface curvature")
-            #     os.system("meshtool query curvature -msh={}.obj -size={}".format(meshname, 30*args.scale))
-            #     curv = np.loadtxt('{}.curv.dat'.format(meshname))
-            #     mesh_curv = pv.read('{}.obj'.format(meshname))
-            #
-            #     apex = mesh_curv.points[np.argmax(curv),:]
-            #
-            #     point_cloud = pv.PolyData(apex)
-            #
-            #     p.add_mesh(point_cloud, color='w', point_size=30.*args.scale, render_points_as_spheres=True)
-            #
-            # p.add_mesh(meshin,color='r')
-            # p.enable_point_picking(meshin, use_picker=True)
-            # p.add_text('Select the appendage apex and close the window',position='lower_left')
-            #
-            # p.show()
-            #
-            # if p.picked_point is not None:
-            #     apex = p.picked_point
-            #
-            # print("Apex coordinates: ", apex)
-            # p.close()
-            # mesh_data = dict()
-            # tree = cKDTree(meshin.points.astype(np.double))
-            # dist, apex_id = tree.query(apex)
-            #
-            # mesh_data[args.atrium+"A_id"] = [apex_id]
-            #
-            # fname = '{}_mesh_data.csv'.format(meshname)
-            # df = pd.DataFrame(mesh_data)
-            # df.to_csv(fname, float_format="%.2f", index=False)
-
         elif not args.resample_input and not args.find_appendage:  # do not resample and do not find appendage
 
             processed_mesh = meshname  # Provide mesh with _res in  the name
-
-            # if not args.closed_surface:
-            #     #Convert mesh from vtk to obj
-            #     meshin = pv.read('{}.vtk'.format(meshname))
-            #     pv.save_meshio('{}.obj'.format(meshname), meshin, "obj")
-            # else:
-            #     meshin = pv.read('{}.obj'.format(meshname))
 
         # Label atrial orifices using apex id found in the resampling algorithm
         df = pd.read_csv(f'{processed_mesh}_mesh_data.csv')

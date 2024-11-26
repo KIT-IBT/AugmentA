@@ -280,10 +280,6 @@ def generate_sheet_dir(args, model, job):
     writing
     '''
     print('writing...')
-    # sheet_data = vtk.util.numpy_support.numpy_to_vtk(sheet_norm, deep=True, array_type=vtk.VTK_DOUBLE)
-    # sheet_data.SetNumberOfComponents(3)
-    # sheet_data.SetName("sheet")
-    # model.GetCellData().AddArray(sheet_data)
 
     meshNew = dsa.WrapDataObject(model)
     meshNew.CellData.append(fiber, "fiber")
@@ -667,26 +663,6 @@ def get_ct_end_points_id(endo, ct, scv, icv):
 
 
 def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, ra_tv_surface):
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_tv_s_surface.vtk')
-    # reader.Update()
-    # tv_s = reader.GetOutput()
-
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_ivc_surface.vtk')
-    # reader.Update()
-    # tv_ivc = reader.GetOutput()
-
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_svc_surface.vtk')
-    # reader.Update()
-    # tv_svc = reader.GetOutput()
-
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_tv_surface.vtk')
-    # reader.Update()
-    # tv = reader.GetOutput()
-
     tv_center = get_mean_point(ra_tv_surface)
     tv_ivc_center = get_mean_point(ra_ivc_surface)
     tv_svc_center = get_mean_point(ra_svc_surface)

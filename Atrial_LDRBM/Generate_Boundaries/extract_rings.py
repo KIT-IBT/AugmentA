@@ -143,11 +143,6 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         LA_tag = id_vec[int(LAA_id)]
         RA_tag = id_vec[int(RAA_id)]
 
-        # thr = vtk.vtkThreshold()
-        # thr.SetInputData(mesh_conn)
-        # thr.ThresholdBetween(LA_tag, LA_tag)
-        # thr.Update()
-
         warning("WARNING: Should be checkt for functionality extract_rings l151")
         thr = get_threshold_between(mesh_conn, LA_tag, LA_tag, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
 

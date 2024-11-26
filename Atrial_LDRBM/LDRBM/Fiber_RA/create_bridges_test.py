@@ -180,11 +180,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     loc.BuildLocator()
     point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p + TV_p * 0.1))
 
-    # loc = vtk.vtkPointLocator()
-    # loc.SetDataSet(la_wall)
-    # loc.BuildLocator()
-    # point_CS_on_MV = la_wall.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
-
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(ra_septum)
     loc.BuildLocator()
@@ -342,11 +337,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         if args.debug:
             vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/" + str(var) + "_append_earth.vtu",
                                              append_filter.AddInputData(extract.GetOutput()))
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.MergePointsOn()
-    #     append_filter.SetTolerance(0.2*args.scale)
-    #     append_filter.AddInputData(append_filter.GetOutput())
-    # meshNew = dsa.WrapDataObject(extract.GetOutput())
 
     filename = job.ID + '/bridges/bb_fiber.dat'
     f = open(filename, 'rb')

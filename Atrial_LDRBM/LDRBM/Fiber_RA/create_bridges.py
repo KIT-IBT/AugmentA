@@ -124,10 +124,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     loc.BuildLocator()
     point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p + TV_p * 0.1))  # adapt this value if CS is too low
 
-    # loc = vtk.vtkPointLocator()
-    # loc.SetDataSet(la_wall)
-    # loc.BuildLocator()
-    # point_CS_on_MV = la_wall.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(ra_septum)
@@ -222,31 +218,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         reader.Update()
         bridge_usg = reader.GetOutput()
 
-        # geo_filter = vtk.vtkGeometryFilter()
-        # geo_filter.SetInputData(bridge_usg)
-        # geo_filter.Update()
-        # bridge = geo_filter.GetOutput()
-
-        # reverse = vtk.vtkReverseSense()
-        # reverse.ReverseCellsOn()
-        # reverse.ReverseNormalsOn()
-        # reverse.SetInputConnection(cleaner.GetOutputPort())
-        # reverse.Update()
-
-        # earth = reverse.GetOutput()
-
-        # vbool = vtk.vtkBooleanOperationPolyDataFilter()
-        # vbool.SetOperationToDifference()
-        # vbool.SetInputData( 0, epi_surf )
-        # vbool.SetInputData( 1, bridge )
-
-        # vbool.Update()
-
         locator = vtk.vtkStaticPointLocator()
         locator.SetDataSet(la_ra_usg)
         locator.BuildLocator()
 
-        # intersection_points = vbool.GetOutput().GetPoints().GetData()
         intersection_points = bridge_usg.GetPoints().GetData()
         intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
 

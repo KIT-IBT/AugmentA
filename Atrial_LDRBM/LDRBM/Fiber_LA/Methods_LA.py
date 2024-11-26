@@ -75,13 +75,6 @@ def move_surf_along_normals(mesh, eps, direction):
     extract_surf.SetInputData(mesh)
     extract_surf.Update()
 
-    # reverse = vtk.vtkReverseSense()
-    # reverse.ReverseCellsOn()
-    # reverse.ReverseNormalsOn()
-    # reverse.SetInputConnection(extract_surf.GetOutputPort())
-    # reverse.Update()
-
-    # polydata = reverse.GetOutput()
     polydata = extract_surf.GetOutput()
 
     normalGenerator = vtk.vtkPolyDataNormals()
@@ -503,26 +496,6 @@ def get_ct_end_points_id(endo, ct, scv, icv):
 
 
 def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, ra_tv_surface):
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_tv_s_surface.vtk')
-    # reader.Update()
-    # tv_s = reader.GetOutput()
-
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_ivc_surface.vtk')
-    # reader.Update()
-    # tv_ivc = reader.GetOutput()
-
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_svc_surface.vtk')
-    # reader.Update()
-    # tv_svc = reader.GetOutput()
-
-    # reader = vtk.vtkPolyDataReader()
-    # reader.SetFileName('model_pm/ra_tv_surface.vtk')
-    # reader.Update()
-    # tv = reader.GetOutput()
-
     tv_center = get_mean_point(ra_tv_surface)
     tv_ivc_center = get_mean_point(ra_ivc_surface)
     tv_svc_center = get_mean_point(ra_svc_surface)
@@ -943,73 +916,10 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
 
     bb_left = get_wide_bachmann_path_left(thresh.GetOutput(), inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id,
                                           LAA_pt_far_from_LIPV_id)
-    # bb_left = get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id, LAA_pt_far_from_LIPV_id)
-    # bb_left = savgol_filter(bb_left, 5, 2, mode='interp', axis =0)
 
-    # new = []
-    # diff = 1000
-    # for n in range(len(bb_left)):
-    #     if not new or np.sqrt(np.sum((np.array(bb_left[n])-np.array(new[-1]))**2, axis=0)) >= diff:
-    #         new.append(bb_left[n])
-    # new = np.array(new)
-
-    # tck, u = interpolate.splprep([new[:,0],new[:,1],new[:,2]], s=100)
-    # x_knots, y_knots, z_knots = interpolate.splev(tck[0], tck)
-
-    # u_fine = np.linspace(0,1,len(bb_left))
-    # x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
-
-    # bb_left = np.array([x_knots, y_knots, z_knots]).T
-    # bb_left = np.array([x_fine, y_fine, z_fine]).T
-
-    # u_fine = np.linspace(0,1,len(bb_left))
-    # x_fine, y_fine, z_fine = interpolate.splev(u_fine, tck)
-    # new_points = splev(u, tck)
-    # window_width = 1000
-    # cumsum_vec = np.cumsum(np.insert(data, 0, 0))
-    # ma_vec = (cumsum_vec[window_width:] - cumsum_vec[:-window_width]) / window_width
-
-    # pts = vtk.vtkPoints()
-    # for n in range(len(bb_left)):
-    #     pts.InsertNextPoint(bb_left[n])
-
-    # smoothingIterations = 15
-    # passBand = 0.001
-    # featureAngle = 120.0
-
-    # smoother = vtk.vtkWindowedSincPolyDataFilter()
-    # smoother.SetInputConnection(discrete->GetOutputPort())
-    # smoother.SetNumberOfIterations(smoothingIterations)
-    # smoother.BoundarySmoothingOff()
-    # smoother.FeatureEdgeSmoothingOff()
-    # smoother.SetFeatureAngle(featureAngle)
-    # smoother.SetPassBand(passBand)
-    # smoother.NonManifoldSmoothingOn()
-    # smoother.NormalizeCoordinatesOn()
-    # smoother.Update()
-
-    # Smooth the path fitting a spline?
-    # new = []
-    # diff = 1000
-    # for n in range(len(bb_left)):
-    #     if not new or np.sqrt(np.sum((np.array(bb_left[n])-np.array(new[-1]))**2, axis=0)) >= diff:
-    #         new.append(bb_left[n])
-    # new = np.array(new)
-    # bb_left = np.array(new)
-    # n = bb_left.shape[0]
-    # new = []  # change dtype if you need to
-    # tree = cKDTree(bb_left)
-    # for i in range(n):
-    #     neighbors = tree.query_ball_point(bb_left[i], 1000)
-    #     temp = [bb_left[k] for k in neighbors]
-    #     new.append(np.mean(temp, axis =0))
-
-    # # mesh.VPos = final
-    # bb_left = np.array(new)
 
     return bb_left, thresh.GetOutput().GetPoint(inf_appendage_basis_id), thresh.GetOutput().GetPoint(
         sup_appendage_basis_id), thresh.GetOutput().GetPoint(LAA_pt_far_from_LIPV_id)
-    # return bb_left, epi.GetPoint(inf_appendage_basis_id), epi.GetPoint(sup_appendage_basis_id), epi.GetPoint(LAA_pt_far_from_LIPV_id)
 
 
 def get_in_surf1_closest_point_in_surf2(surf1, surf2, pt_id_in_surf2):

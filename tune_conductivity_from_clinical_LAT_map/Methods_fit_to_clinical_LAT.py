@@ -33,6 +33,7 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -378,13 +379,6 @@ def create_regele(endo, args):
     low_vol = vtk_thr(endo, 1, "CELLS", "bi", args.low_vol_thr)
     low_vol_ids = vtk.util.numpy_support.vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
     not_low_volt_endo = vtk_thr(endo, 0, "POINTS", "bi", 0.5 + 0.01)
-
-    # f_not_conductive = job.ID + '/elems_not_conductive'
-    # file = open(f_not_conductive + '.regele', 'w')
-    # file.write(str(len(elems_not_conductive)) + '\n')
-    # for i in elems_not_conductive:
-    #     file.write(str(i) + '\n')
-    # file.close()
 
     f_slow_conductive = f"{args.init_state_dir}/{args.mesh.split('/')[-1]}/elems_slow_conductive"
     file = open(f_slow_conductive + '.regele', 'w')

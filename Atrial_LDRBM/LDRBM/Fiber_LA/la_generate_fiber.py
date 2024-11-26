@@ -388,10 +388,6 @@ def la_generate_fiber(model, args, job):
         el_endo[PVs["LIPV"]] = v_grad_norm[PVs["LIPV"]]
         el_endo[PVs["LSPV"]] = v_grad_norm[PVs["LSPV"]]
 
-        # for i in range(len(v_grad_norm)):
-        #     if v[i] <= 0.2:
-        #         el_endo[i] = v_grad_norm[i]
-
         end_time = datetime.datetime.now()
 
         el_endo = np.where(el_endo == [0, 0, 0], [1, 0, 0], el_endo).astype("float32")
@@ -515,16 +511,6 @@ def la_generate_fiber(model, args, job):
     df["LAA_far_from_LIPV"] = LAA_far_from_LIPV
 
     df.to_csv(args.mesh + "_surf/rings_centroids.csv", float_format="%.2f", index=False)
-
-    # # Bachmann_Bundle internal connection
-    # la_connect_point, ra_connect_point = Method.get_connection_point_la_and_ra(la_appex_point)
-    # la_connect_point = np.asarray(la_connect_point)
-    #
-    # path_start_end = np.vstack((appendage_basis, la_connect_point))
-    # path_bb_ra = Method.creat_center_line(path_start_end)
-    # tag = Method.assign_element_tag_around_path_within_radius(model, path_bb_ra, 2, tag, bachmann_bundel_left)
-    # el = Method.assign_element_fiber_around_path_within_radius(model, path_bb_ra, 2, el, smooth=True)
-
     print("Creating bachmann bundles... done")
     if args.mesh_type == "bilayer":
         el_epi = np.where(el_epi == [0, 0, 0], [1, 0, 0], el_epi).astype("float32")

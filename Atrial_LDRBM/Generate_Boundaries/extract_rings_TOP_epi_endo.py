@@ -942,10 +942,6 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     tv_id_epi = np.intersect1d(pts_in_tv_epi, pts_in_top_epi)
 
-    # pts_in_top_endo = vtk.util.numpy_support.vtk_to_numpy(top_cut_endo.GetPoints().GetData())
-    # pts_in_svc = vtk.util.numpy_support.vtk_to_numpy(svc.GetPoints().GetData())
-    # pts_in_ivc = vtk.util.numpy_support.vtk_to_numpy(ivc.GetPoints().GetData())
-
     endo_ids = vtk.util.numpy_support.vtk_to_numpy(endo.GetPointData().GetArray("Ids"))
     tree = cKDTree(vtk.util.numpy_support.vtk_to_numpy(endo.GetPoints().GetData()))
     dd, ii = tree.query(svc_points)

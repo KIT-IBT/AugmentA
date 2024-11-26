@@ -549,18 +549,6 @@ def run(args, job):
             cmd += tissue_3
             cmd += tissue_4 + bilayer
             cmd += g_scale
-            # if args.fibrotic_tissue == 1:
-            #     fib_reg = [103]
-            #     sigma = 0.000001
-            #     fibrotic_tissue = ['-gregion[6].num_IDs ', 1, #tianbao
-            #             '-gregion[6].ID ', 103,
-            #             '-gregion[6].g_il ', sigma,
-            #             '-gregion[6].g_it ', sigma,
-            #             '-gregion[6].g_in ', sigma,
-            #             '-gregion[6].g_el ', sigma,
-            #             '-gregion[6].g_et ', sigma,
-            #             '-gregion[6].g_en ', sigma]
-            #     cmd += fibrotic_tissue
 
             writestatef = 'state'
             tsav_state = fit_LAT[l]

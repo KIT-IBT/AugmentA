@@ -261,10 +261,6 @@ def ra_generate_fiber(model, args, job):
     IVC_max_r_CT_pt = IVC_s.GetPoint(np.argmax(vtk.util.numpy_support.vtk_to_numpy(
         IVC_s.GetPointData().GetArray('phie_r'))))  # not always the best choice for pm1
 
-    # thr_min = 0.150038
-    # thr_max = 0.38518
-
-    # CT_band = vtk_thr(RAW_s, 2,"CELLS","phie_w", thr_min, thr_max) # dk01 fit_both
     CT_band = vtk_thr(RAW_s, 2, "CELLS", "phie_w", 0.1, tao_ct_plus)  # grad_w
     CT_band = Method.extract_largest_region(CT_band)
     CT_ub = vtk_thr(RAW_s, 2, "CELLS", "phie_w", tao_ct_plus - 0.02, tao_ct_plus)  # grad_w
@@ -312,21 +308,12 @@ def ra_generate_fiber(model, args, job):
 
     CT_band = extract.GetOutput()
 
-    # IVC_max_r_CT_pt = CT_band.GetPoint(np.argmax(vtk.util.numpy_support.vtk_to_numpy(CT_band.GetPointData().GetArray('phie_r'))))  # optional choice for pm, be careful as it overwrites
-
     if args.debug:
         Method.writer_vtk(CT_band, f'{args.mesh}_surf/' + "ct_band_2.vtk")
 
     CT_band_ids = vtk.util.numpy_support.vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
 
     tao_RAA = np.max(vtk.util.numpy_support.vtk_to_numpy(CT_band.GetCellData().GetArray('phie_v2')))
-    # tao_RAA = 0.45 # for patient 20220203
-
-    # CT_ids = vtk.util.numpy_support.vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
-
-    # tag[CT_ids] = crista_terminalis
-
-    # CT part from IVC to septum
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(CT_band)
@@ -509,26 +496,6 @@ def ra_generate_fiber(model, args, job):
 
     RAA_CT_pt = CT_band.GetPoint(loc.FindClosestPoint(np.array(df["RAA"])))
 
-    # # calculate the norm vector
-    # v1 = np.array(SVC_CT_pt) - np.array(RAA_CT_pt)
-    # v2 = np.array(SVC_CT_pt) - np.array(df["TV"])
-    # norm = np.cross(v1, v2)
-
-    # #normalize norm
-    # n = np.linalg.norm(norm)
-    # norm_1 = norm/n
-
-    # plane = vtk.vtkPlane()
-    # plane.SetNormal(norm_1[0], norm_1[1], norm_1[2])
-    # plane.SetOrigin(SVC_CT_pt[0], SVC_CT_pt[1], SVC_CT_pt[2])
-
-    # meshExtractFilter = vtk.vtkExtractGeometry()
-    # meshExtractFilter.SetInputData(CT_band)
-    # meshExtractFilter.SetImplicitFunction(plane)
-    # meshExtractFilter.Update()
-    # CT = meshExtractFilter.GetOutput()
-
-    # CT = Method.extract_largest_region(CT)
     CT = CT_band
 
     CT_ids = vtk.util.numpy_support.vtk_to_numpy(CT.GetCellData().GetArray('Global_ids'))
@@ -574,26 +541,13 @@ def ra_generate_fiber(model, args, job):
     # k
     # k = ab_grad
     print('############### k ###############')
-    # print(k)
-
-    # en
-    # en = ab_grad
-    # for i in range(len(k)):
-    #     en[i] = k[i] - np.dot(k[i], et[i]) * et[i]
 
     en = k - et * np.sum(k * et, axis=1).reshape(len(et), 1)
-    # normlize the en
-    # abs_en = np.linalg.norm(en, axis=1, keepdims=True)
-    # for i in range(len(abs_en)):
-    #     if abs_en[i] == 0:
-    #         abs_en[i] =1
-    # en = en/abs_en
+
     abs_en = np.linalg.norm(en, axis=1, keepdims=True)
     abs_en = np.where(abs_en != 0, abs_en, 1)
     en = en / abs_en
     print('############### en ###############')
-    # print(en)
-
     # el
     el = np.cross(en, et)
 
@@ -866,21 +820,6 @@ def ra_generate_fiber(model, args, job):
             tag[ii] = pectinate_muscle
 
             el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
-
-        # pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
-
-        # tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-        # fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=True)
-
-        # for i in range(pm_num):
-        #     pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
-        #     pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
-
-        #     pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
-        #     pm = pm[int(len(pm)*0.05):,:] 
-        #     print("The ", i + 1, "th pm done")
-        #     tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-        #     fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=True)
 
     if args.mesh_type == "bilayer":
 
