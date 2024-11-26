@@ -27,6 +27,8 @@ under the License.
 import os
 import subprocess as sp
 import datetime
+import warnings
+
 import vtk
 import numpy as np
 from vtk.util import numpy_support
@@ -36,6 +38,7 @@ from carputils import mesh
 from la_laplace import la_laplace
 from la_generate_fiber import la_generate_fiber
 import Methods_LA
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 
 
 def parser():
@@ -104,33 +107,16 @@ def run(args, job):
 
     pts = numpy_support.vtk_to_numpy(LA.GetPoints().GetData())
 
-    with open(LA_mesh + '.pts', "w") as f:
-        f.write(f"{len(pts)}\n")
-        for i in range(len(pts)):
-            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
+    write_to_pts(LA_mesh + '.pts', pts)
 
-    with open(LA_mesh + '.elem', "w") as f:
-        f.write(f"{LA.GetNumberOfCells()}\n")
-        for i in range(LA.GetNumberOfCells()):
-            cell = LA.GetCell(i)
-            if cell.GetNumberOfPoints() == 2:
-                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {1}\n")
-            elif cell.GetNumberOfPoints() == 3:
-                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                  cell.GetPointIds().GetId(2), 1))
-            elif cell.GetNumberOfPoints() == 4:
-                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), 1))
+    write_to_elem( LA_mesh + '.elem', LA, np.ones(LA.GetNumberOfCells(), dtype=int))
 
     fibers = np.zeros((LA.GetNumberOfCells(), 6))
     fibers[:, 0] = 1
     fibers[:, 4] = 1
 
-    with open(LA_mesh + '.lon', "w") as f:
-        f.write("2\n")
-        for i in range(len(fibers)):
-            f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3], fibers[i][4],
-                                                 fibers[i][5]))
+    warnings.warn("Test if lon is storred correctly la_main.py l116 ff.")
+    write_to_lon(LA_mesh + '.lon', fibers, [fiber[3:6] for fiber in fibers], precession=1)
 
     start_time = datetime.datetime.now()
     init_start_time = datetime.datetime.now()

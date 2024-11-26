@@ -31,6 +31,8 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_to_pts, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -168,45 +170,25 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     return bilayer
 
 
-def write_bilayer(args, job):
-    reader = vtk.vtkXMLUnstructuredGridReader()
-    reader.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  #
-    reader.Update()
-    bilayer = reader.GetOutput()
+def write_bilayer(bilayer, args, job):
+    file_name = job.ID + "/result_RA/LA_RA_bilayer_with_fiber"
+    if args.ofmt == 'vtk':
+        vtk_unstructured_grid_writer(f"{file_name}.vtk", bilayer, True)
+    else:
+        vtk_xml_unstructured_grid_writer(f"{file_name}.vtu", bilayer)
 
-    pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
-    with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.pts', "w") as f:
-        f.write(f"{len(pts)}\n")
-        for i in range(len(pts)):
-            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
+    pts = vtk_to_numpy(bilayer.GetPoints().GetData())
 
-    tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
+    write_to_pts(f'{file_name}.pts', pts)
 
-    with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.elem', "w") as f:
-        f.write(f"{bilayer.GetNumberOfCells()}\n")
-        for i in range(bilayer.GetNumberOfCells()):
-            cell = bilayer.GetCell(i)
-            if cell.GetNumberOfPoints() == 2:
-                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
-            elif cell.GetNumberOfPoints() == 3:
-                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                  cell.GetPointIds().GetId(2), tag_epi[i]))
-            elif cell.GetNumberOfPoints() == 4:
-                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3),
-                                                     tag_epi[i]))
-            else:
-                print("strange " + str(cell.GetNumberOfPoints()))
-    el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
-    sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
+    tag_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
-    with open(job.ID + '/result_RA/LA_RA_bilayer_with_fiber.lon', "w") as f:
-        f.write("2\n")
-        for i in range(len(el_epi)):
-            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
-                                                                         sheet_epi[i][0], sheet_epi[i][1],
-                                                                         sheet_epi[i][2]))
-    print('Done...')
+    write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
+
+    el_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
+    sheet_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
+
+    write_to_lon(f'{file_name}.lon', el_epi, sheet_epi)
 
 
 def generate_sheet_dir(args, model, job):
@@ -1070,11 +1052,7 @@ def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
 
 
 def create_pts(array_points, array_name, mesh_dir):
-    f = open(f"{mesh_dir}{array_name}.pts", "w")
-    f.write("0 0 0\n")
-    for i in range(len(array_points)):
-        f.write(f"{array_points[i][0]} {array_points[i][1]} {array_points[i][2]}\n")
-    f.close()
+    write_to_pts(f"{mesh_dir}{array_name}.pts", array_points)
 
 
 def to_polydata(mesh):

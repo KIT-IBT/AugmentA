@@ -47,6 +47,7 @@ import Methods_RA as Method
 import pandas as pd
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, \
     vtk_unstructured_grid_writer, vtk_obj_writer
 
@@ -277,7 +278,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         reader.Update()
         bridge_usg = reader.GetOutput()
 
-
         locator = vtk.vtkStaticPointLocator()
         locator.SetDataSet(la_ra_usg)
         locator.BuildLocator()
@@ -368,7 +368,6 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     print("Union between earth and bridges")
     for var in bridge_list:
-
 
         mesh_D = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj")
         mesh_E = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_earth.obj")
@@ -480,41 +479,19 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         Method.write_bilayer(bilayer, args, job)
 
     else:
+        file_name = job.ID + "/result_RA/LA_RA_vol_with_fiber"
+        vtk_xml_unstructured_grid_writer(f"{file_name}.vtu", epi)
 
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_vol_with_fiber.vtu", epi)
         pts = vtk.util.numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
-        with open(job.ID + '/result_RA/LA_RA_vol_with_fiber.pts', "w") as f:
-            f.write(f"{len(pts)}\n")
-            for i in range(len(pts)):
-                f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
         tag_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('elemTag'))
 
-        with open(job.ID + '/result_RA/LA_RA_vol_with_fiber.elem', "w") as f:
-            f.write(f"{epi.GetNumberOfCells()}\n")
-            for i in range(epi.GetNumberOfCells()):
-                cell = epi.GetCell(i)
-                if cell.GetNumberOfPoints() == 2:
-                    f.write(
-                        f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
-                elif cell.GetNumberOfPoints() == 3:
-                    f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                      cell.GetPointIds().GetId(2), tag_epi[i]))
-                elif cell.GetNumberOfPoints() == 4:
-                    f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                         cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3),
-                                                         tag_epi[i]))
-                else:
-                    print("strange " + str(cell.GetNumberOfPoints()))
         el_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('fiber'))
         sheet_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('sheet'))
 
-        with open(job.ID + '/result_RA/LA_RA_vol_with_fiber.lon', "w") as f:
-            f.write("2\n")
-            for i in range(len(el_epi)):
-                f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
-                                                                             sheet_epi[i][0], sheet_epi[i][1],
-                                                                             sheet_epi[i][2]))
+        write_to_pts(f'{file_name}.pts', pts)
+        write_to_elem(f'{file_name}.elem', epi, tag_epi)
+        write_to_lon(f'{file_name}.lon', el_epi, sheet_epi)
 
 
 if __name__ == '__main__':

@@ -24,6 +24,7 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 
 EXAMPLE_DESCRIPTIVE_NAME = 'Tune conductivities to fit clinical LAT map'
@@ -375,32 +376,18 @@ def run(args, job):
 
     vtk_xml_unstructured_grid_writer(f"{meshfold}/LA_endo_with_fiber_30_um.vtu", meshNew.VTKObject)
     pts = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetPoints().GetData())
-    with open(meshfold + "/LA_endo_with_fiber_30_um.pts", "w") as f:
-        f.write(f"{len(pts)}\n")
-        for i in range(len(pts)):
-            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
-
-    with open(meshfold + "/LA_endo_with_fiber_30_um.elem", "w") as f:
-        f.write(f"{meshNew.VTKObject.GetNumberOfCells()}\n")
-        for i in range(meshNew.VTKObject.GetNumberOfCells()):
-            cell = meshNew.VTKObject.GetCell(i)
-            f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                              cell.GetPointIds().GetId(2), endo_etag[i]))
 
     el_epi = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('fiber'))
     sheet_epi = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('sheet'))
 
     el_epi = el_epi / 1000
     sheet_epi = sheet_epi / 1000
+    file_name = meshfold + "/LA_endo_with_fiber_30_um"
+    write_to_pts(f"{file_name}.pts", pts)
+    write_to_elem(f"{file_name}.elem", meshNew.VTKObject, endo_etag)
+    write_to_lon(f"{file_name}.lon", el_epi, sheet_epi)
 
-    with open(meshfold + "/LA_endo_with_fiber_30_um.lon", "w") as f:
-        f.write("2\n")
-        for i in range(len(el_epi)):
-            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
-                                                                         sheet_epi[i][0], sheet_epi[i][1],
-                                                                         sheet_epi[i][2]))
-
-    meshname_e = meshfold + "/LA_endo_with_fiber_30_um"
+    meshname_e = file_name
 
     new_endo = Methods_fit_to_clinical_LAT.smart_reader(meshname_e + '.vtu')
     cellid = vtk.vtkIdFilter()

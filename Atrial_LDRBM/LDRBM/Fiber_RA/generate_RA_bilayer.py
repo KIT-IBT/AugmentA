@@ -14,6 +14,9 @@ from scipy.spatial import cKDTree
 # from sklearn.neighbors import NearestNeighbors
 import argparse
 
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer
+
 parser = argparse.ArgumentParser(description='Create Right Atrium.')
 
 parser.add_argument('--mesh',
@@ -156,40 +159,19 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
 
 # Creates VTK and CARP files: .pts, .lon, .elem
 def write_bilayer(bilayer):
-    vtk_unstructured_grid_writer(args.mesh + "/RA_bilayer_with_fiber.vtk", bilayer, store_binary=True)
+    file_name=args.mesh + "/RA_bilayer_with_fiber"
+    vtk_unstructured_grid_writer(f"{file_name}.vtk", bilayer, store_binary=True)
 
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
-    with open(args.mesh + '/RA_bilayer_with_fiber.pts', "w") as f:
-        f.write(f"{len(pts)}\n")
-        for i in range(len(pts)):
-            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
 
     tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
-    with open(args.mesh + '/RA_bilayer_with_fiber.elem', "w") as f:
-        f.write(f"{bilayer.GetNumberOfCells()}\n")
-        for i in range(bilayer.GetNumberOfCells()):
-            cell = bilayer.GetCell(i)
-            if cell.GetNumberOfPoints() == 2:
-                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
-            elif cell.GetNumberOfPoints() == 3:
-                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                  cell.GetPointIds().GetId(2), tag_epi[i]))
-            elif cell.GetNumberOfPoints() == 4:
-                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3),
-                                                     tag_epi[i]))
-            else:
-                print("strange " + str(cell.GetNumberOfPoints()))
     el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
     sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
 
-    with open(args.mesh + '/RA_bilayer_with_fiber.lon', "w") as f:
-        f.write("2\n")
-        for i in range(len(el_epi)):
-            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
-                                                                         sheet_epi[i][0], sheet_epi[i][1],
-                                                                         sheet_epi[i][2]))
+    write_to_pts(f'{file_name}.pts', pts)
+    write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
+    write_to_lon(f'{file_name}.lon', el_epi, sheet_epi)
 
     print('Generated Bilayer RA')
 

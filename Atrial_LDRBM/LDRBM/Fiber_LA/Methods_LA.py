@@ -26,6 +26,7 @@ under the License.
 """
 import vtk
 import numpy as np
+from carputils.job.serialise import filename
 from vtk.numpy_interface import dataset_adapter as dsa
 from vtk.numpy_interface import algorithms as algs
 from scipy.spatial import cKDTree
@@ -34,6 +35,7 @@ from scipy.spatial.distance import cosine
 import collections
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -168,41 +170,20 @@ def generate_bilayer(endo, epi):
 
 
 def write_bilayer(bilayer, args, job):
+    file_name = job.ID + "/result_LA/LA_bilayer_with_fiber"
     if args.ofmt == 'vtk':
-        vtk_unstructured_grid_writer(job.ID + "/result_LA/LA_bilayer_with_fiber.vtk", bilayer, store_binary=True)
+        vtk_unstructured_grid_writer(f"{filename}.vtk", bilayer, store_binary=True)
     else:
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_LA/LA_bilayer_with_fiber.vtu", bilayer)
+        vtk_xml_unstructured_grid_writer(f"{filename}.vtu", bilayer)
+
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
-    with open(job.ID + '/result_LA/LA_bilayer_with_fiber.pts', "w") as f:
-        f.write(f"{len(pts)}\n")
-        for i in range(len(pts)):
-            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
-
     tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
-
-    with open(job.ID + '/result_LA/LA_bilayer_with_fiber.elem', "w") as f:
-        f.write(f"{bilayer.GetNumberOfCells()}\n")
-        for i in range(bilayer.GetNumberOfCells()):
-            cell = bilayer.GetCell(i)
-            if cell.GetNumberOfPoints() == 2:
-                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {tag_epi[i]}\n")
-            elif cell.GetNumberOfPoints() == 3:
-                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                  cell.GetPointIds().GetId(2), tag_epi[i]))
-            elif cell.GetNumberOfPoints() == 4:
-                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3),
-                                                     tag_epi[i]))
-
     el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
     sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
 
-    with open(job.ID + '/result_LA/LA_bilayer_with_fiber.lon', "w") as f:
-        f.write("2\n")
-        for i in range(len(el_epi)):
-            f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2],
-                                                                         sheet_epi[i][0], sheet_epi[i][1],
-                                                                         sheet_epi[i][2]))
+    write_to_pts(f'{filename}.pts', pts)
+    write_to_elem(f'{filename}.elem', bilayer, tag_epi)
+    write_to_lon(f'{filename}.lon', el_epi, sheet_epi)
     print('Done..')
 
 

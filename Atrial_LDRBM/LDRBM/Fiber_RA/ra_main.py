@@ -25,6 +25,8 @@ specific language governing permissions and limitations
 under the License.  
 """
 import os
+import warnings
+
 import numpy as np
 import vtk
 import pandas as pd
@@ -36,6 +38,7 @@ from ra_laplace import ra_laplace
 from ra_generate_fiber import ra_generate_fiber
 import Methods_RA as Method
 from create_bridges import add_free_bridge
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 
 
 def parser():
@@ -114,36 +117,17 @@ def run(args, job):
         RA = reverse.GetOutput()
 
     pts = numpy_support.vtk_to_numpy(RA.GetPoints().GetData())
-    # cells = numpy_support.vtk_to_numpy(RA.GetPolys().GetData())
-    # cells = cells.reshape(int(len(cells)/4),4)[:,1:]
 
-    with open(RA_mesh + '.pts', "w") as f:
-        f.write(f"{len(pts)}\n")
-        for i in range(len(pts)):
-            f.write(f"{pts[i][0]} {pts[i][1]} {pts[i][2]}\n")
+    write_to_pts(RA_mesh + '.pts', pts)
 
-    with open(RA_mesh + '.elem', "w") as f:
-        f.write(f"{RA.GetNumberOfCells()}\n")
-        for i in range(RA.GetNumberOfCells()):
-            cell = RA.GetCell(i)
-            if cell.GetNumberOfPoints() == 2:
-                f.write(f"Ln {cell.GetPointIds().GetId(0)} {cell.GetPointIds().GetId(1)} {1}\n")
-            elif cell.GetNumberOfPoints() == 3:
-                f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                  cell.GetPointIds().GetId(2), 1))
-            elif cell.GetNumberOfPoints() == 4:
-                f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1),
-                                                     cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), 1))
+    write_to_elem(RA_mesh + '.elem', RA, np.ones(RA.GetNumberOfCells(), dtype=int))
 
     fibers = np.zeros((RA.GetNumberOfCells(), 6))
     fibers[:, 0] = 1
     fibers[:, 4] = 1
 
-    with open(RA_mesh + '.lon', "w") as f:
-        f.write("2\n")
-        for i in range(len(fibers)):
-            f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3], fibers[i][4],
-                                                 fibers[i][5]))
+    write_to_lon(RA_mesh + '.lon', fibers, [fiber[3:6] for fiber in fibers])
+    warnings.warn("Test if lon is storred correctly ra_main.py l120 ff.")
 
     start_time = datetime.datetime.now()
     print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
