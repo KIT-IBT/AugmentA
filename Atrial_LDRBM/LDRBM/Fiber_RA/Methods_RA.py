@@ -36,7 +36,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, num
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata
+    clean_polydata, vtk_append
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -146,19 +146,13 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     reader.Update()
     test = reader.GetOutput()
 
-    appendFilter = vtk.vtkAppendFilter()
-    appendFilter.AddInputData(endo)
-    appendFilter.AddInputData(epi)
-    appendFilter.AddInputData(test)
-    appendFilter.MergePointsOn()
-    appendFilter.Update()
-
-    bilayer = appendFilter.GetOutput()
+    bilayer = vtk_append([endo, epi, test], True)
 
     if args.ofmt == 'vtk':
         vtk_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtk", bilayer, store_binary=True)
     else:
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  # Has elemTag! :, bilayer)
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu",
+                                         bilayer)  # Has elemTag!
 
     reader = vtk.vtkXMLUnstructuredGridReader()
     reader.SetFileName(job.ID + "/result_RA/LA_RA_bilayer_with_fiber.vtu")  # Has elemTag! :)

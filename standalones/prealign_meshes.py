@@ -32,7 +32,7 @@ import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, vtk_append
 
 
 def parser():
@@ -63,12 +63,10 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
         names = ["MV", "RSPV", "LSPV", "RIPV", "LIPV", "TV", "SVC", "IVC"]
         meshLA = vtkreader(f"{mesh1_name}_surf/LA_boundaries_tagged")
         meshRA = vtkreader(f"{mesh1_name}_surf/RA_boundaries_tagged")
-        appendFilter = vtk.vtkAppendFilter()
-        appendFilter.AddInputData(meshLA)
-        appendFilter.AddInputData(meshRA)
-        appendFilter.Update()
 
-        mesh1 = apply_vtk_geom_filter(appendFilter.GetOutput())
+        biatrial_mesh = vtk_append([meshLA, meshRA])
+
+        mesh1 = apply_vtk_geom_filter(biatrial_mesh)
 
     elif case == "LA":
         names = ["MV", "RSPV", "LSPV", "RIPV", "LIPV"]  # Prealign MRI
@@ -148,7 +146,6 @@ def prealign_meshes(mesh1_name, mesh2_name, case="LA", scale=0):
         vtk_polydata_writer(f'{mesh1_name}_surf/LA_prealigned.vtk', meshNew.VTKObject)
     else:
         vtk_polydata_writer(f'{mesh1_name}_surf/RA_prealigned.vtk', meshNew.VTKObject)
-
 
 
 def run():

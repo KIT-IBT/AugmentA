@@ -41,7 +41,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_obj_writer, \
     vtk_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -132,21 +132,17 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     Method.smart_bridge_writer(csb_tube, csb_sphere_1, csb_sphere_2, "coronary_sinus_bridge", job)
 
     if args.mesh_type == "vol":
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(la_epi)
-        append_filter.AddInputData(ra_epi)
-        append_filter.Update()
 
-        tag = np.zeros((append_filter.GetOutput().GetNumberOfCells(),), dtype=int)
+        biatrial_epi = vtk_append([la_epi, ra_epi])
+
+        tag = np.zeros((biatrial_epi.GetNumberOfCells(),), dtype=int)
         tag[:la_epi.GetNumberOfCells()] = vtk_to_numpy(la_epi.GetCellData().GetArray('elemTag'))
         tag[la_epi.GetNumberOfCells():] = vtk_to_numpy(ra_epi.GetCellData().GetArray('elemTag'))
 
-        meshNew = dsa.WrapDataObject(append_filter.GetOutput())
+        meshNew = dsa.WrapDataObject(biatrial_epi)
         meshNew.CellData.append(tag, "elemTag")
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(meshNew.VTKObject)
-        append_filter.Update()
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu", append_filter.GetOutput())
+
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu", vtk_append([meshNew.VTKObject]))
     elif args.mesh_type == "bilayer":
 
         la_e = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
@@ -155,12 +151,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         ra_e = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
         ra_e = apply_vtk_geom_filter(ra_e)
 
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(la_e)
-        append_filter.AddInputData(ra_e)
-        append_filter.Update()  # la_ra_usg
-
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", append_filter.GetOutput())
+        biatrial_e = vtk_append([la_e, ra_e])
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", biatrial_e)
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     for var in bridge_list:
@@ -255,13 +247,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         extract.SetCellList(la_ra_new)
         extract.Update()
 
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.MergePointsOn()
-        # append_filter.SetTolerance(0.01*args.scale)
-
-        append_filter.AddInputData(extract.GetOutput())
-        append_filter.Update()  # added
-        la_ra_epi = append_filter.GetOutput()  # we lose this mesh, when defining the append filter later
+        la_ra_epi = vtk_append([extract.GetOutput()],
+                               merge_points=True)  # we lose this mesh, when defining the append filter later
 
         if args.debug and var == 'upper_posterior_bridge':
             # Still has element Tag
@@ -328,13 +315,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         extract.SetCellList(la_endo_new)
         extract.Update()
 
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.MergePointsOn()
-        # append_filter.SetTolerance(0.01*args.scale)
-
-        append_filter.AddInputData(extract.GetOutput())
-        append_filter.Update()  # added
-        la_endo_final = append_filter.GetOutput()  # we lose this mesh, when defining the append filter later
+        la_endo_final = vtk_append([extract.GetOutput()],
+                                   merge_points=True)  # we lose this mesh, when defining the append filter later
 
         if args.debug and var == 'upper_posterior_bridge':
             vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_endo_with_holes.vtu", la_endo_final)
@@ -470,15 +452,9 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     reader.Update()
     up = reader.GetOutput()
 
-    append_filter = vtk.vtkAppendFilter()
-    append_filter.AddInputData(bb)
-    append_filter.AddInputData(cs)
-    append_filter.AddInputData(mp)
-    append_filter.AddInputData(up)
-    append_filter.Update()
-    bridges = append_filter.GetOutput()
+    bridges = vtk_append([bb, cs, mp, up])
 
-    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/append_bridges_2.vtu")  # Has elementTag! :, bridges)
+    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/append_bridges_2.vtu", bridges)  # Has elementTag!
 
     reader = vtk.vtkXMLUnstructuredGridReader()
     reader.SetFileName(job.ID + "/result_RA/LA_RA_epi_with_holes.vtu")
@@ -490,13 +466,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     reader.Update()
     bridges = reader.GetOutput()
 
-    append_filter = vtk.vtkAppendFilter()
-    # append_filter.AddInputData(la_ra_epi)
-    append_filter.AddInputData(epi_new)
-    append_filter.AddInputData(bridges)
-    # append_filter.MergePointsOn()
-    append_filter.Update()
-    epi = append_filter.GetOutput()
+    epi = vtk_append([epi_new, bridges])
 
     vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_with_bundles.vtu", epi)
     epi = Method.generate_sheet_dir(args, epi, job)
@@ -504,7 +474,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_with_sheets.vtu", epi)
     if args.mesh_type == "bilayer":
 
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_epi_with_sheets.vtu")  # Has elemTag! :, epi)
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_epi_with_sheets.vtu", epi)  # Has elemTag!
         reader = vtk.vtkXMLUnstructuredGridReader()
         reader.SetFileName(job.ID + "/result_RA/RA_CT_PMs.vtu")  # Has elemTag! :)
         reader.Update()
@@ -516,17 +486,15 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         reader.Update()
         la_endo = reader.GetOutput()
 
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(la_endo)
-        append_filter.AddInputData(ra_endo)
-        append_filter.Update()
+        bilayer_endo = vtk_append([la_endo, ra_endo])
 
         vtk_xml_unstructured_grid_writer(
-            job.ID + "/result_RA/append_LA_endo_RA_endo.vtu")  # Has elemTag! :, append_filter.GetOutput())
-        endo = Method.move_surf_along_normals(append_filter.GetOutput(), 0.1 * args.scale,
+            job.ID + "/result_RA/append_LA_endo_RA_endo.vtu", bilayer_endo)
+        # Has elemTag!
+        endo = Method.move_surf_along_normals(bilayer_endo, 0.1 * args.scale,
                                               1)  # # Warning: set -1 if pts normals are pointing outside
 
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_endo.vtu")  # Has elemTag! :, endo)
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_endo.vtu",endo)  # Has elemTag! :,
         bilayer = Method.generate_bilayer(args, job, endo, epi, 0.12 * args.scale)  # Does not have elemTag :(!
 
         Method.write_bilayer(args, job)
