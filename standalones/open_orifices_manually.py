@@ -39,6 +39,7 @@ from Atrial_LDRBM.Generate_Boundaries import extract_rings
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_elements_from_mesh
 from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 
 pv.set_plot_theme('dark')
@@ -136,27 +137,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
         else:
             el_to_del_tot = find_elements_within_radius(mesh, picked_pt, min_cutting_radius)
 
-        model_new_el = vtk.vtkIdList()
-        cell_id_all = list(range(mesh.GetNumberOfCells()))
-        el_diff = list(set(cell_id_all).difference(el_to_del_tot))
-
-        for var in el_diff:
-            model_new_el.InsertNextId(var)
-
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(mesh)
-        extract.SetCellList(model_new_el)
-        extract.Update()
-
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputConnection(extract.GetOutputPort())
-        geo_filter.Update()
-
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputConnection(geo_filter.GetOutputPort())
-        cleaner.Update()
-
-        mesh = cleaner.GetOutput()
+        mesh = cut_elements_from_mesh(mesh, el_to_del_tot)
 
     model = extract_largest_region(mesh)
 

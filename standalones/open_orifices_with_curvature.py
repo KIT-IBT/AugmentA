@@ -42,7 +42,8 @@ from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points
+from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
+    cut_elements_from_mesh
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 pv.set_plot_theme('dark')
@@ -156,29 +157,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
         if max_dist > max_cutting_radius * 2:
             print(f"Valve bigger than {max_cutting_radius * 2} cm")
-        el_to_del_tot = find_elements_within_radius(model, valve_center, max_cutting_radius)
 
-        model_new_el = vtk.vtkIdList()
-        cell_id_all = list(range(model.GetNumberOfCells()))
-        el_diff = list(set(cell_id_all).difference(el_to_del_tot))
-
-        for var in el_diff:
-            model_new_el.InsertNextId(var)
-
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(model)
-        extract.SetCellList(model_new_el)
-        extract.Update()
-
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputConnection(extract.GetOutputPort())
-        geo_filter.Update()
-
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputConnection(geo_filter.GetOutputPort())
-        cleaner.Update()
-
-        model = cleaner.GetOutput()
+        model = cut_mesh_with_radius(model, valve_center, max_cutting_radius)
 
     else:
         valve = vtk_thr(model, 0, "POINTS", "curv", 0.05)
@@ -200,29 +180,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         max_dist = get_maximum_distance_of_points(valve, valve_center)
 
         # Cutting valve with fixed radius to ensure that it is the biggest ring
-        el_to_del_tot = find_elements_within_radius(model, valve_center, max_cutting_radius)
-
-        model_new_el = vtk.vtkIdList()
-        cell_id_all = list(range(model.GetNumberOfCells()))
-        el_diff = list(set(cell_id_all).difference(el_to_del_tot))
-
-        for var in el_diff:
-            model_new_el.InsertNextId(var)
-
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(model)
-        extract.SetCellList(model_new_el)
-        extract.Update()
-
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputConnection(extract.GetOutputPort())
-        geo_filter.Update()
-
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputConnection(geo_filter.GetOutputPort())
-        cleaner.Update()
-
-        model = cleaner.GetOutput()
+        model = cut_mesh_with_radius(model, valve_center, max_cutting_radius)
 
     # model = smart_reader("{}/{}_valve.vtk".format(full_path, atrium))
     cellid = vtk.vtkIdFilter()
@@ -408,27 +366,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
 
-    model_new_el = vtk.vtkIdList()
-    cell_id_all = list(range(model.GetNumberOfCells()))
-    el_diff = list(set(cell_id_all).difference(el_to_del_tot))
-
-    for var in el_diff:
-        model_new_el.InsertNextId(var)
-
-    extract = vtk.vtkExtractCells()
-    extract.SetInputData(model)
-    extract.SetCellList(model_new_el)
-    extract.Update()
-
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputConnection(extract.GetOutputPort())
-    geo_filter.Update()
-
-    cleaner = vtk.vtkCleanPolyData()
-    cleaner.SetInputConnection(geo_filter.GetOutputPort())
-    cleaner.Update()
-
-    model = cleaner.GetOutput()
+    model = cut_elements_from_mesh(model, el_to_del_tot)
 
     model = extract_largest_region(model)
 
