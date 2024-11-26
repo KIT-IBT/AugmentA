@@ -38,7 +38,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, num
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata
+    clean_polydata, vtk_append
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
@@ -145,14 +145,7 @@ def generate_bilayer(endo, epi):
     fibers[:, 1] = 1
     meshNew.CellData.append(fibers, "sheet")
 
-    appendFilter = vtk.vtkAppendFilter()
-    appendFilter.AddInputData(endo)
-    appendFilter.AddInputData(epi)
-    appendFilter.AddInputData(meshNew.VTKObject)
-    appendFilter.MergePointsOn()
-    appendFilter.Update()
-
-    bilayer = appendFilter.GetOutput()
+    bilayer = vtk_append([endo, epi, meshNew.VTKObject], merge_points=True)
 
     return bilayer
 
