@@ -25,13 +25,13 @@ specific language governing permissions and limitations
 under the License.  
 """
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 
 EXAMPLE_DESCRIPTIVE_NAME = 'Tune conductivities to fit clinical LAT map'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
 import os
-import sys
 import vtk
 
 from datetime import date
@@ -39,10 +39,7 @@ from carputils import settings
 from carputils import tools
 
 import numpy as np
-from carputils.carpio import igb
-from scipy.spatial import cKDTree
 import csv
-import random
 from vtk.numpy_interface import dataset_adapter as dsa
 import Methods_fit_to_clinical_LAT
 
@@ -363,7 +360,7 @@ def run(args, job):
 
     elems_not_conductive = np.loadtxt(f'{meshfold}/elems_slow_conductive.regele', skiprows=1, dtype=int)
 
-    endo_etag = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('elemTag'))
+    endo_etag = vtk_to_numpy(endo.GetCellData().GetArray('elemTag'))
 
     elems_not_conductive = elems_not_conductive[np.where(elems_not_conductive < len(endo_etag))]
 
@@ -375,10 +372,10 @@ def run(args, job):
     meshNew.CellData.append(endo_etag, "elemTag")
 
     vtk_xml_unstructured_grid_writer(f"{meshfold}/LA_endo_with_fiber_30_um.vtu", meshNew.VTKObject)
-    pts = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetPoints().GetData())
+    pts = vtk_to_numpy(meshNew.VTKObject.GetPoints().GetData())
 
-    el_epi = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('fiber'))
-    sheet_epi = vtk.util.numpy_support.vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('sheet'))
+    el_epi = vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('fiber'))
+    sheet_epi = vtk_to_numpy(meshNew.VTKObject.GetCellData().GetArray('sheet'))
 
     el_epi = el_epi / 1000
     sheet_epi = sheet_epi / 1000
@@ -604,7 +601,7 @@ def run(args, job):
             # Extract all cells which are activated
             active = Methods_fit_to_clinical_LAT.vtk_thr(healthy_endo, 0, "POINTS", "lat_s", 0)
 
-            active_cells = vtk.util.numpy_support.vtk_to_numpy(active.GetCellData().GetArray('Global_ids')).astype(int)
+            active_cells = vtk_to_numpy(active.GetCellData().GetArray('Global_ids')).astype(int)
             print(f"active_cells: {len(active_cells)}")
             act_cls_old = np.zeros((model.GetNumberOfCells(),))
             act_cls = np.zeros((model.GetNumberOfCells(),))
@@ -618,7 +615,7 @@ def run(args, job):
             act_cls[active_cells] = 1
 
             lats_to_fit_old = np.array(lats_to_fit)
-            lats_to_fit = vtk.util.numpy_support.vtk_to_numpy(model.GetCellData().GetArray('lat_s'))
+            lats_to_fit = vtk_to_numpy(model.GetCellData().GetArray('lat_s'))
 
             if len(lats_to_fit_old) > 0:
                 meshNew.CellData.append(lats_to_fit_old, "LATs_old")
@@ -754,11 +751,11 @@ def run(args, job):
 
     model_cleaned = Methods_fit_to_clinical_LAT.vtk_thr(meshNew.VTKObject, 2, "CELLS", "idss", 0, 0)
 
-    cleaned_ids = vtk.util.numpy_support.vtk_to_numpy(model_cleaned.GetPointData().GetArray('Global_ids')).astype(int)
+    cleaned_ids = vtk_to_numpy(model_cleaned.GetPointData().GetArray('Global_ids')).astype(int)
 
     lats = np.loadtxt(simid + '/init_acts_ACTs-thresh.dat')
 
-    lats_to_fit = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('lat')) - min_LAT
+    lats_to_fit = vtk_to_numpy(model.GetPointData().GetArray('lat')) - min_LAT
 
     RMSE = mean_squared_error(lats[cleaned_ids], lats_to_fit[cleaned_ids], squared=False)
 
@@ -803,7 +800,7 @@ def run(args, job):
     pt_cell.Update()
 
     meshNew.CellData.append(LAT_map, "LAT_to_clean")
-    LATs_diff = vtk.util.numpy_support.vtk_to_numpy(pt_cell.GetOutput().GetCellData().GetArray('lat_s')) - LAT_map
+    LATs_diff = vtk_to_numpy(pt_cell.GetOutput().GetCellData().GetArray('lat_s')) - LAT_map
     meshNew.CellData.append(slow_CV, "slow_CV")
     meshNew.CellData.append(LATs_diff, "LATs_diff")
 

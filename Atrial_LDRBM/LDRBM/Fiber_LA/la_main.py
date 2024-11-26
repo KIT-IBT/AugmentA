@@ -24,21 +24,17 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import os
-import subprocess as sp
 import datetime
 import warnings
 
-import vtk
 import numpy as np
-from vtk.util import numpy_support
-from carputils import settings
+import vtk
 from carputils import tools
-from carputils import mesh
-from la_laplace import la_laplace
+
 from la_generate_fiber import la_generate_fiber
-import Methods_LA
+from la_laplace import la_laplace
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 
 
 def parser():
@@ -105,7 +101,7 @@ def run(args, job):
 
         LA = reverse.GetOutput()
 
-    pts = numpy_support.vtk_to_numpy(LA.GetPoints().GetData())
+    pts = vtk_to_numpy(LA.GetPoints().GetData())
 
     write_to_pts(LA_mesh + '.pts', pts)
 

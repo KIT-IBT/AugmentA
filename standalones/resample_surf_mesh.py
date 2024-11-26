@@ -36,6 +36,7 @@ import os
 import numpy as np
 import pandas as pd
 
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
 
 pv.set_plot_theme('dark')
@@ -126,7 +127,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         boundaryEdges.NonManifoldEdgesOff()
         boundaryEdges.Update()
 
-        boundary_pts = vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData())
+        boundary_pts = vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData())
 
         # Clean the mesh from holes and self intersecting triangles
         meshin = pv.read(f'{meshname}.obj')

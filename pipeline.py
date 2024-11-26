@@ -28,15 +28,12 @@ under the License.
 EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
-import sys
-from glob import glob
-from shutil import copyfile
-import pandas as pd
 import os
+import sys
 from string import Template
-import argparse
 
 import numpy as np
+import pandas as pd
 import pyvista as pv
 from scipy.spatial import cKDTree
 
@@ -49,8 +46,6 @@ from create_SSM_instance import create_SSM_instance
 from resample_surf_mesh import resample_surf_mesh
 
 import vtk
-from vtk.util import numpy_support
-from vtk.numpy_interface import dataset_adapter as dsa
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 sys.path.append('Atrial_LDRBM/LDRBM/Fiber_LA')

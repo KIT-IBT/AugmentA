@@ -33,6 +33,7 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -77,11 +78,11 @@ def low_vol_LAT(args, path):
     filter_cell_centers = vtk.vtkCellCenters()
     filter_cell_centers.SetInputData(model)
     filter_cell_centers.Update()
-    centroids = vtk.util.numpy_support.vtk_to_numpy(filter_cell_centers.GetOutput().GetPoints().GetData())
+    centroids = vtk_to_numpy(filter_cell_centers.GetOutput().GetPoints().GetData())
 
     # Low voltage in the model
     low_vol = vtk_thr(model, 1, "CELLS", "bi", args.low_vol_thr)
-    low_vol_ids = vtk.util.numpy_support.vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
+    low_vol_ids = vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
 
     if args.debug:
 
@@ -106,18 +107,18 @@ def low_vol_LAT(args, path):
     if args.debug:
         vtk_xml_unstructured_grid_writer(f'{debug_dir}/endo.vtu', endo)
     # Get point LAT map in endocardium
-    LAT_endo = vtk.util.numpy_support.vtk_to_numpy(endo.GetPointData().GetArray('lat'))
-    endo_ids = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('Global_ids')).astype(int)
-    endo_pts = vtk.util.numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
+    LAT_endo = vtk_to_numpy(endo.GetPointData().GetArray('lat'))
+    endo_ids = vtk_to_numpy(endo.GetCellData().GetArray('Global_ids')).astype(int)
+    endo_pts = vtk_to_numpy(endo.GetPoints().GetData())
 
     # Get elements LAT map in endocardium
-    LAT_map = vtk.util.numpy_support.vtk_to_numpy(endo.GetCellData().GetArray('lat'))
+    LAT_map = vtk_to_numpy(endo.GetCellData().GetArray('lat'))
 
     # Extract "healthy" high voltage endocardium
     not_low_volt_endo = vtk_thr(endo, 0, "POINTS", "bi", 0.5 + 0.01)
-    LAT_not_low_volt = vtk.util.numpy_support.vtk_to_numpy(not_low_volt_endo.GetPointData().GetArray('lat'))
-    not_low_volt_endo_pts = vtk.util.numpy_support.vtk_to_numpy(not_low_volt_endo.GetPoints().GetData())
-    not_low_volt_ids = vtk.util.numpy_support.vtk_to_numpy(
+    LAT_not_low_volt = vtk_to_numpy(not_low_volt_endo.GetPointData().GetArray('lat'))
+    not_low_volt_endo_pts = vtk_to_numpy(not_low_volt_endo.GetPoints().GetData())
+    not_low_volt_ids = vtk_to_numpy(
         not_low_volt_endo.GetPointData().GetArray('Global_ids')).astype(int)
 
     if args.debug:
@@ -125,7 +126,7 @@ def low_vol_LAT(args, path):
     # Extract LA wall from SSM to be sure that no veins or LAA is included when selecting the earliest activated point
     if args.SSM_fitting:
         LA_wall = smart_reader(args.SSM_basename + '/LA_wall.vtk')
-        LA_wall_pt_ids = vtk.util.numpy_support.vtk_to_numpy(LA_wall.GetPointData().GetArray('PointIds'))
+        LA_wall_pt_ids = vtk_to_numpy(LA_wall.GetPointData().GetArray('PointIds'))
 
         # See create_SSM_instance standalone to create LA_fit.obj
         reader = vtk.vtkOBJReader()
@@ -133,7 +134,7 @@ def low_vol_LAT(args, path):
         reader.Update()
         LA_fit = reader.GetOutput()
 
-        LA_fit_wall_pts = vtk.util.numpy_support.vtk_to_numpy(LA_fit.GetPoints().GetData())[LA_wall_pt_ids, :] * 1000
+        LA_fit_wall_pts = vtk_to_numpy(LA_fit.GetPoints().GetData())[LA_wall_pt_ids, :] * 1000
 
         tree = cKDTree(not_low_volt_endo_pts)
 
@@ -143,8 +144,8 @@ def low_vol_LAT(args, path):
         dd, ii = tree.query(endo_pts)
 
     healthy_endo = not_low_volt_endo  # vtk_thr(not_low_volt_endo,0,"POINTS","CV_mag", args.low_CV_thr)
-    LAT_healthy = vtk.util.numpy_support.vtk_to_numpy(healthy_endo.GetPointData().GetArray('lat'))
-    healthy_ids = vtk.util.numpy_support.vtk_to_numpy(healthy_endo.GetPointData().GetArray('Global_ids')).astype(int)
+    LAT_healthy = vtk_to_numpy(healthy_endo.GetPointData().GetArray('lat'))
+    healthy_ids = vtk_to_numpy(healthy_endo.GetPointData().GetArray('Global_ids')).astype(int)
 
     if args.max_LAT_pt == "max":
 
@@ -209,7 +210,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         # Extract LAT band from min LAT to step i and remove all areas not connected with EAP
         band = vtk_thr(endo, 2, "CELLS", "lat", min_LAT, steps[i])
 
-        b_ids = vtk.util.numpy_support.vtk_to_numpy(band.GetCellData().GetArray('Global_ids')).astype(int)
+        b_ids = vtk_to_numpy(band.GetCellData().GetArray('Global_ids')).astype(int)
 
         connect = vtk.vtkConnectivityFilter()
         connect.SetInputData(band)
@@ -218,7 +219,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         connect.Update()
         largest_band = connect.GetOutput()
 
-        l_b_ids = vtk.util.numpy_support.vtk_to_numpy(largest_band.GetCellData().GetArray('Global_ids')).astype(int)
+        l_b_ids = vtk_to_numpy(largest_band.GetCellData().GetArray('Global_ids')).astype(int)
 
         if len(b_ids) > len(l_b_ids):
             cell_diff = set()
@@ -255,7 +256,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
             filter_cell_centers.SetInputData(largest_band)
             filter_cell_centers.Update()
             centroids2 = filter_cell_centers.GetOutput().GetPoints()
-            pts = vtk.util.numpy_support.vtk_to_numpy(centroids2.GetData())
+            pts = vtk_to_numpy(centroids2.GetData())
 
             tree = cKDTree(pts)
 
@@ -281,13 +282,13 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
                 filter_cell_centers.SetInputData(surface)
                 filter_cell_centers.Update()
                 centroids1 = filter_cell_centers.GetOutput().GetPoints()
-                centroids1_array = vtk.util.numpy_support.vtk_to_numpy(centroids1.GetData())
+                centroids1_array = vtk_to_numpy(centroids1.GetData())
 
                 dd, ii = tree.query(centroids1_array, n_jobs=-1)
 
                 # Set as elements to clean only if they are at least 1 um away from the biggest band
                 if np.min(dd) > 1:
-                    loc_el_to_clean = vtk.util.numpy_support.vtk_to_numpy(
+                    loc_el_to_clean = vtk_to_numpy(
                         surface.GetCellData().GetArray('Global_ids')).astype(int)
 
                     tot_el_to_clean = np.union1d(tot_el_to_clean, loc_el_to_clean)
@@ -305,7 +306,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
 
     endo_clean = vtk_thr(meshNew.VTKObject, 1, "CELLS", "idss", 0)
 
-    el_cleaned = vtk.util.numpy_support.vtk_to_numpy(endo_clean.GetCellData().GetArray('Global_ids')).astype(int)
+    el_cleaned = vtk_to_numpy(endo_clean.GetCellData().GetArray('Global_ids')).astype(int)
 
     endo_to_interpolate = vtk_thr(meshNew.VTKObject, 0, "CELLS", "idss", 1)
 
@@ -313,7 +314,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
     filter_cell_centers.SetInputData(endo_clean)
     filter_cell_centers.Update()
     centroids2 = filter_cell_centers.GetOutput().GetPoints()
-    pts = vtk.util.numpy_support.vtk_to_numpy(centroids2.GetData())
+    pts = vtk_to_numpy(centroids2.GetData())
 
     tree = cKDTree(pts)
 
@@ -336,7 +337,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         cln.Update()
         surface = cln.GetOutput()
 
-        loc_el_to_clean = vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('Global_ids')).astype(int)
+        loc_el_to_clean = vtk_to_numpy(surface.GetCellData().GetArray('Global_ids')).astype(int)
 
         el_to_clean.append(np.unique(loc_el_to_clean))
 
@@ -344,7 +345,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         filter_cell_centers.SetInputData(surface)
         filter_cell_centers.Update()
         centroids1 = filter_cell_centers.GetOutput().GetPoints()
-        centroids1_array = vtk.util.numpy_support.vtk_to_numpy(centroids1.GetData())
+        centroids1_array = vtk_to_numpy(centroids1.GetData())
 
         dd, ii = tree.query(centroids1_array, n_jobs=-1)  # Find distance to endo_clean pts
 
@@ -377,7 +378,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
 def create_regele(endo, args):
     # Low voltage in the model
     low_vol = vtk_thr(endo, 1, "CELLS", "bi", args.low_vol_thr)
-    low_vol_ids = vtk.util.numpy_support.vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
+    low_vol_ids = vtk_to_numpy(low_vol.GetCellData().GetArray('Global_ids')).astype(int)
     not_low_volt_endo = vtk_thr(endo, 0, "POINTS", "bi", 0.5 + 0.01)
 
     f_slow_conductive = f"{args.init_state_dir}/{args.mesh.split('/')[-1]}/elems_slow_conductive"
@@ -393,9 +394,9 @@ def create_regele(endo, args):
 def low_CV(model, low_CV_thr, meshfold):
     low_CV = vtk_thr(model, 1, "CELLS", "CV_mag", low_CV_thr)
 
-    low_CV_ids = vtk.util.numpy_support.vtk_to_numpy(low_CV.GetCellData().GetArray('Global_ids')).astype(int)
+    low_CV_ids = vtk_to_numpy(low_CV.GetCellData().GetArray('Global_ids')).astype(int)
 
-    low_CV_c = vtk.util.numpy_support.vtk_to_numpy(low_CV.GetCellData().GetArray('CV_mag')) / 1000
+    low_CV_c = vtk_to_numpy(low_CV.GetCellData().GetArray('CV_mag')) / 1000
 
     low_sigma = low_CV_c ** 2
 
@@ -408,6 +409,7 @@ def low_CV(model, low_CV_thr, meshfold):
         f.write(f"{i:.4f}\n")
     f.close()
 
+
 def dijkstra_path(polydata, StartVertex, EndVertex):
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(polydata)
@@ -416,7 +418,7 @@ def dijkstra_path(polydata, StartVertex, EndVertex):
     path.SetEndVertex(StartVertex)
     path.Update()
     points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    points_data = vtk_to_numpy(points_data)
     return points_data
 
 
@@ -438,9 +440,9 @@ def get_EAP(path_mod, path_fib):
 
     mod_fib = cellid.GetOutput()
     LA_MV = vtk_thr(mod_fib, 1, "CELLS", "elemTag", 2)
-    LAT_map = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('LAT'))
+    LAT_map = vtk_to_numpy(model.GetPointData().GetArray('LAT'))
 
-    LA_MV_ids = vtk.util.numpy_support.vtk_to_numpy(LA_MV.GetPointData().GetArray('Global_ids')).astype(int)
+    LA_MV_ids = vtk_to_numpy(LA_MV.GetPointData().GetArray('Global_ids')).astype(int)
 
     print(LA_MV_ids[np.argmin(LAT_map[LA_MV_ids])])
     stim_pt = model.GetPoint(LA_MV_ids[np.argmin(LAT_map[LA_MV_ids])])

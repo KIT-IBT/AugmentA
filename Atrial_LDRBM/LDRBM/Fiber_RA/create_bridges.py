@@ -38,6 +38,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 import Methods_RA as Method
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_obj_writer, \
     vtk_unstructured_grid_writer
 
@@ -143,8 +144,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         append_filter.Update()
 
         tag = np.zeros((append_filter.GetOutput().GetNumberOfCells(),), dtype=int)
-        tag[:la_epi.GetNumberOfCells()] = vtk.util.numpy_support.vtk_to_numpy(la_epi.GetCellData().GetArray('elemTag'))
-        tag[la_epi.GetNumberOfCells():] = vtk.util.numpy_support.vtk_to_numpy(ra_epi.GetCellData().GetArray('elemTag'))
+        tag[:la_epi.GetNumberOfCells()] = vtk_to_numpy(la_epi.GetCellData().GetArray('elemTag'))
+        tag[la_epi.GetNumberOfCells():] = vtk_to_numpy(ra_epi.GetCellData().GetArray('elemTag'))
 
         meshNew = dsa.WrapDataObject(append_filter.GetOutput())
         meshNew.CellData.append(tag, "elemTag")
@@ -223,7 +224,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         locator.BuildLocator()
 
         intersection_points = bridge_usg.GetPoints().GetData()
-        intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
+        intersection_points = vtk_to_numpy(intersection_points)
 
         earth_point_ids_temp = vtk.vtkIdList()
         earth_point_ids = vtk.vtkIdList()
@@ -307,7 +308,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         locator.BuildLocator()
 
         intersection_points = bridge_usg.GetPoints().GetData()
-        intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
+        intersection_points = vtk_to_numpy(intersection_points)
 
         earth_point_ids_temp = vtk.vtkIdList()
         earth_point_ids = vtk.vtkIdList()
@@ -380,7 +381,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     functionSource.SetParametricFunction(spline)
     functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
     functionSource.Update()
-    bb_fiber_points_data = vtk.util.numpy_support.vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
+    bb_fiber_points_data = vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
 
     print("Union between earth and bridges")
     for var in bridge_list:
@@ -559,12 +560,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     else:
 
         vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_vol_with_fiber.vtu", epi)
-        pts = vtk.util.numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
+        pts = vtk_to_numpy(epi.GetPoints().GetData())
         write_to_pts(job.ID + '/result_RA/LA_RA_vol_with_fiber.pts', pts)
 
-        tag_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('elemTag'))
+        tag_epi = vtk_to_numpy(epi.GetCellData().GetArray('elemTag'))
         write_to_elem(job.ID + '/result_RA/LA_RA_vol_with_fiber.elem', epi, tag_epi)
 
-        el_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('fiber'))
-        sheet_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('sheet'))
+        el_epi = vtk_to_numpy(epi.GetCellData().GetArray('fiber'))
+        sheet_epi = vtk_to_numpy(epi.GetCellData().GetArray('sheet'))
         write_to_lon(job.ID + '/result_RA/LA_RA_vol_with_fiber.lon', el_epi, sheet_epi)

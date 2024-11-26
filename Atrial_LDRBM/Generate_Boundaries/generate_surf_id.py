@@ -24,13 +24,15 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import vtk
-from vtk.util.numpy_support import vtk_to_numpy
+import os
 import shutil
-import os, sys
+import sys
 from glob import glob
-from scipy.spatial import cKDTree
+
 import numpy as np
+from scipy.spatial import cKDTree
+
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import smart_reader
@@ -55,10 +57,10 @@ def generate_surf_id(meshname, atrium):
     """The whole model"""
 
     vol = smart_reader(meshname + f"_{atrium}_vol.vtk")
-    whole_model_points_coordinate = vtk.util.numpy_support.vtk_to_numpy(vol.GetPoints().GetData())
+    whole_model_points_coordinate = vtk_to_numpy(vol.GetPoints().GetData())
 
     tree = cKDTree(whole_model_points_coordinate)
-    epi_pts = vtk.util.numpy_support.vtk_to_numpy(
+    epi_pts = vtk_to_numpy(
         smart_reader(meshname + f'_{atrium}_epi.obj').GetPoints().GetData())
     dd, ii = tree.query(epi_pts)
 
@@ -73,7 +75,7 @@ def generate_surf_id(meshname, atrium):
 
     write_surf_ids(outdir, "EPI", ii)
 
-    dd, ii = tree.query(vtk.util.numpy_support.vtk_to_numpy(
+    dd, ii = tree.query(vtk_to_numpy(
         smart_reader(meshname + f'_{atrium}_endo.obj').GetPoints().GetData()))
     ii = np.setdiff1d(ii, epi_ids)
 

@@ -25,7 +25,6 @@ specific language governing permissions and limitations
 under the License.  
 """
 import os
-import sys
 
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_polydata_writer
 
@@ -34,10 +33,6 @@ EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 from carputils.carpio import igb
 from carputils import tools
 from la_calculate_gradient import la_calculate_gradient
-import vtk
-from vtk.util.numpy_support import vtk_to_numpy
-from vtk.util.numpy_support import numpy_to_vtk
-import numpy as np
 from vtk.numpy_interface import dataset_adapter as dsa
 
 

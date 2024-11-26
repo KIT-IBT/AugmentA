@@ -36,6 +36,7 @@ import function
 from sklearn.neighbors import NearestNeighbors
 import argparse
 
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 
 
@@ -88,11 +89,11 @@ def get_landmarks(mesh, prealigned=1, scale=1):
     thr=get_threshold_between(model,1,1,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     mv = thr.GetOutput()
 
-    rsv_points = vtk.util.numpy_support.vtk_to_numpy(rsv.GetPoints().GetData())
-    riv_points = vtk.util.numpy_support.vtk_to_numpy(riv.GetPoints().GetData())
-    lsv_points = vtk.util.numpy_support.vtk_to_numpy(lsv.GetPoints().GetData())
-    liv_points = vtk.util.numpy_support.vtk_to_numpy(liv.GetPoints().GetData())
-    mv_points = vtk.util.numpy_support.vtk_to_numpy(mv.GetPoints().GetData())
+    rsv_points = vtk_to_numpy(rsv.GetPoints().GetData())
+    riv_points = vtk_to_numpy(riv.GetPoints().GetData())
+    lsv_points = vtk_to_numpy(lsv.GetPoints().GetData())
+    liv_points = vtk_to_numpy(liv.GetPoints().GetData())
+    mv_points = vtk_to_numpy(mv.GetPoints().GetData())
 
     # get farthest away and clostest points on PVs
     rs_o, ri_o = function.get_farthest_point_pair(rsv_points, riv_points)
@@ -152,9 +153,9 @@ def get_landmarks(mesh, prealigned=1, scale=1):
     lpv_path = function.dijkstra_path(model_polydata, ls_i_id, li_i_id)
     rpv_path = function.dijkstra_path(model_polydata, rs_i_id, ri_i_id)
 
-    lpv_base_temp = function.multidim_intersect(vtk.util.numpy_support.vtk_to_numpy(band.GetPoints().GetData()),
+    lpv_base_temp = function.multidim_intersect(vtk_to_numpy(band.GetPoints().GetData()),
                                                 lpv_path)
-    rpv_base_temp = function.multidim_intersect(vtk.util.numpy_support.vtk_to_numpy(band.GetPoints().GetData()),
+    rpv_base_temp = function.multidim_intersect(vtk_to_numpy(band.GetPoints().GetData()),
                                                 rpv_path)
 
     lpv_base_fuzzy = np.asarray(

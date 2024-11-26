@@ -1,10 +1,7 @@
-import os
-import numpy as np
-import vtk
-from vtk.util.numpy_support import vtk_to_numpy
-import math
 import csv
 import sys
+
+import vtk
 
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 

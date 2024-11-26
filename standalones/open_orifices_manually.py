@@ -37,6 +37,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from Atrial_LDRBM.Generate_Boundaries import extract_rings
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 
@@ -48,11 +49,6 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
-# def create_sphere(value):
-#     radius = int(value)
-#     sphere = pv.Sphere(center=center, radius=radius)
-#     p.add_mesh(sphere, name='sphere', show_edges=True)
-#     return
 def parser():
     parser = argparse.ArgumentParser(description='Cut veins manually')
     parser.add_argument('--mesh',
@@ -244,8 +240,8 @@ def extract_largest_region(mesh):
 
 
 def point_array_mapper(mesh1, mesh2, idat):
-    pts1 = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPoints().GetData())
-    pts2 = vtk.util.numpy_support.vtk_to_numpy(mesh2.GetPoints().GetData())
+    pts1 = vtk_to_numpy(mesh1.GetPoints().GetData())
+    pts2 = vtk_to_numpy(mesh2.GetPoints().GetData())
 
     tree = cKDTree(pts1)
 
@@ -254,7 +250,7 @@ def point_array_mapper(mesh1, mesh2, idat):
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(
+            data = vtk_to_numpy(
                 mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
             if isinstance(data[0], collections.abc.Sized):
                 data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
@@ -266,7 +262,7 @@ def point_array_mapper(mesh1, mesh2, idat):
 
             meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
     else:
-        data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
+        data = vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
         if isinstance(data[0], collections.abc.Sized):
             data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:

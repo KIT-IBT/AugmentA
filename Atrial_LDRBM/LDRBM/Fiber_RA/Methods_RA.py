@@ -24,15 +24,14 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import vtk
 import numpy as np
-from vtk.util import numpy_support
-from vtk.numpy_interface import dataset_adapter as dsa
+import vtk
 from scipy.spatial import cKDTree
+from vtk.numpy_interface import dataset_adapter as dsa
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_to_pts, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -55,7 +54,7 @@ def downsample_path(points_data, step):
     functionSource.SetParametricFunction(spline)
     functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
     functionSource.Update()
-    points_data = vtk.util.numpy_support.vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
+    points_data = vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
     return points_data
 
 
@@ -73,13 +72,13 @@ def move_surf_along_normals(mesh, eps, direction):
     normalGenerator.SplittingOff()
     normalGenerator.Update()
 
-    PointNormalArray = numpy_support.vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
-    atrial_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
+    PointNormalArray = vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
+    atrial_points = vtk_to_numpy(polydata.GetPoints().GetData())
 
     atrial_points = atrial_points + eps * direction * PointNormalArray
 
     vtkPts = vtk.vtkPoints()
-    vtkPts.SetData(numpy_support.numpy_to_vtk(atrial_points))
+    vtkPts.SetData(numpy_to_vtk(atrial_points))
     polydata.SetPoints(vtkPts)
 
     mesh = vtk.vtkUnstructuredGrid()
@@ -103,8 +102,8 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     endo.DeepCopy(reverse.GetOutput())
     # endo.DeepCopy(extract_surf.GetOutputPort())
 
-    endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
-    epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
+    endo_pts = vtk_to_numpy(endo.GetPoints().GetData())
+    epi_pts = vtk_to_numpy(epi.GetPoints().GetData())
 
     tree = cKDTree(epi_pts)
     dd, ii = tree.query(endo_pts, distance_upper_bound=max_dist)  # , n_jobs=-1)
@@ -122,7 +121,7 @@ def generate_bilayer(args, job, endo, epi, max_dist=np.inf):
     points = np.vstack((endo_pts[endo_ids], epi_pts[epi_ids]))
     polydata = vtk.vtkUnstructuredGrid()
     vtkPts = vtk.vtkPoints()
-    vtkPts.SetData(numpy_support.numpy_to_vtk(points))
+    vtkPts.SetData(numpy_to_vtk(points))
     polydata.SetPoints(vtkPts)
     polydata.SetCells(3, lines)
 
@@ -193,7 +192,7 @@ def write_bilayer(bilayer, args, job):
 
 def generate_sheet_dir(args, model, job):
     fiber = model.GetCellData().GetArray('fiber')
-    fiber = vtk.util.numpy_support.vtk_to_numpy(fiber)
+    fiber = vtk_to_numpy(fiber)
 
     fiber = np.where(fiber == [0, 0, 0], [1, 0, 0], fiber).astype("float32")
 
@@ -221,7 +220,7 @@ def generate_sheet_dir(args, model, job):
     normals.ComputePointNormalsOff()
     normals.Update()
     normal_vectors = normals.GetOutput().GetCellData().GetArray('Normals')
-    normal_vectors = vtk.util.numpy_support.vtk_to_numpy(normal_vectors)
+    normal_vectors = vtk_to_numpy(normal_vectors)
 
     # print('Normal vectors: \n', normal_vectors, '\n')
     print('Number of normals: ', len(normal_vectors))
@@ -236,7 +235,7 @@ def generate_sheet_dir(args, model, job):
         filter_cell_centers.SetInputData(cln_surface)
         filter_cell_centers.Update()
         center_surface = filter_cell_centers.GetOutput().GetPoints()
-        center_surface_array = vtk.util.numpy_support.vtk_to_numpy(center_surface.GetData())
+        center_surface_array = vtk_to_numpy(center_surface.GetData())
         print('Number of center_surface: ', len(center_surface_array), '\n')
 
         '''
@@ -246,7 +245,7 @@ def generate_sheet_dir(args, model, job):
         filter_cell_centers.SetInputData(model)
         filter_cell_centers.Update()
         center_volume = filter_cell_centers.GetOutput().GetPoints().GetData()
-        center_volume = vtk.util.numpy_support.vtk_to_numpy(center_volume)
+        center_volume = vtk_to_numpy(center_volume)
         print('Number of center_volume: ', len(center_volume), '\n')
 
         '''
@@ -361,7 +360,7 @@ def dijkstra_path(polydata, StartVertex, EndVertex):
     path.SetEndVertex(StartVertex)
     path.Update()
     points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    points_data = vtk_to_numpy(points_data)
     return points_data
 
 
@@ -379,7 +378,7 @@ def dijkstra_path_coord(polydata, StartVertex, EndVertex):
     path.SetEndVertex(StartVertex)
     path.Update()
     points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    points_data = vtk_to_numpy(points_data)
     return points_data
 
 
@@ -488,7 +487,7 @@ def find_elements_around_path_within_radius(mesh, points_data, radius):
 
 
 def get_element_ids_around_path_within_radius(mesh, points_data, radius):
-    gl_ids = vtk.util.numpy_support.vtk_to_numpy(mesh.GetCellData().GetArray('Global_ids'))
+    gl_ids = vtk_to_numpy(mesh.GetCellData().GetArray('Global_ids'))
 
     locator = vtk.vtkStaticPointLocator()
     locator.SetDataSet(mesh)
@@ -600,7 +599,7 @@ def assign_element_fiber_around_path_within_radius(mesh, points_data, radius, fi
 
 def get_mean_point(data):
     ring_points = data.GetPoints().GetData()
-    ring_points = vtk.util.numpy_support.vtk_to_numpy(ring_points)
+    ring_points = vtk_to_numpy(ring_points)
     center_point = [np.mean(ring_points[:, 0]), np.mean(ring_points[:, 1]), np.mean(ring_points[:, 2])]
     center_point = np.array(center_point)
     return center_point
@@ -627,19 +626,19 @@ def multidim_intersect_bool(arr1, arr2):
 def get_ct_end_points_id(endo, ct, scv, icv):
     # endo
     points_data = endo.GetPoints().GetData()
-    endo_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    endo_points = vtk_to_numpy(points_data)
 
     # ct
     points_data = ct.GetPoints().GetData()
-    ct_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ct_points = vtk_to_numpy(points_data)
 
     # scv
     points_data = scv.GetPoints().GetData()
-    scv_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    scv_points = vtk_to_numpy(points_data)
 
     # icv
     points_data = icv.GetPoints().GetData()
-    icv_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    icv_points = vtk_to_numpy(points_data)
 
     # intersection
     # inter_ct_endo = multidim_intersect(endo_points, ct_points)
@@ -702,7 +701,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     cln.SetInputData(surface)
     cln.Update()
     points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ring = vtk_to_numpy(points_data)
     center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
 
     connect.DeleteSpecifiedRegion(1)
@@ -719,7 +718,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     cln.SetInputData(surface)
     cln.Update()
     points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ring = vtk_to_numpy(points_data)
     center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
     dis_1 = np.linalg.norm(center_point_1 - tv_ivc_center)
     dis_2 = np.linalg.norm(center_point_1 - tv_svc_center)
@@ -794,10 +793,10 @@ def assign_ra_appendage(model, SCV, appex_point, tag, elemTag):
 
 def get_endo_ct_intersection_cells(endo, ct):
     points_data = ct.GetPoints().GetData()
-    ct_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ct_points = vtk_to_numpy(points_data)
 
     points_data = endo.GetPoints().GetData()
-    endo_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    endo_points = vtk_to_numpy(points_data)
 
     intersection = multidim_intersect(ct_points, endo_points)
 
@@ -1013,7 +1012,7 @@ def creat_center_line(start_end_point):
     functionSource.Update()
     tubePolyData = functionSource.GetOutput()
     points = tubePolyData.GetPoints().GetData()
-    points = vtk.util.numpy_support.vtk_to_numpy(points)
+    points = vtk_to_numpy(points)
 
     return points
 

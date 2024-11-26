@@ -24,20 +24,19 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+import argparse
 import os
+from glob import glob
 from logging import warning
 
 import numpy as np
-from glob import glob
 import pandas as pd
 import vtk
-from vtk.util import numpy_support
-from vtk.numpy_interface import dataset_adapter as dsa
-import datetime
-from sklearn.cluster import KMeans
-import argparse
 from scipy.spatial import cKDTree
+from sklearn.cluster import KMeans
+from vtk.numpy_interface import dataset_adapter as dsa
 
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -131,7 +130,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         connect.Update()
         mesh_conn = connect.GetOutput()
         mesh_conn.GetPointData().GetArray("RegionId").SetName("RegionID")
-        id_vec = numpy_support.vtk_to_numpy(mesh_conn.GetPointData().GetArray("RegionID"))
+        id_vec = vtk_to_numpy(mesh_conn.GetPointData().GetArray("RegionID"))
 
         # It can happen that the connectivity filter changes the ids
         loc = vtk.vtkPointLocator()
@@ -394,7 +393,7 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
             rings[pvs[i]].name = "RSPV"
 
     for r in rings:
-        id_vec = numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
+        id_vec = vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
         fname = outdir + f'/ids_{r.name}.vtx'
         if os.path.exists(fname):
             id_vec = id_vec[0:len(id_vec) - 1]
@@ -490,7 +489,7 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
         rings[list(set(other) - set([IVC, SVC]))[0]].name = "CS"
 
     for r in rings:
-        id_vec = numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
+        id_vec = vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
         fname = outdir + f'/ids_{r.name}.vtx'
 
         f = open(fname, 'w')
@@ -543,7 +542,7 @@ def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
 
     appendFilter = vtk.vtkAppendPolyData()
     for r in [rings[i] for i in RPVs]:
-        tag_data = vtk.util.numpy_support.numpy_to_vtk(np.ones((r.np,)) * r.id, deep=True, array_type=vtk.VTK_INT)
+        tag_data = numpy_to_vtk(np.ones((r.np,)) * r.id, deep=True, array_type=vtk.VTK_INT)
         tag_data.SetNumberOfComponents(1)
         tag_data.SetName("id")
         temp = vtk.vtkPolyData()
@@ -557,7 +556,7 @@ def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
     meshExtractFilter.SetImplicitFunction(plane)
     meshExtractFilter.Update()
 
-    RSPV_id = int(vtk.util.numpy_support.vtk_to_numpy(meshExtractFilter.GetOutput().GetPointData().GetArray('id'))[0])
+    RSPV_id = int(vtk_to_numpy(meshExtractFilter.GetOutput().GetPointData().GetArray('id'))[0])
 
     return RSPV_id
 
@@ -601,11 +600,11 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     boundaryEdges.NonManifoldEdgesOff()
     boundaryEdges.Update()
 
-    tree = cKDTree(vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData()))
-    ids = vtk.util.numpy_support.vtk_to_numpy(boundaryEdges.GetOutput().GetPointData().GetArray('Ids'))
+    tree = cKDTree(vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData()))
+    ids = vtk_to_numpy(boundaryEdges.GetOutput().GetPointData().GetArray('Ids'))
     MV_ring = [r for r in rings if r.name == "MV"]
 
-    MV_ids = set(numpy_support.vtk_to_numpy(MV_ring[0].vtk_polydata.GetPointData().GetArray("Ids")))
+    MV_ids = set(vtk_to_numpy(MV_ring[0].vtk_polydata.GetPointData().GetArray("Ids")))
 
     MV_ant = set(ids).intersection(MV_ids)
     MV_post = MV_ids - MV_ant
@@ -647,11 +646,11 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     path.SetEndVertex(lpv_mv)
     path.Update()
 
-    p = vtk.util.numpy_support.vtk_to_numpy(path.GetOutput().GetPoints().GetData())
+    p = vtk_to_numpy(path.GetOutput().GetPoints().GetData())
     dd, ii = tree.query(p)
     mv_lpv = set(ids[ii])
     for r in rings:
-        mv_lpv = mv_lpv - set(numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
+        mv_lpv = mv_lpv - set(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
 
     fname = outdir + '/ids_MV_LPV.vtx'
     f = open(fname, 'w')
@@ -667,11 +666,11 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     path.SetEndVertex(rpv_mv)
     path.Update()
 
-    p = vtk.util.numpy_support.vtk_to_numpy(path.GetOutput().GetPoints().GetData())
+    p = vtk_to_numpy(path.GetOutput().GetPoints().GetData())
     dd, ii = tree.query(p)
     mv_rpv = set(ids[ii])
     for r in rings:
-        mv_rpv = mv_rpv - set(numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
+        mv_rpv = mv_rpv - set(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
 
     fname = outdir + '/ids_MV_RPV.vtx'
     f = open(fname, 'w')
@@ -687,11 +686,11 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     path.SetEndVertex(rpv_bb)
     path.Update()
 
-    p = vtk.util.numpy_support.vtk_to_numpy(path.GetOutput().GetPoints().GetData())
+    p = vtk_to_numpy(path.GetOutput().GetPoints().GetData())
     dd, ii = tree.query(p)
     rpv_lpv = set(ids[ii])
     for r in rings:
-        rpv_lpv = rpv_lpv - set(numpy_support.vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
+        rpv_lpv = rpv_lpv - set(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
 
     fname = outdir + '/ids_RPV_LPV.vtx'
     f = open(fname, 'w')
@@ -802,7 +801,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     geo_filter.Update()
     tv_f = geo_filter.GetOutput()
 
-    tv_f_ids = vtk.util.numpy_support.vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
+    tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_F.vtx'
     f = open(fname, 'w')
     f.write(f'{len(tv_f_ids)}\n')
@@ -816,7 +815,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     geo_filter2.Update()
     tv_s = geo_filter2.GetOutput()
 
-    tv_s_ids = vtk.util.numpy_support.vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
+    tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_S.vtx'
     f = open(fname, 'w')
     f.write(f'{len(tv_s_ids)}\n')
@@ -826,10 +825,10 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     f.close()
 
     svc_points = svc.GetPoints().GetData()
-    svc_points = vtk.util.numpy_support.vtk_to_numpy(svc_points)
+    svc_points = vtk_to_numpy(svc_points)
 
     ivc_points = svc.GetPoints().GetData()  # Changed
-    ivc_points = vtk.util.numpy_support.vtk_to_numpy(ivc_points)
+    ivc_points = vtk_to_numpy(ivc_points)
 
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(gamma_top)
@@ -851,7 +850,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
         cln.Update()
         surface = cln.GetOutput()
         points = surface.GetPoints().GetData()
-        points = vtk.util.numpy_support.vtk_to_numpy(points)
+        points = vtk_to_numpy(points)
         points = points.tolist()
 
         if debug:
@@ -891,9 +890,9 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     if debug:
         vtkWrite(top_cut, outdir + '/top_endo_epi.vtk')  # If this is the CS, then change top_endo_id in 877
 
-    pts_in_top = vtk.util.numpy_support.vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))
-    pts_in_svc = vtk.util.numpy_support.vtk_to_numpy(svc.GetPointData().GetArray("Ids"))
-    pts_in_ivc = vtk.util.numpy_support.vtk_to_numpy(ivc.GetPointData().GetArray("Ids"))
+    pts_in_top = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))
+    pts_in_svc = vtk_to_numpy(svc.GetPointData().GetArray("Ids"))
+    pts_in_ivc = vtk_to_numpy(ivc.GetPointData().GetArray("Ids"))
 
     to_delete = np.zeros((len(pts_in_top),), dtype=int)
 
@@ -910,7 +909,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     geo_filter.SetInputConnection(thresh.GetOutputPort())
     geo_filter.Update()
 
-    mv_id = vtk.util.numpy_support.vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))[0]
+    mv_id = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))[0]
 
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(geo_filter.GetOutput())
@@ -929,7 +928,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
         cln.Update()
         surface = cln.GetOutput()
 
-        pts_surf = vtk.util.numpy_support.vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
+        pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
 
         if mv_id not in pts_surf:
             found_id = i
@@ -948,7 +947,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     cln.SetInputData(surface)
     cln.Update()
 
-    top_endo = vtk.util.numpy_support.vtk_to_numpy(cln.GetOutput().GetPointData().GetArray("Ids"))
+    top_endo = vtk_to_numpy(cln.GetOutput().GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TOP_ENDO.vtx'
     f = open(fname, 'w')
     f.write(f'{len(top_endo)}\n')

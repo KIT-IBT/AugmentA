@@ -27,7 +27,6 @@ under the License.
 import numpy as np
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
-from vtk.util import numpy_support
 import Methods_LA as Method
 import csv
 import datetime
@@ -37,6 +36,7 @@ import os
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
 
@@ -92,32 +92,32 @@ def la_generate_fiber(model, args, job):
     # ab
     ab = model.GetCellData().GetArray('phie_ab')
     ab_grad = model.GetCellData().GetArray('grad_ab')
-    ab = vtk.util.numpy_support.vtk_to_numpy(ab)
-    ab_grad = vtk.util.numpy_support.vtk_to_numpy(ab_grad)
+    ab = vtk_to_numpy(ab)
+    ab_grad = vtk_to_numpy(ab_grad)
 
     # v
     v = model.GetCellData().GetArray('phie_v')
     v_grad = model.GetCellData().GetArray('grad_v')
-    v = vtk.util.numpy_support.vtk_to_numpy(v)
-    v_grad = vtk.util.numpy_support.vtk_to_numpy(v_grad)
+    v = vtk_to_numpy(v)
+    v_grad = vtk_to_numpy(v_grad)
 
     # r
     r = model.GetCellData().GetArray('phie_r')
     r_grad = model.GetCellData().GetArray('grad_r')
-    r = vtk.util.numpy_support.vtk_to_numpy(r)
-    r_grad = vtk.util.numpy_support.vtk_to_numpy(r_grad)
+    r = vtk_to_numpy(r)
+    r_grad = vtk_to_numpy(r_grad)
 
     # r2
     r2 = model.GetCellData().GetArray('phie_r2')
-    r2 = vtk.util.numpy_support.vtk_to_numpy(r2)
+    r2 = vtk_to_numpy(r2)
 
     # phie
     if args.mesh_type == "vol":
         phie = model.GetCellData().GetArray('phie_phi')
-        phie = vtk.util.numpy_support.vtk_to_numpy(phie)
+        phie = vtk_to_numpy(phie)
 
     phie_grad = model.GetCellData().GetArray('grad_phi')
-    phie_grad = vtk.util.numpy_support.vtk_to_numpy(phie_grad)
+    phie_grad = vtk_to_numpy(phie_grad)
 
     cellid = vtk.vtkIdFilter()
     cellid.CellIdsOn()
@@ -154,10 +154,10 @@ def la_generate_fiber(model, args, job):
 
     thr = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
 
-    phie_r2_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetCellData().GetArray('phie_r2'))
+    phie_r2_tau_lpv = vtk_to_numpy(thr.GetCellData().GetArray('phie_r2'))
     max_phie_r2_tau_lpv = np.max(phie_r2_tau_lpv)
 
-    phie_ab_tau_lpv = vtk.util.numpy_support.vtk_to_numpy(thr.GetPointData().GetArray('phie_ab2'))
+    phie_ab_tau_lpv = vtk_to_numpy(thr.GetPointData().GetArray('phie_ab2'))
     max_phie_ab_tau_lpv = np.max(phie_ab_tau_lpv)
 
     print("max_phie_r2_tau_lpv ", max_phie_r2_tau_lpv)
@@ -197,7 +197,7 @@ def la_generate_fiber(model, args, job):
 
         epi = vtk_thr(model, 0, "CELLS", "phie_phi", 0.5)
 
-        epi_ids = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('Global_ids'))
+        epi_ids = vtk_to_numpy(epi.GetCellData().GetArray('Global_ids'))
 
         endo_ids = np.arange(len(r)).astype(int)
 
@@ -213,7 +213,7 @@ def la_generate_fiber(model, args, job):
 
     LAA_bb = vtk_thr(model, 2, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - 0.03, max_phie_ab_tau_lpv + 0.01)
 
-    LAA_bb_ids = vtk.util.numpy_support.vtk_to_numpy(LAA_bb.GetPointData().GetArray('Global_ids'))
+    LAA_bb_ids = vtk_to_numpy(LAA_bb.GetPointData().GetArray('Global_ids'))
 
     MV_ring_ids = np.loadtxt(f'{args.mesh}_surf/ids_MV.vtx', skiprows=2, dtype=int)
 
@@ -233,11 +233,11 @@ def la_generate_fiber(model, args, job):
 
     ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_MV.vtx', skiprows=2, dtype=int)
 
-    rings_pts = vtk.util.numpy_support.vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
+    rings_pts = vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
 
     MV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
 
-    LAA_ids = vtk.util.numpy_support.vtk_to_numpy(LAA_s.GetCellData().GetArray('Global_ids'))
+    LAA_ids = vtk_to_numpy(LAA_s.GetCellData().GetArray('Global_ids'))
 
     # tagging endo-layer
     if args.mesh_type == 'bilayer':
@@ -334,7 +334,7 @@ def la_generate_fiber(model, args, job):
     meshExtractFilter.SetImplicitFunction(plane)
     meshExtractFilter.Update()
 
-    band_cell_ids = vtk.util.numpy_support.vtk_to_numpy(
+    band_cell_ids = vtk_to_numpy(
         meshExtractFilter.GetOutput().GetCellData().GetArray('Global_ids'))
 
     if args.mesh_type == "bilayer":
@@ -410,7 +410,7 @@ def la_generate_fiber(model, args, job):
                                          store_binary=True)
         else:
             vtk_xml_unstructured_grid_writer(job.ID + "/result_LA/LA_endo_with_fiber.vtu", meshNew.VTKObject)
-        pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
+        pts = vtk_to_numpy(endo.GetPoints().GetData())
         write_to_pts(job.ID + '/result_LA/LA_endo_with_fiber.pts', pts)
 
         write_to_elem(job.ID + '/result_LA/LA_endo_with_fiber.elem', endo, tag_endo)
@@ -478,7 +478,7 @@ def la_generate_fiber(model, args, job):
         geo_filter.Update()
         surf = geo_filter.GetOutput()
         epi_surf = vtk_thr(surf, 0, "CELLS", "phie_phi", 0.5)
-        epi_surf_ids = vtk.util.numpy_support.vtk_to_numpy(epi_surf.GetCellData().GetArray('Global_ids'))
+        epi_surf_ids = vtk_to_numpy(epi_surf.GetCellData().GetArray('Global_ids'))
 
         geo_filter = vtk.vtkGeometryFilter()
         geo_filter.SetInputData(epi_surf)
@@ -497,12 +497,12 @@ def la_generate_fiber(model, args, job):
                                                                                                     left_atrial_appendage_epi,
                                                                                                     mitral_valve_epi)
         tag[epi_surf_ids] = Method.assign_element_tag_around_path_within_radius(epi_surf, bb_left, w_bb,
-                                                                                vtk.util.numpy_support.vtk_to_numpy(
+                                                                                vtk_to_numpy(
                                                                                     epi_surf.GetCellData().GetArray(
                                                                                         'elemTag')),
                                                                                 bachmann_bundel_left)
         el[epi_surf_ids] = Method.assign_element_fiber_around_path_within_radius(epi_surf, bb_left, w_bb,
-                                                                                 vtk.util.numpy_support.vtk_to_numpy(
+                                                                                 vtk_to_numpy(
                                                                                      epi_surf.GetCellData().GetArray(
                                                                                          'fiber')), smooth=True)
 
@@ -536,7 +536,7 @@ def la_generate_fiber(model, args, job):
                                          store_binary=True)
         else:
             vtk_xml_unstructured_grid_writer(job.ID + "/result_LA/LA_epi_with_fiber.vtu", meshNew.VTKObject)
-        pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
+        pts = vtk_to_numpy(epi.GetPoints().GetData())
 
         write_to_pts(job.ID + '/result_LA/LA_epi_with_fiber.pts', pts)
 
@@ -580,12 +580,11 @@ def la_generate_fiber(model, args, job):
                                          store_binary=True)
         else:
             vtk_xml_unstructured_grid_writer(filename + ".vtu", meshNew.VTKObject)
-        pts = numpy_support.vtk_to_numpy(model.GetPoints().GetData())
+        pts = vtk_to_numpy(model.GetPoints().GetData())
 
         write_to_pts(filename + '.pts', pts)
         write_to_elem(filename + '.elem', model, tag)
         write_to_lon(filename + '.lon', el, sheet)
-
 
         end_time = datetime.datetime.now()
         running_time = end_time - start_time

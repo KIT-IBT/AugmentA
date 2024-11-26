@@ -26,12 +26,10 @@ under the License.
 """
 
 import numpy as np
-from glob import glob
-import pandas as pd
-import vtk
-from vtk.util import numpy_support
 import scipy.spatial as spatial
-from vtk.numpy_interface import dataset_adapter as dsa
+import vtk
+
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 
 
 def to_polydata(mesh):
@@ -66,8 +64,8 @@ def get_farthest_point_pair(point_array_1, point_array_2):
 
 
 def get_closest_point(vtk_points_1, vtk_points_2):
-    points_array_1 = vtk.util.numpy_support.vtk_to_numpy(vtk_points_1.GetData())
-    points_array_2 = vtk.util.numpy_support.vtk_to_numpy(vtk_points_2.GetData())
+    points_array_1 = vtk_to_numpy(vtk_points_1.GetData())
+    points_array_2 = vtk_to_numpy(vtk_points_2.GetData())
     center_1 = get_mean_point(points_array_1)
     center_2 = get_mean_point(points_array_2)
 
@@ -89,7 +87,7 @@ def get_closest_point(vtk_points_1, vtk_points_2):
 
 
 def find_points_on_mv(mv_points, center_lpv):
-    mv_points_array_1 = vtk.util.numpy_support.vtk_to_numpy(mv_points.GetData())
+    mv_points_array_1 = vtk_to_numpy(mv_points.GetData())
     kDTree = vtk.vtkKdTree()
     kDTree.BuildLocatorFromPoints(mv_points)
     id_list = vtk.vtkIdList()
@@ -197,7 +195,7 @@ def dijkstra_path(polydata, StartVertex, EndVertex):
     path.SetEndVertex(StartVertex)
     path.Update()
     points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    points_data = vtk_to_numpy(points_data)
     return points_data
 
 
@@ -216,7 +214,7 @@ def get_mv_l_and_r(mv_band, center_lpv):
     cln.SetInputData(surface)
     cln.Update()
     points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ring = vtk_to_numpy(points_data)
     center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
 
     connect.DeleteSpecifiedRegion(1)
@@ -229,7 +227,7 @@ def get_mv_l_and_r(mv_band, center_lpv):
     cln.SetInputData(surface)
     cln.Update()
     points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ring = vtk_to_numpy(points_data)
     center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
     dis_1 = np.linalg.norm(center_point_1 - center_lpv)
     dis_2 = np.linalg.norm(center_point_2 - center_lpv)

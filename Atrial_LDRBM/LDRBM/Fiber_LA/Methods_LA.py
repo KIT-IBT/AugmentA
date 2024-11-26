@@ -31,10 +31,10 @@ import vtk
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cosine
 from vtk.numpy_interface import dataset_adapter as dsa
-from vtk.util import numpy_support
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -47,7 +47,7 @@ vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 def mark_LA_endo_elemTag(model, tag, tao_mv, tao_lpv, tao_rpv, max_phie_ab_tau_lpv, max_phie_r2_tau_lpv):
     thresh = get_upper_threshold(model, tao_mv, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_r")
 
-    MV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
+    MV_ids = vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
     thresh2 = get_upper_threshold(model, max_phie_r2_tau_lpv + 0.01, "vtkDataObject::FIELD_ASSOCIATION_CELLS",
                                   "phie_r2")
@@ -55,15 +55,15 @@ def mark_LA_endo_elemTag(model, tag, tao_mv, tao_lpv, tao_rpv, max_phie_ab_tau_l
     thresh = get_lower_threshold(thresh2.GetOutputPort(), max_phie_ab_tau_lpv + 0.01,
                                  "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_ab", source_is_input_connection=True)
 
-    LAA_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
+    LAA_ids = vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
     thresh = get_lower_threshold(model, tao_lpv, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
 
-    LPV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
+    LPV_ids = vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
     thresh = get_upper_threshold(model, tao_rpv, "vtkDataObject::FIELD_ASSOCIATION_CELLS", "phie_v")
 
-    RPV_ids = vtk.util.numpy_support.vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
+    RPV_ids = vtk_to_numpy(thresh.GetOutput().GetCellData().GetArray('Global_ids'))
 
     meshNew = dsa.WrapDataObject(model)
     meshNew.CellData.append(tag, "elemTag")
@@ -86,13 +86,13 @@ def move_surf_along_normals(mesh, eps, direction):
     normalGenerator.SplittingOff()
     normalGenerator.Update()
 
-    PointNormalArray = numpy_support.vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
-    atrial_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
+    PointNormalArray = vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
+    atrial_points = vtk_to_numpy(polydata.GetPoints().GetData())
 
     atrial_points = atrial_points + eps * direction * PointNormalArray
 
     vtkPts = vtk.vtkPoints()
-    vtkPts.SetData(numpy_support.numpy_to_vtk(atrial_points))
+    vtkPts.SetData(numpy_to_vtk(atrial_points))
     polydata.SetPoints(vtkPts)
 
     mesh = vtk.vtkUnstructuredGrid()
@@ -115,8 +115,8 @@ def generate_bilayer(endo, epi):
     epi = vtk.vtkUnstructuredGrid()
     epi.DeepCopy(reverse.GetOutput())
 
-    endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
-    epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
+    endo_pts = vtk_to_numpy(endo.GetPoints().GetData())
+    epi_pts = vtk_to_numpy(epi.GetPoints().GetData())
 
     tree = cKDTree(endo_pts)
     dd, ii = tree.query(epi_pts)
@@ -132,7 +132,7 @@ def generate_bilayer(endo, epi):
     points = np.concatenate((endo_pts, epi_pts[ii, :]), axis=0)
     polydata = vtk.vtkUnstructuredGrid()
     vtkPts = vtk.vtkPoints()
-    vtkPts.SetData(numpy_support.numpy_to_vtk(points))
+    vtkPts.SetData(numpy_to_vtk(points))
     polydata.SetPoints(vtkPts)
     polydata.SetCells(3, lines)
 
@@ -168,10 +168,10 @@ def write_bilayer(bilayer, args, job):
     else:
         vtk_xml_unstructured_grid_writer(f"{file_name}.vtu", bilayer)
 
-    pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
-    tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
-    el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
-    sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
+    pts = vtk_to_numpy(bilayer.GetPoints().GetData())
+    tag_epi = vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
+    el_epi = vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
+    sheet_epi = vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
 
     write_to_pts(f'{file_name}.pts', pts)
     write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
@@ -244,7 +244,7 @@ def dijkstra_path(polydata, StartVertex, EndVertex):
     path.SetEndVertex(StartVertex)
     path.Update()
     points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    points_data = vtk_to_numpy(points_data)
     return points_data
 
 
@@ -321,7 +321,7 @@ def creat_tube(center1, center2, radius):
 
 
 def get_element_ids_around_path_within_radius(mesh, points_data, radius):
-    gl_ids = vtk.util.numpy_support.vtk_to_numpy(mesh.GetCellData().GetArray('Global_ids'))
+    gl_ids = vtk_to_numpy(mesh.GetCellData().GetArray('Global_ids'))
 
     locator = vtk.vtkStaticPointLocator()
     locator.SetDataSet(mesh)
@@ -433,7 +433,7 @@ def assign_element_fiber_around_path_within_radius(mesh, points_data, radius, fi
 
 def get_mean_point(data):
     ring_points = data.GetPoints().GetData()
-    ring_points = vtk.util.numpy_support.vtk_to_numpy(ring_points)
+    ring_points = vtk_to_numpy(ring_points)
     center_point = [np.mean(ring_points[:, 0]), np.mean(ring_points[:, 1]), np.mean(ring_points[:, 2])]
     center_point = np.array(center_point)
     return center_point
@@ -460,19 +460,19 @@ def multidim_intersect_bool(arr1, arr2):
 def get_ct_end_points_id(endo, ct, scv, icv):
     # endo
     points_data = endo.GetPoints().GetData()
-    endo_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    endo_points = vtk_to_numpy(points_data)
 
     # ct
     points_data = ct.GetPoints().GetData()
-    ct_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ct_points = vtk_to_numpy(points_data)
 
     # scv
     points_data = scv.GetPoints().GetData()
-    scv_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    scv_points = vtk_to_numpy(points_data)
 
     # icv
     points_data = icv.GetPoints().GetData()
-    icv_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    icv_points = vtk_to_numpy(points_data)
 
     # intersection
     # inter_ct_endo = multidim_intersect(endo_points, ct_points)
@@ -535,7 +535,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     cln.SetInputData(surface)
     cln.Update()
     points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ring = vtk_to_numpy(points_data)
     center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
 
     connect.DeleteSpecifiedRegion(1)
@@ -552,7 +552,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     cln.SetInputData(surface)
     cln.Update()
     points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ring = vtk_to_numpy(points_data)
     center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
     dis_1 = np.linalg.norm(center_point_1 - tv_ivc_center)
     dis_2 = np.linalg.norm(center_point_1 - tv_svc_center)
@@ -627,10 +627,10 @@ def assign_ra_appendage(model, SCV, appex_point, tag):
 
 def get_endo_ct_intersection_cells(endo, ct):
     points_data = ct.GetPoints().GetData()
-    ct_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    ct_points = vtk_to_numpy(points_data)
 
     points_data = endo.GetPoints().GetData()
-    endo_points = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    endo_points = vtk_to_numpy(points_data)
 
     intersection = multidim_intersect(ct_points, endo_points)
 
@@ -722,8 +722,8 @@ def get_connection_point_la_and_ra(appen_point):
 
 
 def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
-    pts1 = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPoints().GetData())
-    pts2 = vtk.util.numpy_support.vtk_to_numpy(mesh2.GetPoints().GetData())
+    pts1 = vtk_to_numpy(mesh1.GetPoints().GetData())
+    pts2 = vtk_to_numpy(mesh2.GetPoints().GetData())
 
     tree = cKDTree(pts1)
 
@@ -732,7 +732,7 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(
+            data = vtk_to_numpy(
                 mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
             if isinstance(data[0], collections.abc.Sized):
                 data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
@@ -747,7 +747,7 @@ def point_array_mapper(mesh1, mesh2, mesh2_name, idat):
             # assert algs.make_point_mask_from_NaNs(meshNew, data2)[1] == vtk.vtkDataSetAttributes.DUPLICATEPOINT | vtk.vtkDataSetAttributes.HIDDENPOINT
             meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
     else:
-        data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
+        data = vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
         if isinstance(data[0], collections.abc.Sized):
             data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
@@ -765,13 +765,13 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
     filter_cell_centers.SetInputData(mesh1)
     filter_cell_centers.Update()
     centroids1 = filter_cell_centers.GetOutput().GetPoints()
-    centroids1_array = vtk.util.numpy_support.vtk_to_numpy(centroids1.GetData())
+    centroids1_array = vtk_to_numpy(centroids1.GetData())
 
     filter_cell_centers = vtk.vtkCellCenters()
     filter_cell_centers.SetInputData(mesh2)
     filter_cell_centers.Update()
     centroids2 = filter_cell_centers.GetOutput().GetPoints()
-    pts2 = vtk.util.numpy_support.vtk_to_numpy(centroids2.GetData())
+    pts2 = vtk_to_numpy(centroids2.GetData())
 
     tree = cKDTree(centroids1_array)
 
@@ -780,7 +780,7 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetCellData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(
+            data = vtk_to_numpy(
                 mesh1.GetCellData().GetArray(mesh1.GetCellData().GetArrayName(i)))
             if isinstance(data[0], collections.abc.Sized):
                 data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
@@ -790,7 +790,7 @@ def cell_array_mapper(mesh1, mesh2, mesh2_name, idat):
             data2 = data[ii]
             meshNew.PointData.append(data2, mesh1.GetCellData().GetArrayName(i))
     else:
-        data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetCellData().GetArray(idat))
+        data = vtk_to_numpy(mesh1.GetCellData().GetArray(idat))
         if isinstance(data[0], collections.abc.Sized):
             data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:
@@ -843,7 +843,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
 
     LAA = thresh.GetOutput()
 
-    min_r2_cell_LAA = np.argmin(vtk.util.numpy_support.vtk_to_numpy(LAA.GetCellData().GetArray('phie_r2')))
+    min_r2_cell_LAA = np.argmin(vtk_to_numpy(LAA.GetCellData().GetArray('phie_r2')))
 
     ptIds = vtk.vtkIdList()
 
@@ -851,7 +851,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     # sup_appendage_basis_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
     sup_appendage_basis = LAA.GetPoint(ptIds.GetId(0))
 
-    max_r2_cell_LAA = np.argmax(vtk.util.numpy_support.vtk_to_numpy(LAA.GetCellData().GetArray('phie_r2')))
+    max_r2_cell_LAA = np.argmax(vtk_to_numpy(LAA.GetCellData().GetArray('phie_r2')))
 
     ptIds = vtk.vtkIdList()
 
@@ -859,7 +859,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     # bb_mv_id = int(LAA.GetPointData().GetArray('Global_ids').GetTuple(ptIds.GetId(0))[0])
     bb_mv_laa = LAA.GetPoint(ptIds.GetId(0))
 
-    max_v_cell_LAA = np.argmax(vtk.util.numpy_support.vtk_to_numpy(LAA.GetCellData().GetArray('phie_v')))
+    max_v_cell_LAA = np.argmax(vtk_to_numpy(LAA.GetCellData().GetArray('phie_v')))
 
     ptIds = vtk.vtkIdList()
 
@@ -883,7 +883,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     boundaryEdges.Update()
 
     LAA_border = boundaryEdges.GetOutput()
-    LAA_pts_border = vtk.util.numpy_support.vtk_to_numpy(LAA_border.GetPoints().GetData())
+    LAA_pts_border = vtk_to_numpy(LAA_border.GetPoints().GetData())
     max_dist = 0
     for i in range(len(LAA_pts_border)):
         if np.sqrt(np.sum((LAA_pts_border[i] - df["LIPV"].to_numpy()) ** 2, axis=0)) > max_dist:
@@ -916,7 +916,6 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
 
     bb_left = get_wide_bachmann_path_left(thresh.GetOutput(), inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id,
                                           LAA_pt_far_from_LIPV_id)
-
 
     return bb_left, thresh.GetOutput().GetPoint(inf_appendage_basis_id), thresh.GetOutput().GetPoint(
         sup_appendage_basis_id), thresh.GetOutput().GetPoint(LAA_pt_far_from_LIPV_id)
@@ -960,7 +959,7 @@ def creat_center_line(start_end_point):
     functionSource.Update()
     tubePolyData = functionSource.GetOutput()
     points = tubePolyData.GetPoints().GetData()
-    points = vtk.util.numpy_support.vtk_to_numpy(points)
+    points = vtk_to_numpy(points)
 
     return points
 
@@ -1035,9 +1034,9 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
         surface = cln.GetOutput()
 
         if name1.startswith("L"):
-            phie_v = np.max(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
+            phie_v = np.max(vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
         elif name1.startswith("R"):
-            phie_v = np.min(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
+            phie_v = np.min(vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
 
         if name1.startswith("L") and phie_v > 0.04:  # 0.025
             found, val = optimize_shape_PV(surface, 10, 0)
@@ -1067,9 +1066,9 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
         centroid2_d = np.sqrt(np.sum((np.array(centroid2) - np.array(c_mass)) ** 2, axis=0))
 
         if centroid1_d < centroid2_d:
-            PVs[name1] = vtk.util.numpy_support.vtk_to_numpy(single_PV.GetCellData().GetArray('Global_ids'))
+            PVs[name1] = vtk_to_numpy(single_PV.GetCellData().GetArray('Global_ids'))
         else:
-            PVs[name2] = vtk.util.numpy_support.vtk_to_numpy(single_PV.GetCellData().GetArray('Global_ids'))
+            PVs[name2] = vtk_to_numpy(single_PV.GetCellData().GetArray('Global_ids'))
 
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
@@ -1079,9 +1078,9 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
 
 def optimize_shape_PV(surface, num, bound):
     if bound == 0:
-        phie_v = np.max(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
+        phie_v = np.max(vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
     else:
-        phie_v = np.min(vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
+        phie_v = np.min(vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
 
     arr = np.linspace(bound, phie_v, num)
 

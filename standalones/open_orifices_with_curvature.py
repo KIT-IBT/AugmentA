@@ -48,6 +48,7 @@ import collections
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.vtk_methods import filters
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -158,7 +159,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
         valve_center = np.array(centerOfMassFilter.GetCenter())
 
-        valve_pts = vtk.util.numpy_support.vtk_to_numpy(valve.GetPoints().GetData())
+        valve_pts = vtk_to_numpy(valve.GetPoints().GetData())
         max_dist = 0
         for l in range(len(valve_pts)):
             if np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0)) > max_dist:
@@ -207,7 +208,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
         valve_center = np.array(center_of_mass)
 
-        valve_pts = vtk.util.numpy_support.vtk_to_numpy(valve.GetPoints().GetData())
+        valve_pts = vtk_to_numpy(valve.GetPoints().GetData())
         max_dist = 0
         for l in range(len(valve_pts)):
             if np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0)) > max_dist:
@@ -254,15 +255,15 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     vtk_polydata_writer(f"{full_path}/{atrium}_curv.vtk", model, True)
 
-    curv = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('curv'))
+    curv = vtk_to_numpy(model.GetPointData().GetArray('curv'))
 
-    Gl_pt_id = list(vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('Ids')))
-    Gl_cell_id = list(vtk.util.numpy_support.vtk_to_numpy(model.GetCellData().GetArray('Ids')))
+    Gl_pt_id = list(vtk_to_numpy(model.GetPointData().GetArray('Ids')))
+    Gl_cell_id = list(vtk_to_numpy(model.GetCellData().GetArray('Ids')))
 
     if not MRI:
         low_v = vtk_thr(model, 1, "POINTS", "bi", 0.5)
 
-        pts_low_v = set(list(vtk.util.numpy_support.vtk_to_numpy(low_v.GetPointData().GetArray('Ids'))))
+        pts_low_v = set(list(vtk_to_numpy(low_v.GetPointData().GetArray('Ids'))))
 
         high_v = vtk_thr(model, 0, "POINTS", "bi", 0.5001)
 
@@ -320,7 +321,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             loc = vtk.vtkPointLocator()
             loc.SetDataSet(model)
             loc.BuildLocator()
-            transeptal_punture_id = vtk.util.numpy_support.vtk_to_numpy(model.GetPointData().GetArray('Ids'))[
+            transeptal_punture_id = vtk_to_numpy(model.GetPointData().GetArray('Ids'))[
                 loc.FindClosestPoint(p.picked_point)]
         p.close()
 
@@ -340,8 +341,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         cln.Update()
         surface = cln.GetOutput()
 
-        pt_high_c = list(vtk.util.numpy_support.vtk_to_numpy(surface.GetPointData().GetArray('Ids')))
-        curv_s = vtk.util.numpy_support.vtk_to_numpy(surface.GetPointData().GetArray('curv'))
+        pt_high_c = list(vtk_to_numpy(surface.GetPointData().GetArray('Ids')))
+        curv_s = vtk_to_numpy(surface.GetPointData().GetArray('curv'))
 
         if not MRI:
             if transeptal_punture_id not in pt_high_c:
@@ -371,10 +372,10 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                         cln.SetInputData(surface2)
                         cln.Update()
                         surface2 = cln.GetOutput()
-                        pt_surf_2 = list(vtk.util.numpy_support.vtk_to_numpy(surface2.GetPointData().GetArray('Ids')))
+                        pt_surf_2 = list(vtk_to_numpy(surface2.GetPointData().GetArray('Ids')))
                         if len(set(pt_high_c).intersection(pt_surf_2)) > 0:
 
-                            for el in vtk.util.numpy_support.vtk_to_numpy(surface2.GetCellData().GetArray('Ids')):
+                            for el in vtk_to_numpy(surface2.GetCellData().GetArray('Ids')):
                                 el_low_vol.add(Gl_cell_id.index(el))
 
                         connect2.DeleteSpecifiedRegion(ii)
@@ -402,7 +403,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
                     loc_low_V = extract_largest_region(loc_low_V)
 
-                    loc_low_V_pts = vtk.util.numpy_support.vtk_to_numpy(loc_low_V.GetPoints().GetData())
+                    loc_low_V_pts = vtk_to_numpy(loc_low_V.GetPoints().GetData())
 
                     max_dist = 0
                     for l in range(len(loc_low_V_pts)):
@@ -421,7 +422,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                         apex = np.asarray(model.GetPoint(Gl_pt_id.index(pt_high_c[np.argmax(curv_s)])))
         else:
             if not apex_id in pt_high_c:
-                for el in vtk.util.numpy_support.vtk_to_numpy(surface.GetCellData().GetArray('Ids')):
+                for el in vtk_to_numpy(surface.GetCellData().GetArray('Ids')):
                     el_to_del_tot.add(Gl_cell_id.index(el))
 
         connect.DeleteSpecifiedRegion(i)
@@ -550,8 +551,8 @@ def extract_largest_region(mesh):
 
 
 def point_array_mapper(mesh1, mesh2, idat):
-    pts1 = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPoints().GetData())
-    pts2 = vtk.util.numpy_support.vtk_to_numpy(mesh2.GetPoints().GetData())
+    pts1 = vtk_to_numpy(mesh1.GetPoints().GetData())
+    pts2 = vtk_to_numpy(mesh2.GetPoints().GetData())
 
     tree = cKDTree(pts1)
 
@@ -560,7 +561,7 @@ def point_array_mapper(mesh1, mesh2, idat):
     meshNew = dsa.WrapDataObject(mesh2)
     if idat == "all":
         for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk.util.numpy_support.vtk_to_numpy(
+            data = vtk_to_numpy(
                 mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
             if isinstance(data[0], collections.abc.Sized):
                 data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
@@ -572,7 +573,7 @@ def point_array_mapper(mesh1, mesh2, idat):
 
             meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
     else:
-        data = vtk.util.numpy_support.vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
+        data = vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
         if isinstance(data[0], collections.abc.Sized):
             data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
         else:

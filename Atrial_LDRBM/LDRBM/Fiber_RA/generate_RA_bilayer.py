@@ -15,6 +15,7 @@ from scipy.spatial import cKDTree
 import argparse
 
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer
 
 parser = argparse.ArgumentParser(description='Create Right Atrium.')
@@ -68,13 +69,13 @@ def move_surf_along_normals(mesh, eps, direction):
     normalGenerator.SplittingOff()
     normalGenerator.Update()
 
-    PointNormalArray = numpy_support.vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
-    atrial_points = numpy_support.vtk_to_numpy(polydata.GetPoints().GetData())
+    PointNormalArray = vtk_to_numpy(normalGenerator.GetOutput().GetPointData().GetNormals())
+    atrial_points = vtk_to_numpy(polydata.GetPoints().GetData())
 
     atrial_points = atrial_points + eps * direction * PointNormalArray
 
     vtkPts = vtk.vtkPoints()
-    vtkPts.SetData(numpy_support.numpy_to_vtk(atrial_points))
+    vtkPts.SetData(numpy_to_vtk(atrial_points))
     polydata.SetPoints(vtkPts)
 
     mesh = vtk.vtkUnstructuredGrid()
@@ -97,8 +98,8 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
     endo = vtk.vtkUnstructuredGrid()
     endo.DeepCopy(reverse.GetOutput())
 
-    endo_pts = numpy_support.vtk_to_numpy(endo.GetPoints().GetData())
-    epi_pts = numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
+    endo_pts = vtk_to_numpy(endo.GetPoints().GetData())
+    epi_pts = vtk_to_numpy(epi.GetPoints().GetData())
 
     tree = cKDTree(epi_pts)
     dd, ii = tree.query(endo_pts, distance_upper_bound=max_dist, n_jobs=-1)
@@ -116,7 +117,7 @@ def generate_bilayer(endo, epi, max_dist=np.inf):
     points = np.vstack((endo_pts[endo_ids], epi_pts[epi_ids]))
     polydata = vtk.vtkUnstructuredGrid()
     vtkPts = vtk.vtkPoints()
-    vtkPts.SetData(numpy_support.numpy_to_vtk(points))
+    vtkPts.SetData(numpy_to_vtk(points))
     polydata.SetPoints(vtkPts)
     polydata.SetCells(3, lines)
 
@@ -150,12 +151,12 @@ def write_bilayer(bilayer):
     file_name=args.mesh + "/RA_bilayer_with_fiber"
     vtk_unstructured_grid_writer(f"{file_name}.vtk", bilayer, store_binary=True)
 
-    pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
+    pts = vtk_to_numpy(bilayer.GetPoints().GetData())
 
-    tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
+    tag_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
-    el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
-    sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
+    el_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
+    sheet_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
 
     write_to_pts(f'{file_name}.pts', pts)
     write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
