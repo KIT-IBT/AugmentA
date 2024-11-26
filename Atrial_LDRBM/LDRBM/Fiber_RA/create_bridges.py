@@ -41,6 +41,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_obj_writer, \
     vtk_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -69,15 +70,11 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     mitral_valve_epi = int(tag_dict["mitral_valve_epi"])
     tricuspid_valve_epi = int(tag_dict["tricuspid_valve_epi"])
 
-    geo_filter_la = vtk.vtkGeometryFilter()
-    geo_filter_la.SetInputData(la_epi)
-    geo_filter_la.Update()
-    la_epi_surface = geo_filter_la.GetOutput()
+    la_epi_surface = apply_vtk_geom_filter(la_epi)
 
-    geo_filter_ra = vtk.vtkGeometryFilter()
-    geo_filter_ra.SetInputData(ra_epi)
-    geo_filter_ra.Update()
-    ra_epi_surface = geo_filter_ra.GetOutput()
+
+    ra_epi_surface = apply_vtk_geom_filter(ra_epi)
+
 
     SVC_p = np.array(df["SVC"])
     IVC_p = np.array(df["IVC"])
@@ -156,16 +153,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     elif args.mesh_type == "bilayer":
 
         la_e = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
-        geo_filter_la_epi = vtk.vtkGeometryFilter()
-        geo_filter_la_epi.SetInputData(la_e)
-        geo_filter_la_epi.Update()
-        la_e = geo_filter_la_epi.GetOutput()
+        la_e = apply_vtk_geom_filter(la_e)
+
 
         ra_e = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
-        geo_filter_ra_epi = vtk.vtkGeometryFilter()
-        geo_filter_ra_epi.SetInputData(ra_e)
-        geo_filter_ra_epi.Update()
-        ra_e = geo_filter_ra_epi.GetOutput()
+        ra_e = apply_vtk_geom_filter(ra_e)
+
 
         append_filter = vtk.vtkAppendFilter()
         append_filter.AddInputData(la_e)

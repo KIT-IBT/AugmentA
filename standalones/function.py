@@ -31,14 +31,13 @@ import vtk
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 
 def to_polydata(mesh):
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(mesh)
-    geo_filter.Update()
-    polydata = geo_filter.GetOutput()
+    polydata = apply_vtk_geom_filter(mesh)
+
     return polydata
 
 
@@ -139,10 +138,8 @@ def cut_a_band_from_model(polydata, point_1, point_2, point_3, width):
     meshExtractFilter2.SetImplicitFunction(plane2)
     meshExtractFilter2.Update()
     band = meshExtractFilter2.GetOutput()
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(band)
-    geo_filter.Update()
-    band = geo_filter.GetOutput()
+    band = apply_vtk_geom_filter(band)
+
 
     return band
 

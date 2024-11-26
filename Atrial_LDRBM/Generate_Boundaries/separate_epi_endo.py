@@ -3,6 +3,7 @@ import sys
 
 import vtk
 
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')

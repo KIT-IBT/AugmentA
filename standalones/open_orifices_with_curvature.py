@@ -42,6 +42,7 @@ from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -274,10 +275,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         surface = connect.GetOutput()
 
         # Clean unused points
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(surface)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(surface)
+
 
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
@@ -306,10 +305,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                         surface2 = connect2.GetOutput()
 
                         # Clean unused points
-                        geo_filter = vtk.vtkGeometryFilter()
-                        geo_filter.SetInputData(surface2)
-                        geo_filter.Update()
-                        surface2 = geo_filter.GetOutput()
+                        surface2 = apply_vtk_geom_filter(surface2)
+
 
                         cln = vtk.vtkCleanPolyData()
                         cln.SetInputData(surface2)
@@ -432,10 +429,8 @@ def extract_largest_region(mesh):
     connect.Update()
     surface = connect.GetOutput()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(surface)
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(surface)
+
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
@@ -489,10 +484,8 @@ def create_pts(array_points, array_name, mesh_dir):
 
 
 def to_polydata(mesh):
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(mesh)
-    geo_filter.Update()
-    polydata = geo_filter.GetOutput()
+    polydata = apply_vtk_geom_filter(mesh)
+
     return polydata
 
 

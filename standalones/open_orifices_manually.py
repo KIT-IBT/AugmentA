@@ -39,6 +39,7 @@ from Atrial_LDRBM.Generate_Boundaries import extract_rings
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
 from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 
@@ -185,10 +186,8 @@ def extract_largest_region(mesh):
     connect.Update()
     surface = connect.GetOutput()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(surface)
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(surface)
+
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)

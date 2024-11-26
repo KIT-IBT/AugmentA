@@ -40,6 +40,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -273,10 +274,8 @@ def ra_generate_fiber(model, args, job):
         Method.writer_vtk(CT_band, f'{args.mesh}_surf/' + "ct_band.vtk")
         Method.writer_vtk(CT_ub, f'{args.mesh}_surf/' + "ct_ub.vtk")
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(CT_band)
-    geo_filter.Update()
-    mesh_surf = geo_filter.GetOutput()
+    mesh_surf = apply_vtk_geom_filter(CT_band)
+
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(mesh_surf)
@@ -323,10 +322,8 @@ def ra_generate_fiber(model, args, job):
 
     IVC_CT_pt_id = loc.FindClosestPoint(np.array(IVC_CT_pt))
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(no_IVC_s)
-    geo_filter.Update()
-    no_IVC_s = geo_filter.GetOutput()
+    no_IVC_s = apply_vtk_geom_filter(no_IVC_s)
+
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(no_IVC_s)
@@ -642,10 +639,8 @@ def ra_generate_fiber(model, args, job):
     point3_id = loc.FindClosestPoint(IVC_max_r_CT_pt)
     point4_id = loc.FindClosestPoint(np.array(df["RAA"]))  # this is also the id for Bachmann-Bundle on the right atrium
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(CT)
-    geo_filter.Update()
-    CT = geo_filter.GetOutput()
+    CT = apply_vtk_geom_filter(CT)
+
 
     # calculate the norm vector
     v1 = np.array(df["IVC"]) - np.array(df["SVC"])
@@ -664,10 +659,8 @@ def ra_generate_fiber(model, args, job):
     meshExtractFilter.Update()
     TV_lat = meshExtractFilter.GetOutput()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(TV_lat)
-    geo_filter.Update()
-    TV_lat = geo_filter.GetOutput()
+    TV_lat = apply_vtk_geom_filter(TV_lat)
+
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(TV_lat)
@@ -703,29 +696,23 @@ def ra_generate_fiber(model, args, job):
         tag_old = np.array(tag, dtype=int)
         el_old = np.array(el)
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(model)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(model)
+
 
         epi = vtk_thr(surface, 0, "POINTS", "phie_phi", 0.5)
 
         endo = vtk_thr(surface, 1, "POINTS", "phie_phi", 0.5)
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(endo)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(endo)
+
 
     elif args.mesh_type == "bilayer":
 
         fiber_endo = el.copy()
         tag_endo = np.copy(tag)
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(endo)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(endo)
+
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(surface)
@@ -914,10 +901,8 @@ def ra_generate_fiber(model, args, job):
 
     # Bachmann-Bundle
     if args.mesh_type == "vol":
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(epi)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(epi)
+
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(RAS_S)
@@ -1010,10 +995,8 @@ def ra_generate_fiber(model, args, job):
             else:
                 la = Method.smart_reader(meshname + "_LA_vol_fibers/result_LA/LA_vol_with_fiber.vtu")
 
-            geo_filter = vtk.vtkGeometryFilter()
-            geo_filter.SetInputData(la)
-            geo_filter.Update()
-            la_surf = geo_filter.GetOutput()
+            la_surf = apply_vtk_geom_filter(la)
+
 
             la_epi = vtk_thr(la_surf, 2, "CELLS", "elemTag", left_atrial_wall_epi, 99)
 
@@ -1023,16 +1006,12 @@ def ra_generate_fiber(model, args, job):
         length = len(bachmann_bundle_points_data)
         ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
 
-        geo_filter_la_epi = vtk.vtkGeometryFilter()
-        geo_filter_la_epi.SetInputData(la_epi)
-        geo_filter_la_epi.Update()
-        la_epi = geo_filter_la_epi.GetOutput()
+        la_epi = apply_vtk_geom_filter(la_epi)
+
 
         if args.mesh_type == "bilayer":
-            geo_filter_ra_epi = vtk.vtkGeometryFilter()
-            geo_filter_ra_epi.SetInputData(model)
-            geo_filter_ra_epi.Update()
-            ra_epi = geo_filter_ra_epi.GetOutput()
+            ra_epi = apply_vtk_geom_filter(model)
+
         else:
             ra_epi = surface
 

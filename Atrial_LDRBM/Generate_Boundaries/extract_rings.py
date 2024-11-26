@@ -39,6 +39,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -90,12 +91,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
     print('Extracting rings...')
 
     mesh_surf = smart_reader(mesh)
-
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(mesh_surf)
-    geo_filter.Update()
-
-    mesh_surf = geo_filter.GetOutput()
+    mesh_surf = apply_vtk_geom_filter(mesh_surf)
 
     centroids = dict()
 
@@ -126,7 +122,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
             centroids["RAA_base"] = RA_bs_point
 
         connect = vtk.vtkConnectivityFilter()
-        connect.SetInputConnection(geo_filter.GetOutputPort())
+        connect.SetInputData(mesh_surf)
         connect.SetExtractionModeToAllRegions()
         connect.ColorRegionsOn()
         connect.Update()
@@ -224,7 +220,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         vtkWrite(dataSet.VTKObject, outdir + '/RA_boundaries_tagged.vtk'.format(mesh))
 
     elif RAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir + '/LA.vtk'.format(mesh))
+        vtkWrite(mesh_surf, outdir + '/LA.vtk'.format(mesh))
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         centroids["LAA"] = LA_ap_point
         array_name = "Ids"
@@ -251,10 +247,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         vtkWrite(dataSet.VTKObject, outdir + '/LA_boundaries_tagged.vtk'.format(mesh))
 
     elif LAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir + '/RA.vtk'.format(mesh))
+        vtkWrite(mesh_surf, outdir + '/RA.vtk'.format(mesh))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
         idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_filter.GetOutputPort())
+        idFilter.SetInputData(mesh_surf)
         if int(vtk_version) >= 9:
             idFilter.SetPointIdsArrayName('Ids')
             idFilter.SetCellIdsArrayName('Ids')
@@ -313,10 +309,8 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
         surface = connect.GetOutput()
 
         # Clean unused points
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(surface)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(surface)
+
 
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
@@ -699,10 +693,8 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
 
     plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(model)
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(model)
+
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(surface)
@@ -731,10 +723,8 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     gamma_top = boundaryEdges.GetOutput()
 
     if debug:
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(gamma_top)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(gamma_top)
+
         vtkWrite(surface, outdir + '/gamma_top.vtk')
 
     """
@@ -928,10 +918,8 @@ def create_pts(array_points, array_name, mesh_dir):
 
 
 def to_polydata(mesh):
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(mesh)
-    geo_filter.Update()
-    polydata = geo_filter.GetOutput()
+    polydata = apply_vtk_geom_filter(mesh)
+
     return polydata
 
 

@@ -35,6 +35,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -448,10 +449,8 @@ def extract_largest_region(mesh):
     connect.Update()
     surface = connect.GetOutput()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(surface)
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(surface)
+
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)

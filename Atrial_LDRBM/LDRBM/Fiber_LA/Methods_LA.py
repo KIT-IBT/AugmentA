@@ -37,6 +37,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
@@ -272,10 +273,8 @@ def dijkstra_path_on_a_plane(polydata, StartVertex, EndVertex, plane_point):
     meshExtractFilter2.SetImplicitFunction(plane2)
     meshExtractFilter2.Update()
     band = meshExtractFilter2.GetOutput()
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(band)
-    geo_filter.Update()
-    band = geo_filter.GetOutput()
+    band = apply_vtk_geom_filter(band)
+
     # print(band)
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(band)
@@ -565,10 +564,8 @@ def extract_largest_region(mesh):
     connect.Update()
     surface = connect.GetOutput()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(surface)
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(surface)
+
 
     cln = vtk.vtkCleanPolyData()
     cln.SetInputData(surface)
@@ -678,15 +675,11 @@ def get_connection_point_la_and_ra(appen_point):
     la_connect_point = bb_aux_l_points[int(length * 0.5)]
 
     # ra
-    geo_filter_la = vtk.vtkGeometryFilter()
-    geo_filter_la.SetInputData(la_epi_surface)
-    geo_filter_la.Update()
-    la_epi_surface = geo_filter_la.GetOutput()
+    la_epi_surface = apply_vtk_geom_filter(la_epi_surface)
 
-    geo_filter_ra = vtk.vtkGeometryFilter()
-    geo_filter_ra.SetInputData(ra_epi_surface)
-    geo_filter_ra.Update()
-    ra_epi_surface = geo_filter_ra.GetOutput()
+
+    ra_epi_surface = apply_vtk_geom_filter(ra_epi_surface)
+
 
     loc_la_epi = vtk.vtkPointLocator()
     loc_la_epi.SetDataSet(la_epi_surface)
@@ -1007,10 +1000,8 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
         single_PV = connect.GetOutput()
 
         # Clean unused points
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(single_PV)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(single_PV)
+
 
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
@@ -1026,18 +1017,14 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
             found, val = optimize_shape_PV(surface, 10, 0)
             if found:
                 single_PV = vtk_thr(single_PV, 1, "CELLS", "phie_v", val)
-                geo_filter = vtk.vtkGeometryFilter()
-                geo_filter.SetInputData(single_PV)
-                geo_filter.Update()
-                surface = geo_filter.GetOutput()
+                surface = apply_vtk_geom_filter(single_PV)
+
         elif name1.startswith("R") and phie_v < 0.9:  # 0.975
             found, val = optimize_shape_PV(surface, 10, 1)
             if found:
                 single_PV = vtk_thr(single_PV, 0, "CELLS", "phie_v", val)
-                geo_filter = vtk.vtkGeometryFilter()
-                geo_filter.SetInputData(single_PV)
-                geo_filter.Update()
-                surface = geo_filter.GetOutput()
+                surface = apply_vtk_geom_filter(single_PV)
+
 
         centerOfMassFilter = vtk.vtkCenterOfMass()
         centerOfMassFilter.SetInputData(surface)

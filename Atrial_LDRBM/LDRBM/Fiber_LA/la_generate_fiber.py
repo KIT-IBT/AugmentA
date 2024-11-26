@@ -40,6 +40,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -467,10 +468,8 @@ def la_generate_fiber(model, args, job):
     # Bachmann Bundle
 
     if args.mesh_type == "vol":  # Extract epicardial surface
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(model)
-        geo_filter.Update()
-        surf = geo_filter.GetOutput()
+        surf = apply_vtk_geom_filter(model)
+
         epi_surf = vtk_thr(surf, 0, "CELLS", "phie_phi", 0.5)
         epi_surf_ids = vtk_to_numpy(epi_surf.GetCellData().GetArray('Global_ids'))
 

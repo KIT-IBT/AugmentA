@@ -39,6 +39,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -304,10 +305,7 @@ def detect_and_mark_rings(surf, ap_point):
         surface = connect.GetOutput()
 
         # Clean unused points
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(surface)
-        geo_filter.Update()
-        surface = geo_filter.GetOutput()
+        surface = apply_vtk_geom_filter(surface)
 
         cln = vtk.vtkCleanPolyData()
         cln.SetInputData(surface)
@@ -670,12 +668,10 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
             ivc_center = np.array(r.center)
             ivc = r.vtk_polydata
 
-    initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
+    plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(model)
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(model)
+
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(surface)
@@ -715,10 +711,8 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     endo = idFilter.GetOutput()
 
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(endo)
-    geo_filter.Update()
-    surface = geo_filter.GetOutput()
+    surface = apply_vtk_geom_filter(endo)
+
 
     meshExtractFilter = vtk.vtkExtractGeometry()
     meshExtractFilter.SetInputData(surface)
