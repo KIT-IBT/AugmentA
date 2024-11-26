@@ -24,15 +24,14 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import vtk
-import numpy as np
-from carputils.job.serialise import filename
-from vtk.numpy_interface import dataset_adapter as dsa
-from vtk.numpy_interface import algorithms as algs
-from scipy.spatial import cKDTree
-from vtk.util import numpy_support
-from scipy.spatial.distance import cosine
 import collections
+
+import numpy as np
+import vtk
+from scipy.spatial import cKDTree
+from scipy.spatial.distance import cosine
+from vtk.numpy_interface import dataset_adapter as dsa
+from vtk.util import numpy_support
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
@@ -172,18 +171,18 @@ def generate_bilayer(endo, epi):
 def write_bilayer(bilayer, args, job):
     file_name = job.ID + "/result_LA/LA_bilayer_with_fiber"
     if args.ofmt == 'vtk':
-        vtk_unstructured_grid_writer(f"{filename}.vtk", bilayer, store_binary=True)
+        vtk_unstructured_grid_writer(f"{file_name}.vtk", bilayer, store_binary=True)
     else:
-        vtk_xml_unstructured_grid_writer(f"{filename}.vtu", bilayer)
+        vtk_xml_unstructured_grid_writer(f"{file_name}.vtu", bilayer)
 
     pts = numpy_support.vtk_to_numpy(bilayer.GetPoints().GetData())
     tag_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
     el_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
     sheet_epi = vtk.util.numpy_support.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
 
-    write_to_pts(f'{filename}.pts', pts)
-    write_to_elem(f'{filename}.elem', bilayer, tag_epi)
-    write_to_lon(f'{filename}.lon', el_epi, sheet_epi)
+    write_to_pts(f'{file_name}.pts', pts)
+    write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
+    write_to_lon(f'{file_name}.lon', el_epi, sheet_epi)
     print('Done..')
 
 

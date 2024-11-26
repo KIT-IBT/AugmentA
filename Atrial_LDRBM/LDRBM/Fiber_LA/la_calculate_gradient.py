@@ -24,10 +24,11 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import numpy as np
-import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
 import os
+
+import vtk
+
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer
 
 
 def la_calculate_gradient(args, model, job):
