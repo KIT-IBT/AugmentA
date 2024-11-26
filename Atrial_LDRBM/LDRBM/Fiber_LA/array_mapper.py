@@ -24,10 +24,9 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import vtk
-import Methods_LA as Method
 from carputils import tools
-from vtk.numpy_interface import dataset_adapter as dsa
+
+import Methods_LA as Method
 
 
 def parser():

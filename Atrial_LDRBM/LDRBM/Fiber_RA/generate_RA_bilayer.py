@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-import numpy as np
-# from glob import glob
-# import pandas as pd
-import vtk
-from vtk.util import numpy_support
-from vtk.numpy_interface import dataset_adapter as dsa
-from scipy.spatial import cKDTree
 # from scipy import spatial
 # import function
 # from sklearn.neighbors import NearestNeighbors
 import argparse
+
+import numpy as np
+# from glob import glob
+# import pandas as pd
+import vtk
+from scipy.spatial import cKDTree
+from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk

@@ -24,13 +24,15 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
+from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
 import os
-import sys
 from string import Template
 
 import numpy as np
@@ -38,27 +40,18 @@ import pandas as pd
 import pyvista as pv
 from scipy.spatial import cKDTree
 
-sys.path.append('standalones')
-from open_orifices_with_curvature import open_orifices_with_curvature
-from open_orifices_manually import open_orifices_manually
-from prealign_meshes import prealign_meshes
-from getmarks import get_landmarks
-from create_SSM_instance import create_SSM_instance
-from resample_surf_mesh import resample_surf_mesh
+from standalones.open_orifices_with_curvature import open_orifices_with_curvature
+from standalones.open_orifices_manually import open_orifices_manually
+from standalones.prealign_meshes import prealign_meshes
+from standalones.getmarks import get_landmarks
+from standalones.create_SSM_instance import create_SSM_instance
+from standalones.resample_surf_mesh import resample_surf_mesh
 
-import vtk
-
-sys.path.append('Atrial_LDRBM/Generate_Boundaries')
-sys.path.append('Atrial_LDRBM/LDRBM/Fiber_LA')
-sys.path.append('Atrial_LDRBM/LDRBM/Fiber_RA')
-import la_main
-import ra_main
-from extract_rings import label_atrial_orifices
-from extract_rings import smart_reader
-from extract_rings_TOP_epi_endo import label_atrial_orifices_TOP_epi_endo
-from separate_epi_endo import separate_epi_endo
-from generate_mesh import generate_mesh
-from generate_surf_id import generate_surf_id
+from Atrial_LDRBM.Generate_Boundaries.extract_rings import label_atrial_orifices
+from Atrial_LDRBM.Generate_Boundaries.extract_rings_TOP_epi_endo import label_atrial_orifices_TOP_epi_endo
+from Atrial_LDRBM.Generate_Boundaries.separate_epi_endo import separate_epi_endo
+from Atrial_LDRBM.Generate_Boundaries.generate_mesh import generate_mesh
+from Atrial_LDRBM.Generate_Boundaries.generate_surf_id import generate_surf_id
 
 pv.set_plot_theme('dark')
 n_cpu = os.cpu_count()

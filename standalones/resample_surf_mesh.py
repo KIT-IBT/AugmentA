@@ -24,17 +24,16 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import pymeshlab
-import pymeshfix
-import pyvista as pv
-import vtk
 import argparse
-from scipy.spatial import cKDTree
-from urllib3.filepost import writer
-from vtk.util import numpy_support
 import os
+
 import numpy as np
 import pandas as pd
+import pymeshfix
+import pymeshlab
+import pyvista as pv
+import vtk
+from scipy.spatial import cKDTree
 
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
@@ -296,7 +295,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
 def run():
     args = parser().parse_args()
-    resample_surf_mesh(args.mesh, target_mesh_resolution, find_apex_with_curv, scale, size)
+    resample_surf_mesh(args.mesh, args.target_mesh_resolution, args.find_apex_with_curv, args.scale, args.size)
 
 
 if __name__ == '__main__':

@@ -33,8 +33,8 @@ import pandas as pd
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
-import Methods_LA as Method
-from la_laplace import laplace_0_1
+import Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import laplace_0_1
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy

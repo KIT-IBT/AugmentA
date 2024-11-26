@@ -31,8 +31,8 @@ import numpy as np
 import vtk
 from carputils import tools
 
-from la_generate_fiber import la_generate_fiber
-from la_laplace import la_laplace
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import la_generate_fiber
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import la_laplace
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 

@@ -25,12 +25,12 @@ specific language governing permissions and limitations
 under the License.  
 """
 import os
+
 from carputils import tools
-from ra_calculate_gradient import ra_calculate_gradient
-import vtk
 from carputils.carpio import igb
 from vtk.numpy_interface import dataset_adapter as dsa
 
+from Atrial_LDRBM.LDRBM.Fiber_RA.ra_calculate_gradient import ra_calculate_gradient
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_polydata_writer
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))

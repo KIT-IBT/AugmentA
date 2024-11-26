@@ -35,7 +35,7 @@ import vtk
 from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
-import Methods_RA as Method
+import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
@@ -45,7 +45,7 @@ from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plan
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
-from create_bridges import add_free_bridge
+from Atrial_LDRBM.LDRBM.Fiber_RA.create_bridges import add_free_bridge
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 

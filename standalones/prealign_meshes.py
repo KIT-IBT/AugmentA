@@ -24,17 +24,12 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import os
-import numpy as np
-from glob import glob
-import pandas as pd
-import vtk
-from vtk.util import numpy_support
-from vtk.numpy_interface import dataset_adapter as dsa
-import datetime
-import transformations as tf
-
 import argparse
+
+import pandas as pd
+import transformations as tf
+import vtk
+from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter

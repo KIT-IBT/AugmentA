@@ -33,10 +33,10 @@ import pandas as pd
 import vtk
 from carputils import tools
 
-import Methods_RA as Method
-from create_bridges import add_free_bridge
-from ra_generate_fiber import ra_generate_fiber
-from ra_laplace import ra_laplace
+import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
+from Atrial_LDRBM.LDRBM.Fiber_RA.create_bridges import add_free_bridge
+from Atrial_LDRBM.LDRBM.Fiber_RA.ra_generate_fiber import ra_generate_fiber
+from Atrial_LDRBM.LDRBM.Fiber_RA.ra_laplace import ra_laplace
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 

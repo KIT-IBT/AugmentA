@@ -32,7 +32,7 @@ EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 from carputils.carpio import igb
 from carputils import tools
-from la_calculate_gradient import la_calculate_gradient
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_calculate_gradient import la_calculate_gradient
 from vtk.numpy_interface import dataset_adapter as dsa
 
 

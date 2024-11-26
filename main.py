@@ -28,9 +28,9 @@ under the License.
 EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
-import sys
-import os
 import argparse
+import os
+
 from pipeline import AugmentA
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))

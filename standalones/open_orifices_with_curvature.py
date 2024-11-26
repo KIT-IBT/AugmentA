@@ -50,7 +50,7 @@ from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 pv.set_plot_theme('dark')
 
 sys.path.append('./Atrial_LDRBM/Generate_Boundaries')
-from extract_rings import label_atrial_orifices
+from Atrial_LDRBM.Generate_Boundaries.extract_rings import label_atrial_orifices
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 

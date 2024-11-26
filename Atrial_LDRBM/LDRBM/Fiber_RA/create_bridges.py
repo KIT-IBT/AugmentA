@@ -35,7 +35,7 @@ import pymeshlab
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
-import Methods_RA as Method
+import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
