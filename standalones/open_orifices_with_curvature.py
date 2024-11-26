@@ -24,32 +24,25 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import os, sys
+import argparse
+import collections
+import os
+import sys
 import warnings
 
 import numpy as np
-import pathlib
-from glob import glob
-import pandas as pd
-import vtk
-from vtk.util import numpy_support
-import scipy.spatial as spatial
-from vtk.numpy_interface import dataset_adapter as dsa
-import datetime
-from sklearn.cluster import KMeans
-import argparse
-from scipy.spatial import cKDTree
-
 import pymeshfix
-from pymeshfix import _meshfix
 import pyvista as pv
-import collections
+import vtk
+from scipy.spatial import cKDTree
+from vtk.numpy_interface import dataset_adapter as dsa
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 pv.set_plot_theme('dark')
@@ -159,11 +152,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
         valve_center = np.array(centerOfMassFilter.GetCenter())
 
-        valve_pts = vtk_to_numpy(valve.GetPoints().GetData())
-        max_dist = 0
-        for l in range(len(valve_pts)):
-            if np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0)) > max_dist:
-                max_dist = np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0))
+        max_dist = get_maximum_distance_of_points(valve, valve_center)
 
         if max_dist > max_cutting_radius * 2:
             print(f"Valve bigger than {max_cutting_radius * 2} cm")
@@ -208,11 +197,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
         valve_center = np.array(center_of_mass)
 
-        valve_pts = vtk_to_numpy(valve.GetPoints().GetData())
-        max_dist = 0
-        for l in range(len(valve_pts)):
-            if np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0)) > max_dist:
-                max_dist = np.sqrt(np.sum((valve_center - valve_pts[l]) ** 2, axis=0))
+        max_dist = get_maximum_distance_of_points(valve, valve_center)
 
         # Cutting valve with fixed radius to ensure that it is the biggest ring
         el_to_del_tot = find_elements_within_radius(model, valve_center, max_cutting_radius)
@@ -403,12 +388,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
                     loc_low_V = extract_largest_region(loc_low_V)
 
-                    loc_low_V_pts = vtk_to_numpy(loc_low_V.GetPoints().GetData())
-
-                    max_dist = 0
-                    for l in range(len(loc_low_V_pts)):
-                        if np.sqrt(np.sum((pt_max_curv - loc_low_V_pts[l]) ** 2, axis=0)) > max_dist:
-                            max_dist = np.sqrt(np.sum((pt_max_curv - loc_low_V_pts[l]) ** 2, axis=0))
+                    max_dist = get_maximum_distance_of_points(loc_low_V, pt_max_curv)
 
                     el_to_del = find_elements_within_radius(model, pt_max_curv, min_cutting_radius * 2 * scale)
 
