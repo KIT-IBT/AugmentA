@@ -31,7 +31,7 @@ import vtk
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 
@@ -140,7 +140,6 @@ def cut_a_band_from_model(polydata, point_1, point_2, point_3, width):
     band = meshExtractFilter2.GetOutput()
     band = apply_vtk_geom_filter(band)
 
-
     return band
 
 
@@ -189,10 +188,8 @@ def get_mv_l_and_r(mv_band, center_lpv):
 
     # Clean unused points
     surface = to_polydata(connect.GetOutput())
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
+
+    points_data = clean_polydata(surface).GetPoints().GetData()
     ring = vtk_to_numpy(points_data)
     center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
 
@@ -202,10 +199,7 @@ def get_mv_l_and_r(mv_band, center_lpv):
 
     # Clean unused points
     surface = to_polydata(connect.GetOutput())
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
+    points_data = clean_polydata(surface).GetPoints().GetData()
     ring = vtk_to_numpy(points_data)
     center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
     dis_1 = np.linalg.norm(center_point_1 - center_lpv)

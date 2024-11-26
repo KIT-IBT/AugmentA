@@ -35,7 +35,8 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+    clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -200,11 +201,7 @@ def generate_sheet_dir(args, model, job):
     extract the surface
     '''
     surface = apply_vtk_geom_filter(model)
-
-    cleaner = vtk.vtkCleanPolyData()
-    cleaner.SetInputData(surface)
-    cleaner.Update()
-    cln_surface = cleaner.GetOutput()
+    cln_surface = clean_polydata(surface)
 
     '''
     calculate normals of surface cells
@@ -401,11 +398,7 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
     meshExtractFilter2.Update()
 
     band = meshExtractFilter2.GetOutput()
-
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(apply_vtk_geom_filter(band))
-    cln.Update()
-    band = cln.GetOutput()
+    band = clean_polydata(apply_vtk_geom_filter(band))
 
     if args.debug:
         writer_vtk(band, f'{args.mesh}_surf/' + "band_" + str(StartVertex) + "_" + str(EndVertex) + ".vtk")
@@ -670,11 +663,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
 
     # Clean unused points
     surface = apply_vtk_geom_filter(connect.GetOutput())
-
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
+    points_data = clean_polydata(surface).GetPoints().GetData()
     ring = vtk_to_numpy(points_data)
     center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
 
@@ -685,10 +674,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     # Clean unused points
     surface = apply_vtk_geom_filter(connect.GetOutput())
 
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
+    points_data = clean_polydata(surface).GetPoints().GetData()
     ring = vtk_to_numpy(points_data)
     center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
     dis_1 = np.linalg.norm(center_point_1 - tv_ivc_center)
@@ -720,12 +706,7 @@ def extract_largest_region(mesh):
 
     surface = apply_vtk_geom_filter(surface)
 
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    res = cln.GetOutput()
-
-    return res
+    return clean_polydata(surface)
 
 
 def assign_ra_appendage(model, SCV, appex_point, tag, elemTag):

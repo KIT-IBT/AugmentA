@@ -661,11 +661,7 @@ def ra_generate_fiber(model, args, job):
 
     TV_lat = apply_vtk_geom_filter(TV_lat)
 
-
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(TV_lat)
-    cln.Update()
-    TV_lat = cln.GetOutput()
+    TV_lat = clean_polydata(TV_lat)
 
     if args.debug:
         Method.writer_vtk(TV_lat, f'{args.mesh}_surf/' + "TV_lat.vtk")

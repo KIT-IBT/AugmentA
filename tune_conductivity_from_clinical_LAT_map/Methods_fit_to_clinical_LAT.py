@@ -35,7 +35,8 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+    clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -230,14 +231,8 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
 
             geo_port, _geo_filter = get_vtk_geom_filter_port(extract.GetOutputPort(), True)
 
-
-
-            cleaner = vtk.vtkCleanPolyData()
-            cleaner.SetInputConnection(geo_port)
-            cleaner.Update()
-
             # Mesh of all elements which are not belonging to the clean band
-            el_removed = cleaner.GetOutput()
+            el_removed = clean_polydata(geo_port, input_is_connection=True)
 
             # Compute centroids of all elements which are not belonging to the clean band
             filter_cell_centers = vtk.vtkCellCenters()
@@ -259,12 +254,8 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
 
                 geo_port, _geo_filter = get_vtk_geom_filter_port(connect.GetOutputPort(), True)
 
-
                 # Clean unused points
-                cln = vtk.vtkCleanPolyData()
-                cln.SetInputConnection(geo_port)
-                cln.Update()
-                surface = cln.GetOutput()
+                surface = clean_polydata(geo_port, input_is_connection=True)
 
                 filter_cell_centers = vtk.vtkCellCenters()
                 filter_cell_centers.SetInputData(surface)
@@ -318,12 +309,8 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
 
         geo_port, _geo_filter = get_vtk_geom_filter_port(connect.GetOutputPort(), True)
 
-
         # Clean unused points
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputConnection(geo_port)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(geo_port, input_is_connection=True)
 
         loc_el_to_clean = vtk_to_numpy(surface.GetCellData().GetArray('Global_ids')).astype(int)
 
@@ -446,11 +433,4 @@ def extract_largest_region(mesh):
     surface = connect.GetOutput()
 
     surface = apply_vtk_geom_filter(surface)
-
-
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    res = cln.GetOutput()
-
-    return res
+    return clean_polydata(surface)

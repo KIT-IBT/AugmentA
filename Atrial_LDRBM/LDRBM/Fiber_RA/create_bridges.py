@@ -41,7 +41,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_obj_writer, \
     vtk_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -234,11 +234,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         extract.Update()
 
         earth = apply_vtk_geom_filter(extract.GetOutput())
-
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputData(earth)
-        cleaner.Update()
-        earth = cleaner.GetOutput()
+        earth = clean_polydata(earth)
 
         # meshNew = dsa.WrapDataObject(cleaner.GetOutput())
         vtk_obj_writer(job.ID + "/bridges/" + str(var) + "_earth.obj", earth)
@@ -315,11 +311,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         extract.Update()
 
         earth = apply_vtk_geom_filter(extract.GetOutput())
-
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputData(earth)
-        cleaner.Update()
-        earth = cleaner.GetOutput()
+        earth = clean_polydata(earth)
 
         print("Extracted earth")
         cell_id_all = []

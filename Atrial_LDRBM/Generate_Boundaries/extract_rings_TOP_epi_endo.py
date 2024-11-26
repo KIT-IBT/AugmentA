@@ -39,7 +39,8 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+    clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -87,7 +88,6 @@ def label_atrial_orifices_TOP_epi_endo(mesh, LAA_id="", RAA_id="", LAA_base_id="
     print('Extracting rings...')
 
     mesh_surf = apply_vtk_geom_filter(smart_reader(mesh))
-
 
     centroids = dict()
 
@@ -297,11 +297,7 @@ def detect_and_mark_rings(surf, ap_point):
 
         # Clean unused points
         surface = apply_vtk_geom_filter(surface)
-
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
 
         ring_surf = vtk.vtkPolyData()
         ring_surf.DeepCopy(surface)
@@ -776,10 +772,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
         connect.Update()
         surface = connect.GetOutput()
         # Clean unused points
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
         points = surface.GetPoints().GetData()
         points = vtk_to_numpy(points)
         points = points.tolist()
@@ -808,11 +801,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     surface = connect.GetOutput()
 
     # Clean unused points
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-
-    top_cut_epi = cln.GetOutput()
+    top_cut_epi = clean_polydata(surface)
 
     pts_in_top_epi = vtk_to_numpy(top_cut_epi.GetPointData().GetArray("Ids"))
 
@@ -826,10 +815,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
         connect.Update()
         surface = connect.GetOutput()
         # Clean unused points
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
         points = surface.GetPoints().GetData()
         points = vtk_to_numpy(points)
         points = points.tolist()
@@ -858,11 +844,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     surface = connect.GetOutput()
 
     # Clean unused points
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-
-    top_cut_endo = cln.GetOutput()
+    top_cut_endo = clean_polydata(surface)
 
     pts_in_top_endo = vtk_to_numpy(top_cut_endo.GetPointData().GetArray("Ids"))
     pts_in_svc_epi = vtk_to_numpy(svc.GetPointData().GetArray("Ids"))
@@ -908,10 +890,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
         connect.Update()
         surface = connect.GetOutput()
         # Clean unused points
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
 
         pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
 
@@ -928,11 +907,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     surface = connect.GetOutput()
 
     # Clean unused points
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-
-    top_epi = vtk_to_numpy(cln.GetOutput().GetPointData().GetArray("Ids"))
+    top_epi = vtk_to_numpy(clean_polydata(surface).GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TOP_EPI.vtx'
     f = open(fname, 'w')
     f.write(f'{len(top_epi)}\n')
@@ -966,10 +941,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
         connect.Update()
         surface = connect.GetOutput()
         # Clean unused points
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
 
         pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
 
@@ -986,11 +958,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     surface = connect.GetOutput()
 
     # Clean unused points
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-
-    top_endo = vtk_to_numpy(cln.GetOutput().GetPointData().GetArray("Ids"))
+    top_endo = vtk_to_numpy(clean_polydata(surface).GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TOP_ENDO.vtx'
     f = open(fname, 'w')
     f.write(f'{len(top_endo)}\n')

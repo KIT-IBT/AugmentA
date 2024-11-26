@@ -38,7 +38,7 @@ from scipy.spatial import cKDTree
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
 
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -137,20 +137,12 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         earth = apply_vtk_geom_filter(extract.GetOutput())
 
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputData(earth)
-        cleaner.Update()
-
         connect = vtk.vtkConnectivityFilter()
-        connect.SetInputConnection(cleaner.GetOutputPort())
+        connect.SetInputData(clean_polydata(earth))
         connect.SetExtractionModeToLargestRegion()
         connect.Update()
 
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputData(connect.GetOutput())
-        cleaner.Update()
-
-        vtk_obj_writer(f'{meshname}_cleaned.obj', cleaner.GetOutput())
+        vtk_obj_writer(f'{meshname}_cleaned.obj', clean_polydata(connect.GetOutput()))
         mesh_data["vol"] = [vol]
 
         ms = pymeshlab.MeshSet()

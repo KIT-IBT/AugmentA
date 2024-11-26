@@ -39,7 +39,8 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+    clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -306,11 +307,7 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
 
         # Clean unused points
         surface = apply_vtk_geom_filter(surface)
-
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
 
         # be careful overwrite previous rings
         if debug:
@@ -779,10 +776,8 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
             vtkWrite(surface, outdir + f'/gamma_top_{str(i)}.vtk')
 
         # Clean unused points
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
+
         points = surface.GetPoints().GetData()
         points = vtk_to_numpy(points)
         points = points.tolist()
@@ -815,11 +810,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     surface = connect.GetOutput()
 
     # Clean unused points
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-
-    top_cut = cln.GetOutput()
+    top_cut = clean_polydata(surface)
 
     if debug:
         vtkWrite(top_cut, outdir + '/top_endo_epi.vtk')  # If this is the CS, then change top_endo_id in 877
@@ -855,10 +846,7 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
         connect.Update()
         surface = connect.GetOutput()
         # Clean unused points
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
 
         pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
 
@@ -872,14 +860,9 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
 
     connect.AddSpecifiedRegion(found_id)
     connect.Update()
-    surface = connect.GetOutput()
+    surface = clean_polydata(connect.GetOutput())
 
-    # Clean unused points
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-
-    top_endo = vtk_to_numpy(cln.GetOutput().GetPointData().GetArray("Ids"))
+    top_endo = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TOP_ENDO.vtx'
     f = open(fname, 'w')
     f.write(f'{len(top_endo)}\n')

@@ -42,7 +42,8 @@ from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+    clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -276,12 +277,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
         # Clean unused points
         surface = apply_vtk_geom_filter(surface)
-
-
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
 
         pt_high_c = list(vtk_to_numpy(surface.GetPointData().GetArray('Ids')))
         curv_s = vtk_to_numpy(surface.GetPointData().GetArray('curv'))
@@ -306,12 +302,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
                         # Clean unused points
                         surface2 = apply_vtk_geom_filter(surface2)
-
-
-                        cln = vtk.vtkCleanPolyData()
-                        cln.SetInputData(surface2)
-                        cln.Update()
-                        surface2 = cln.GetOutput()
+                        surface2 = clean_polydata(surface2)
                         pt_surf_2 = list(vtk_to_numpy(surface2.GetPointData().GetArray('Ids')))
                         if len(set(pt_high_c).intersection(pt_surf_2)) > 0:
 
@@ -333,13 +324,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
                     geo_port, _geo_filter = get_vtk_geom_filter_port(extract.GetOutputPort(), True)
 
-
-
-                    cleaner = vtk.vtkCleanPolyData()
-                    cleaner.SetInputConnection(geo_port)
-                    cleaner.Update()
-
-                    loc_low_V = cleaner.GetOutput()  # local low voltage area
+                    loc_low_V = clean_polydata(geo_port, input_is_connection=True)  # local low voltage area
 
                     loc_low_V = extract_largest_region(loc_low_V)
 
@@ -422,6 +407,7 @@ def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
     return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
                                                                                thr2)
 
+
 def extract_largest_region(mesh):
     connect = vtk.vtkConnectivityFilter()
     connect.SetInputData(mesh)
@@ -430,14 +416,7 @@ def extract_largest_region(mesh):
     surface = connect.GetOutput()
 
     surface = apply_vtk_geom_filter(surface)
-
-
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    res = cln.GetOutput()
-
-    return res
+    return clean_polydata(surface)
 
 
 def point_array_mapper(mesh1, mesh2, idat):

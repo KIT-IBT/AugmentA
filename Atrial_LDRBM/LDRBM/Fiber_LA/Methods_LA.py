@@ -37,7 +37,8 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+    clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
@@ -504,10 +505,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     # Clean unused points
     surface = apply_vtk_geom_filter(connect.GetOutput())
 
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
+    points_data = clean_polydata(surface).GetPoints().GetData()
     ring = vtk_to_numpy(points_data)
     center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
 
@@ -518,10 +516,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     # Clean unused points
     surface = apply_vtk_geom_filter(connect.GetOutput())
 
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
+    points_data = clean_polydata(surface).GetPoints().GetData()
     ring = vtk_to_numpy(points_data)
     center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
     dis_1 = np.linalg.norm(center_point_1 - tv_ivc_center)
@@ -553,12 +548,7 @@ def extract_largest_region(mesh):
 
     surface = apply_vtk_geom_filter(surface)
 
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    res = cln.GetOutput()
-
-    return res
+    return clean_polydata(surface)
 
 
 def assign_ra_appendage(model, SCV, appex_point, tag):
@@ -972,11 +962,7 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
 
         # Clean unused points
         surface = apply_vtk_geom_filter(single_PV)
-
-        cln = vtk.vtkCleanPolyData()
-        cln.SetInputData(surface)
-        cln.Update()
-        surface = cln.GetOutput()
+        surface = clean_polydata(surface)
 
         if name1.startswith("L"):
             phie_v = np.max(vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
