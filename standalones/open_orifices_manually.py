@@ -39,7 +39,7 @@ from Atrial_LDRBM.Generate_Boundaries import extract_rings
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_elements_from_mesh
+from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_elements_from_mesh, cut_mesh_with_radius
 from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 
 pv.set_plot_theme('dark')
@@ -95,8 +95,8 @@ def parser():
     return parser
 
 
-def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_radius=7.5, max_cutting_radius=17.5,
-                           LAA="", RAA="", debug=0):
+def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, vessels_cutting_radius=7.5,
+                           valve_cutting_radius=17.5, LAA="", RAA="", debug=0):
     meshname = meshpath.split("/")[-1]
     full_path = meshpath[:-len(meshname)]
 
@@ -133,11 +133,11 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, min_cutting_
             picked_pt = p.picked_point
             p.close()
         if r == 'mitral valve' or r == 'tricuspid valve':
-            el_to_del_tot = find_elements_within_radius(mesh, picked_pt, max_cutting_radius)
+            selected_radius = valve_cutting_radius
         else:
-            el_to_del_tot = find_elements_within_radius(mesh, picked_pt, min_cutting_radius)
+            selected_radius = vessels_cutting_radius
 
-        mesh = cut_elements_from_mesh(mesh, el_to_del_tot)
+        mesh = cut_mesh_with_radius(mesh, picked_pt, selected_radius)
 
     model = extract_largest_region(mesh)
 
