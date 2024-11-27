@@ -39,6 +39,7 @@ from Atrial_LDRBM.LDRBM.Fiber_RA.ra_generate_fiber import ra_generate_fiber
 from Atrial_LDRBM.LDRBM.Fiber_RA.ra_laplace import ra_laplace
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 
 def parser():
@@ -98,20 +99,13 @@ def jobID(args):
 @tools.carpexample(parser, jobID)
 def run(args, job):
     RA_mesh = args.mesh + '_surf/RA'
-
-    if args.mesh_type == "bilayer":
-        reader = vtk.vtkPolyDataReader()
-    else:
-        reader = vtk.vtkUnstructuredGridReader()
-    reader.SetFileName(RA_mesh + '.vtk')
-    reader.Update()
-    RA = reader.GetOutput()
+    RA = smart_reader(RA_mesh + '.vtk')
 
     if args.normals_outside:
         reverse = vtk.vtkReverseSense()
         reverse.ReverseCellsOn()
         reverse.ReverseNormalsOn()
-        reverse.SetInputConnection(reader.GetOutputPort())
+        reverse.SetInputData(RA)
         reverse.Update()
 
         RA = reverse.GetOutput()

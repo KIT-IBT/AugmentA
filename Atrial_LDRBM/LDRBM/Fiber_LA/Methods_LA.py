@@ -809,19 +809,7 @@ def get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis
 
 
 def creat_center_line(start_end_point):
-    spline_points = vtk.vtkPoints()
-    for i in range(len(start_end_point)):
-        spline_points.InsertPoint(i, start_end_point[i][0], start_end_point[i][1], start_end_point[i][2])
-
-    # Fit a spline to the points
-    spline = vtk.vtkParametricSpline()
-    spline.SetPoints(spline_points)
-
-    functionSource = vtk.vtkParametricFunctionSource()
-    functionSource.SetParametricFunction(spline)
-    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    functionSource.Update()
-    tubePolyData = functionSource.GetOutput()
+    tubePolyData = generate_spline_points(start_end_point)
     points = tubePolyData.GetPoints().GetData()
     points = vtk_to_numpy(points)
 
@@ -950,3 +938,25 @@ def optimize_shape_PV(surface, num, bound):
             break
 
     return found, arr[l - 1]
+
+
+def generate_spline_points(input_points):
+    spline_points = vtk.vtkPoints()
+    for i in range(len(input_points)):
+        spline_points.InsertPoint(i, input_points[i][0], input_points[i][1], input_points[i][2])
+    # Fit a spline to the points
+    spline = vtk.vtkParametricSpline()
+    spline.SetPoints(spline_points)
+    functionSource = vtk.vtkParametricFunctionSource()
+    functionSource.SetParametricFunction(spline)
+    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
+    functionSource.Update()
+    return functionSource.GetOutput()
+
+
+def clean_all_data(mesh):
+    for i in range(mesh.GetPointData().GetNumberOfArrays() - 1, -1, -1):
+        mesh.GetPointData().RemoveArray(mesh.GetPointData().GetArrayName(i))
+    for i in range(mesh.GetCellData().GetNumberOfArrays() - 1, -1, -1):
+        mesh.GetCellData().RemoveArray(mesh.GetCellData().GetArrayName(i))
+    return mesh

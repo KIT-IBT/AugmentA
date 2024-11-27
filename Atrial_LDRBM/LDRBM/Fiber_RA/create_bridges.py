@@ -36,6 +36,7 @@ import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import generate_spline_points
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
@@ -294,19 +295,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     f = open(filename, 'rb')
     bb_fiber = pickle.load(f)
 
-    spline_points = vtk.vtkPoints()
-    for i in range(len(bb_fiber)):
-        spline_points.InsertPoint(i, bb_fiber[i][0], bb_fiber[i][1], bb_fiber[i][2])
-
-    # Fit a spline to the points
-    spline = vtk.vtkParametricSpline()
-    spline.SetPoints(spline_points)
-
-    functionSource = vtk.vtkParametricFunctionSource()
-    functionSource.SetParametricFunction(spline)
-    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    functionSource.Update()
-    bb_fiber_points_data = vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
+    bb_fiber_points_data = vtk_to_numpy(generate_spline_points(bb_fiber).GetPoints().GetData())
 
     print("Union between earth and bridges")
     for var in bridge_list:

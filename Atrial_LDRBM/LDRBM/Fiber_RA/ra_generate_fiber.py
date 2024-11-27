@@ -36,6 +36,8 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
+from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
@@ -485,11 +487,7 @@ def ra_generate_fiber(model, args, job):
     if args.mesh_type == "bilayer":
         sheet = np.cross(el, et)
 
-        for i in range(model.GetPointData().GetNumberOfArrays() - 1, -1, -1):
-            model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
-
-        for i in range(model.GetCellData().GetNumberOfArrays() - 1, -1, -1):
-            model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
+        model = clean_all_data(model)
 
         meshNew = dsa.WrapDataObject(model)
         meshNew.CellData.append(tag, "elemTag")
@@ -711,11 +709,7 @@ def ra_generate_fiber(model, args, job):
 
         tag_endo[IVC_ids] = tag[IVC_ids]
 
-        for i in range(endo.GetPointData().GetNumberOfArrays() - 1, -1, -1):
-            endo.GetPointData().RemoveArray(endo.GetPointData().GetArrayName(i))
-
-        for i in range(endo.GetCellData().GetNumberOfArrays() - 1, -1, -1):
-            endo.GetCellData().RemoveArray(endo.GetCellData().GetArrayName(i))
+        endo = clean_all_data(endo)
 
         fiber_endo = np.where(fiber_endo == [0, 0, 0], [1, 0, 0], fiber_endo).astype("float32")
         sheet = np.cross(fiber_endo, et)
@@ -767,11 +761,7 @@ def ra_generate_fiber(model, args, job):
 
         if args.debug:
 
-            for i in range(model.GetPointData().GetNumberOfArrays() - 1, -1, -1):
-                model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
-
-            for i in range(model.GetCellData().GetNumberOfArrays() - 1, -1, -1):
-                model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
+            model = clean_all_data(model)
 
             el = np.where(el == [0, 0, 0], [1, 0, 0], el).astype("float32")
             sheet = np.cross(el, et)
@@ -808,32 +798,14 @@ def ra_generate_fiber(model, args, job):
     np.savetxt(job.ID + '/bb.txt', bachmann_bundle_points_data, fmt='%.5f')  # Change directory
 
     bb_step = int(len(bachmann_bundle_points_data) * 0.1)
-    bb_path = np.asarray([bachmann_bundle_points_data[i] for i in range(len(bachmann_bundle_points_data)) if
-                          i % bb_step == 0 or i == len(bachmann_bundle_points_data) - 1])
-    spline_points = vtk.vtkPoints()
-    for i in range(len(bb_path)):
-        spline_points.InsertPoint(i, bb_path[i][0], bb_path[i][1], bb_path[i][2])
-
-    # Fit a spline to the points
-    spline = vtk.vtkParametricSpline()
-    spline.SetPoints(spline_points)
-    functionSource = vtk.vtkParametricFunctionSource()
-    functionSource.SetParametricFunction(spline)
-    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    functionSource.Update()
-
-    bb_points = vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
+    bb_points = downsample_path(bachmann_bundle_points_data, bb_step)
 
     tag = Method.assign_element_tag_around_path_within_radius(model, bb_points, w_bb, tag, bachmann_bundel_right)
     el = Method.assign_element_fiber_around_path_within_radius(model, bb_points, w_bb, el, smooth=True)
 
     tag[SN_ids] = sinus_node
 
-    for i in range(model.GetPointData().GetNumberOfArrays() - 1, -1, -1):
-        model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
-
-    for i in range(model.GetCellData().GetNumberOfArrays() - 1, -1, -1):
-        model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
+    model = clean_all_data(model)
 
     el = np.where(el == [0, 0, 0], [1, 0, 0], el).astype("float32")
     sheet = np.cross(el, et)

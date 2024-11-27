@@ -34,6 +34,7 @@ import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import laplace_0_1
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
@@ -370,11 +371,7 @@ def la_generate_fiber(model, args, job):
         sheet_endo = np.cross(el_endo, et)
         sheet_endo = np.where(sheet_endo == [0, 0, 0], [1, 0, 0], sheet_endo).astype("float32")
 
-        for i in range(endo.GetPointData().GetNumberOfArrays() - 1, -1, -1):
-            endo.GetPointData().RemoveArray(endo.GetPointData().GetArrayName(i))
-
-        for i in range(endo.GetCellData().GetNumberOfArrays() - 1, -1, -1):
-            endo.GetCellData().RemoveArray(endo.GetCellData().GetArrayName(i))
+        endo = clean_all_data(endo)
 
         meshNew = dsa.WrapDataObject(endo)
         meshNew.CellData.append(tag_endo, "elemTag")
@@ -490,11 +487,7 @@ def la_generate_fiber(model, args, job):
         sheet_epi = np.cross(el_epi, et)
         sheet_epi = np.where(sheet_epi == [0, 0, 0], [1, 0, 0], sheet_epi).astype("float32")
 
-        for i in range(epi.GetPointData().GetNumberOfArrays() - 1, -1, -1):
-            epi.GetPointData().RemoveArray(epi.GetPointData().GetArrayName(i))
-
-        for i in range(epi.GetCellData().GetNumberOfArrays() - 1, -1, -1):
-            epi.GetCellData().RemoveArray(epi.GetCellData().GetArrayName(i))
+        epi = clean_all_data(epi)
 
         meshNew = dsa.WrapDataObject(epi)
         meshNew.CellData.append(tag_epi, "elemTag")
@@ -533,12 +526,7 @@ def la_generate_fiber(model, args, job):
         sheet = np.cross(el, et)
         sheet = np.where(sheet == [0, 0, 0], [1, 0, 0], sheet).astype("float32")
 
-        for i in range(model.GetPointData().GetNumberOfArrays() - 1, -1, -1):
-            model.GetPointData().RemoveArray(model.GetPointData().GetArrayName(i))
-
-        for i in range(model.GetCellData().GetNumberOfArrays() - 1, -1, -1):
-            model.GetCellData().RemoveArray(model.GetCellData().GetArrayName(i))
-
+        model = clean_all_data(model)
         meshNew = dsa.WrapDataObject(model)
         meshNew.CellData.append(tag, "elemTag")
         meshNew.CellData.append(el, "fiber")

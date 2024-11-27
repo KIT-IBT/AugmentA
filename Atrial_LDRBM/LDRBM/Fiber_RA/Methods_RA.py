@@ -30,6 +30,8 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
+from Atrial_LDRBM.LDRBM.Fiber_LA import Methods_LA
+from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import generate_spline_points
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_to_pts, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
@@ -50,17 +52,7 @@ def downsample_path(points_data, step):
         [points_data[i] for i in range(len(points_data)) if i % step == 0 or i == len(points_data) - 1])
 
     # fit a spline
-    spline_points = vtk.vtkPoints()
-    for i in range(len(path_all)):
-        spline_points.InsertPoint(i, path_all[i][0], path_all[i][1], path_all[i][2])
-    spline = vtk.vtkParametricSpline()
-    spline.SetPoints(spline_points)
-    functionSource = vtk.vtkParametricFunctionSource()
-    functionSource.SetParametricFunction(spline)
-    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    functionSource.Update()
-    points_data = vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
-    return points_data
+    return vtk_to_numpy(generate_spline_points(path_all).GetPoints().GetData())
 
 
 def move_surf_along_normals(mesh, eps, direction):
@@ -283,20 +275,6 @@ def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
 
 
 def creat_tube_around_spline(points_data, radius):
-    # Creat a points set
-    spline_points = vtk.vtkPoints()
-    for i in range(len(points_data)):
-        spline_points.InsertPoint(i, points_data[i][0], points_data[i][1], points_data[i][2])
-
-    # Fit a spline to the points
-    spline = vtk.vtkParametricSpline()
-    spline.SetPoints(spline_points)
-
-    functionSource = vtk.vtkParametricFunctionSource()
-    functionSource.SetParametricFunction(spline)
-    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    functionSource.Update()
-
     # Interpolate the scalars
     interpolatedRadius = vtk.vtkTupleInterpolator()
     interpolatedRadius.SetInterpolationTypeToLinear()
@@ -304,7 +282,7 @@ def creat_tube_around_spline(points_data, radius):
 
     # Generate the radius scalars
     tubeRadius = vtk.vtkDoubleArray()
-    n = functionSource.GetOutput().GetNumberOfPoints()
+    n = generate_spline_points(points_data).GetNumberOfPoints()
     tubeRadius.SetNumberOfTuples(n)
     tubeRadius.SetName("TubeRadius")
 
@@ -840,23 +818,7 @@ def create_free_bridge_semi_auto(la_epi, ra_epi, ra_point, radius):
 
 
 def creat_center_line(start_end_point):
-    spline_points = vtk.vtkPoints()
-    for i in range(len(start_end_point)):
-        spline_points.InsertPoint(i, start_end_point[i][0], start_end_point[i][1], start_end_point[i][2])
-
-    # Fit a spline to the points
-    spline = vtk.vtkParametricSpline()
-    spline.SetPoints(spline_points)
-
-    functionSource = vtk.vtkParametricFunctionSource()
-    functionSource.SetParametricFunction(spline)
-    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    functionSource.Update()
-    tubePolyData = functionSource.GetOutput()
-    points = tubePolyData.GetPoints().GetData()
-    points = vtk_to_numpy(points)
-
-    return points
+    return Methods_LA.creat_center_line(start_end_point)
 
 
 def smart_bridge_writer(tube, sphere_1, sphere_2, name, job):
