@@ -134,8 +134,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
         meshNew = dsa.WrapDataObject(biatrial_epi)
         meshNew.CellData.append(tag, "elemTag")
-
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu", vtk_append([meshNew.VTKObject]))
+        biatrial_mesh = vtk_append([meshNew.VTKObject])
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu", biatrial_mesh)
     elif args.mesh_type == "bilayer":
 
         la_e = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
@@ -144,8 +144,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         ra_e = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
         ra_e = apply_vtk_geom_filter(ra_e)
 
-        biatrial_e = vtk_append([la_e, ra_e])
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", biatrial_e)
+        biatrial_mesh = vtk_append([la_e, ra_e])
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", biatrial_mesh)
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     for var in bridge_list:
@@ -176,7 +176,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
                         "-surf=" + job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj",
                         "-outmsh=" + job.ID + "/bridges/" + str(var) + "_bridge_resampled.vtk"])
 
-    la_ra_usg = append_filter.GetOutput()  # this has already elemTag
+    la_ra_usg = biatrial_mesh  # this has already elemTag
 
     if args.debug:
         vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_usg.vtu", la_ra_usg)
