@@ -40,7 +40,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_norm
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata, generate_ids
+    clean_polydata, generate_ids, get_center_of_mass, get_feature_edges
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -238,18 +238,13 @@ def run():
 
 
 def detect_and_mark_rings(surf, ap_point):
-    boundaryEdges = vtk.vtkFeatureEdges()
-    boundaryEdges.SetInputData(surf)
-    boundaryEdges.BoundaryEdgesOn()
-    boundaryEdges.FeatureEdgesOff()
-    boundaryEdges.ManifoldEdgesOff()
-    boundaryEdges.NonManifoldEdgesOff()
-    boundaryEdges.Update()
+    boundary_edges = get_feature_edges(surf, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
+                                       non_manifold_edges_on=False)
 
     "Splitting rings"
 
     connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(boundaryEdges.GetOutput())
+    connect.SetInputData(boundary_edges)
     connect.SetExtractionModeToAllRegions()
     connect.Update()
     num = connect.GetNumberOfExtractedRegions()
@@ -270,12 +265,7 @@ def detect_and_mark_rings(surf, ap_point):
         ring_surf = vtk.vtkPolyData()
         ring_surf.DeepCopy(surface)
 
-        centerOfMassFilter = vtk.vtkCenterOfMass()
-        centerOfMassFilter.SetInputData(surface)
-        centerOfMassFilter.SetUseScalarsAsWeights(False)
-        centerOfMassFilter.Update()
-
-        c_mass = centerOfMassFilter.GetCenter()
+        c_mass = get_center_of_mass(surface, False)
 
         ring = Ring(i, "", surface.GetNumberOfPoints(), c_mass, np.sqrt(np.sum((np.array(ap_point) - \
                                                                                 np.array(c_mass)) ** 2, axis=0)),
@@ -499,16 +489,12 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     """
     here we will extract the feature edge 
     """
-    boundaryEdges = vtk.vtkFeatureEdges()
-    boundaryEdges.SetInputData(surface)
-    boundaryEdges.BoundaryEdgesOn()
-    boundaryEdges.FeatureEdgesOff()
-    boundaryEdges.ManifoldEdgesOff()
-    boundaryEdges.NonManifoldEdgesOff()
-    boundaryEdges.Update()
 
-    tree = cKDTree(vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData()))
-    ids = vtk_to_numpy(boundaryEdges.GetOutput().GetPointData().GetArray('Ids'))
+    boundary_edges = get_feature_edges(surface, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
+                                       non_manifold_edges_on=False)
+
+    tree = cKDTree(vtk_to_numpy(boundary_edges.GetPoints().GetData()))
+    ids = vtk_to_numpy(boundary_edges.GetPointData().GetArray('Ids'))
     MV_ring = [r for r in rings if r.name == "MV"]
 
     MV_ids = set(vtk_to_numpy(MV_ring[0].vtk_polydata.GetPointData().GetArray("Ids")))
@@ -540,7 +526,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     rpv_mv = loc.FindClosestPoint(rpv_mean)
 
     loc = vtk.vtkPointLocator()
-    loc.SetDataSet(boundaryEdges.GetOutput())
+    loc.SetDataSet(boundary_edges)
     loc.BuildLocator()
     lpv_bb = loc.FindClosestPoint(lpv_mean)
     rpv_bb = loc.FindClosestPoint(rpv_mean)
@@ -548,7 +534,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     rpv_mv = loc.FindClosestPoint(MV_ring[0].vtk_polydata.GetPoint(rpv_mv))
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
-    path.SetInputData(boundaryEdges.GetOutput())
+    path.SetInputData(boundary_edges)
     path.SetStartVertex(lpv_bb)
     path.SetEndVertex(lpv_mv)
     path.Update()
@@ -568,7 +554,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     f.close()
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
-    path.SetInputData(boundaryEdges.GetOutput())
+    path.SetInputData(boundary_edges)
     path.SetStartVertex(rpv_bb)
     path.SetEndVertex(rpv_mv)
     path.Update()
@@ -588,7 +574,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     f.close()
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
-    path.SetInputData(boundaryEdges.GetOutput())
+    path.SetInputData(boundary_edges)
     path.SetStartVertex(lpv_bb)
     path.SetEndVertex(rpv_bb)
     path.Update()
@@ -634,15 +620,9 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     """
     here we will extract the feature edge 
     """
-    boundaryEdges = vtk.vtkFeatureEdges()
-    boundaryEdges.SetInputData(surface)
-    boundaryEdges.BoundaryEdgesOn()
-    boundaryEdges.FeatureEdgesOff()
-    boundaryEdges.ManifoldEdgesOff()
-    boundaryEdges.NonManifoldEdgesOff()
-    boundaryEdges.Update()
 
-    gamma_top_epi = boundaryEdges.GetOutput()
+    gamma_top_epi = get_feature_edges(surface, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
+                                      non_manifold_edges_on=False)
 
     # Endo
 
@@ -662,15 +642,9 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     """
     here we will extract the feature edge 
     """
-    boundaryEdges = vtk.vtkFeatureEdges()
-    boundaryEdges.SetInputData(surface)
-    boundaryEdges.BoundaryEdgesOn()
-    boundaryEdges.FeatureEdgesOff()
-    boundaryEdges.ManifoldEdgesOff()
-    boundaryEdges.NonManifoldEdgesOff()
-    boundaryEdges.Update()
 
-    gamma_top_endo = boundaryEdges.GetOutput()
+    gamma_top_endo = get_feature_edges(surface, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
+                                       non_manifold_edges_on=False)
 
     """
     separate the tv into tv tv-f and tv-f

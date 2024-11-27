@@ -38,7 +38,8 @@ from scipy.spatial import cKDTree
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, get_cells_with_ids
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, get_cells_with_ids, \
+    get_feature_edges
 
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -94,15 +95,11 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         reader.SetFileName(f'{meshname}.obj')
         reader.Update()
 
-        boundaryEdges = vtk.vtkFeatureEdges()
-        boundaryEdges.SetInputData(reader.GetOutput())
-        boundaryEdges.BoundaryEdgesOn()
-        boundaryEdges.FeatureEdgesOff()
-        boundaryEdges.ManifoldEdgesOff()
-        boundaryEdges.NonManifoldEdgesOff()
-        boundaryEdges.Update()
+        boundary_edges = get_feature_edges(reader.GetOutput(), boundary_edges_on=True, feature_edges_on=False,
+                                           manifold_edges_on=False,
+                                           non_manifold_edges_on=False)
 
-        boundary_pts = vtk_to_numpy(boundaryEdges.GetOutput().GetPoints().GetData())
+        boundary_pts = vtk_to_numpy(boundary_edges.GetPoints().GetData())
 
         # Clean the mesh from holes and self intersecting triangles
         meshin = pv.read(f'{meshname}.obj')

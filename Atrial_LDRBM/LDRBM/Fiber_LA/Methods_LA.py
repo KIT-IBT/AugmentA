@@ -38,7 +38,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, num
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata, vtk_append, apply_extract_cell_filter
+    clean_polydata, vtk_append, apply_extract_cell_filter, get_center_of_mass, get_feature_edges
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
@@ -803,16 +803,11 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     inf_appendage_basis = LAA.GetPoint(ptIds.GetId(0))
 
     # Extract the border of the LAA
+    threshold_poly_mesh = apply_vtk_geom_filter(thresh.GetOutputPort(), True)
+    LAA_border = get_feature_edges(threshold_poly_mesh, boundary_edges_on=True, feature_edges_on=False,
+                                   manifold_edges_on=False,
+                                   non_manifold_edges_on=False)
 
-    boundaryEdges = vtk.vtkFeatureEdges()
-    boundaryEdges.SetInputData(apply_vtk_geom_filter(thresh.GetOutputPort(), True))
-    boundaryEdges.BoundaryEdgesOn()
-    boundaryEdges.FeatureEdgesOff()
-    boundaryEdges.ManifoldEdgesOff()
-    boundaryEdges.NonManifoldEdgesOff()
-    boundaryEdges.Update()
-
-    LAA_border = boundaryEdges.GetOutput()
     LAA_pts_border = vtk_to_numpy(LAA_border.GetPoints().GetData())
     max_dist = 0
     for i in range(len(LAA_pts_border)):
@@ -971,12 +966,7 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
                 single_PV = vtk_thr(single_PV, 0, "CELLS", "phie_v", val)
                 surface = apply_vtk_geom_filter(single_PV)
 
-        centerOfMassFilter = vtk.vtkCenterOfMass()
-        centerOfMassFilter.SetInputData(surface)
-        centerOfMassFilter.SetUseScalarsAsWeights(False)
-        centerOfMassFilter.Update()
-
-        c_mass = centerOfMassFilter.GetCenter()
+        c_mass = get_center_of_mass(surface, False)
 
         centroid1_d = np.sqrt(np.sum((np.array(centroid1) - np.array(c_mass)) ** 2, axis=0))
         centroid2_d = np.sqrt(np.sum((np.array(centroid2) - np.array(c_mass)) ** 2, axis=0))
@@ -1008,12 +998,8 @@ def optimize_shape_PV(surface, num, bound):
         else:
             out = vtk_thr(surface, 2, "CELLS", "phie_v", arr[l + 1], arr[l])
 
-        centerOfMassFilter = vtk.vtkCenterOfMass()
-        centerOfMassFilter.SetInputData(apply_vtk_geom_filter(out))
-        centerOfMassFilter.SetUseScalarsAsWeights(False)
-        centerOfMassFilter.Update()
-
-        c_mass_l.append(centerOfMassFilter.GetCenter())
+        center = get_center_of_mass(apply_vtk_geom_filter(out), False)
+        c_mass_l.append(center)
 
     v1 = np.array(c_mass_l[0]) - np.array(c_mass_l[1])
     for l in range(1, num - 2):
