@@ -38,7 +38,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
@@ -324,15 +324,6 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
 
     for r in rings:
         id_vec = vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
-        fname = outdir + f'/ids_{r.name}.vtx'
-        if os.path.exists(fname):
-            id_vec = id_vec[0:len(id_vec) - 1]
-            f = open(fname, 'a')
-        else:
-            f = open(fname, 'w')
-            f.write(f'{len(id_vec)}\n')
-            f.write('extra\n')
-
         if r.name == "MV":
             b_tag[id_vec] = 1
         elif r.name == "LIPV":
@@ -348,34 +339,13 @@ def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
             b_tag[id_vec] = 5
             RPV = RPV + list(id_vec)
 
-        for i in id_vec:
-            f.write(f'{i}\n')
-        f.close()
+        write_to_vtx(outdir + f'/ids_{r.name}.vtx', id_vec, True)
 
         centroids[r.name] = r.center
 
-    fname = outdir + '/ids_LAA.vtx'
-    f = open(fname, 'w')
-    f.write(f'{1}\n')
-    f.write('extra\n')
-    f.write(f'{LAA_id}\n')
-    f.close()
-
-    fname = outdir + '/ids_LPV.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(LPV)}\n')
-    f.write('extra\n')
-    for i in LPV:
-        f.write(f'{i}\n')
-    f.close()
-
-    fname = outdir + '/ids_RPV.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(RPV)}\n')
-    f.write('extra\n')
-    for i in RPV:
-        f.write(f'{i}\n')
-    f.close()
+    write_to_vtx(outdir + '/ids_LAA.vtx', LAA_id)
+    write_to_vtx(outdir + '/ids_LPV.vtx', LPV)
+    write_to_vtx(outdir + '/ids_RPV.vtx', RPV)
 
     return b_tag, centroids
 
@@ -420,11 +390,6 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
 
     for r in rings:
         id_vec = vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
-        fname = outdir + f'/ids_{r.name}.vtx'
-
-        f = open(fname, 'w')
-        f.write(f'{len(id_vec)}\n')
-        f.write('extra\n')
 
         if r.name == "TV":
             b_tag[id_vec] = 6
@@ -435,19 +400,11 @@ def mark_RA_rings(RAA_id, rings, b_tag, centroids, outdir):
         elif r.name == "CS":
             b_tag[id_vec] = 9
 
-        for i in id_vec:
-            f.write(f'{i}\n')
-
-        f.close()
+        write_to_vtx(outdir + f'/ids_{r.name}.vtx', id_vec)
 
         centroids[r.name] = r.center
 
-    fname = outdir + '/ids_RAA.vtx'
-    f = open(fname, 'w')
-    f.write(f'{1}\n')
-    f.write('extra\n')
-    f.write(f'{RAA_id}\n')
-    f.close()
+    write_to_vtx(outdir + '/ids_RAA.vtx', RAA_id)
 
     return b_tag, centroids, rings
 
@@ -506,21 +463,8 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     MV_ant = set(ids).intersection(MV_ids)
     MV_post = MV_ids - MV_ant
 
-    fname = outdir + '/ids_MV_ant.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(MV_ant)}\n')
-    f.write('extra\n')
-    for i in MV_ant:
-        f.write(f'{i}\n')
-    f.close()
-
-    fname = outdir + '/ids_MV_post.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(MV_post)}\n')
-    f.write('extra\n')
-    for i in MV_post:
-        f.write(f'{i}\n')
-    f.close()
+    write_to_vtx(outdir + '/ids_MV_ant.vtx', MV_ant)
+    write_to_vtx(outdir + '/ids_MV_post.vtx', MV_post)
 
     lpv_mv = find_closest_point(MV_ring[0].vtk_polydata, lpv_mean)
     rpv_mv = find_closest_point(MV_ring[0].vtk_polydata, rpv_mean)
@@ -542,13 +486,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     for r in rings:
         mv_lpv = mv_lpv - set(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
 
-    fname = outdir + '/ids_MV_LPV.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(mv_lpv)}\n')
-    f.write('extra\n')
-    for i in mv_lpv:
-        f.write(f'{i}\n')
-    f.close()
+    write_to_vtx(outdir + '/ids_MV_LPV.vtx', mv_lpv)
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(boundary_edges)
@@ -562,13 +500,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     for r in rings:
         mv_rpv = mv_rpv - set(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
 
-    fname = outdir + '/ids_MV_RPV.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(mv_rpv)}\n')
-    f.write('extra\n')
-    for i in mv_rpv:
-        f.write(f'{i}\n')
-    f.close()
+    write_to_vtx(outdir + '/ids_MV_RPV.vtx', mv_rpv)
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(boundary_edges)
@@ -582,13 +514,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     for r in rings:
         rpv_lpv = rpv_lpv - set(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
 
-    fname = outdir + '/ids_RPV_LPV.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(rpv_lpv)}\n')
-    f.write('extra\n')
-    for i in rpv_lpv:
-        f.write(f'{i}\n')
-    f.close()
+    write_to_vtx(outdir + '/ids_RPV_LPV.vtx', rpv_lpv)
 
 
 def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
@@ -637,24 +563,14 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv, plane))
 
     tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
-    fname = outdir + '/ids_TV_F.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(tv_f_ids)}\n')
-    f.write('extra\n')
-    for i in tv_f_ids:
-        f.write(f'{i}\n')
-    f.close()
+
+    write_to_vtx(outdir + '/ids_TV_F.vtx', tv_f_ids)
 
     tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv, plane2, extract_boundary_cells_on=True))
 
     tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
-    fname = outdir + '/ids_TV_S.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(tv_s_ids)}\n')
-    f.write('extra\n')
-    for i in tv_s_ids:
-        f.write(f'{i}\n')
-    f.close()
+
+    write_to_vtx(outdir + '/ids_TV_S.vtx', tv_s_ids)
 
     svc_points = svc.GetPoints().GetData()
     svc_points = vtk_to_numpy(svc_points)
@@ -764,13 +680,8 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     surface = clean_polydata(connect.GetOutput())
 
     top_endo = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
-    fname = outdir + '/ids_TOP_ENDO.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(top_endo)}\n')
-    f.write('extra\n')
-    for i in top_endo:
-        f.write(f'{i}\n')
-    f.close()
+
+    write_to_vtx(outdir + '/ids_TOP_ENDO.vtx', top_endo)
 
 
 def create_pts(array_points, array_name, mesh_dir):

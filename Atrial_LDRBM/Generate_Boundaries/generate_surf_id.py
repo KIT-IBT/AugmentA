@@ -33,24 +33,14 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import smart_reader
 
 
 def write_surf_ids(outdir, name, ii):
-    fname = outdir + f'/ids_{name}.vtx'
-    f = open(fname, 'w')
-    if isinstance(ii, int):
-        f.write('1\n')
-        f.write('extra\n')
-        f.write(f'{ii}\n')
-    else:
-        f.write(f'{len(ii)}\n')
-        f.write('extra\n')
-        for i in ii:
-            f.write(f'{i}\n')
-    f.close()
+    write_to_vtx(outdir + f'/ids_{name}.vtx', ii)
 
 
 def generate_surf_id(meshname, atrium):

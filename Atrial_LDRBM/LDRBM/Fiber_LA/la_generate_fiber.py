@@ -39,7 +39,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
-    vtk_xml_unstructured_grid_writer
+    vtk_xml_unstructured_grid_writer, write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, generate_ids, \
     get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points
@@ -212,13 +212,7 @@ def la_generate_fiber(model, args, job):
 
     LAA_bb_ids = np.append(LAA_bb_ids, MV_ring_ids)
 
-    fname = f'{args.mesh}_surf/ids_LAA_bb.vtx'
-    f = open(fname, 'w')
-    f.write(f'{len(LAA_bb_ids)}\n')
-    f.write('extra\n')
-    for i in LAA_bb_ids:
-        f.write(f'{i}\n')
-    f.close()
+    write_to_vtx(f'{args.mesh}_surf/ids_LAA_bb.vtx', LAA_bb_ids)
 
     LAA_s = laplace_0_1(args, job, model, "LAA", "LAA_bb", "phie_ab3")
 
