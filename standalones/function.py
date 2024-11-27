@@ -31,7 +31,8 @@ import vtk
 
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, \
+    get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 
@@ -124,21 +125,13 @@ def cut_a_band_from_model(polydata, point_1, point_2, point_3, width):
 
     plane = initialize_plane(norm_1[0], point_pass[0])
 
-    meshExtractFilter1 = vtk.vtkExtractGeometry()
-    meshExtractFilter1.SetInputData(polydata)
-    meshExtractFilter1.SetImplicitFunction(plane)
-    meshExtractFilter1.Update()
+    extract_mesh_1 = get_elements_above_plane(polydata, plane)
 
     point_moved = point_1 - 0.5 * width * norm_1
 
     plane2 = initialize_plane(-norm_1[0], point_moved[0])
 
-    meshExtractFilter2 = vtk.vtkExtractGeometry()
-    meshExtractFilter2.SetInputData(meshExtractFilter1.GetOutput())
-    meshExtractFilter2.SetImplicitFunction(plane2)
-    meshExtractFilter2.Update()
-    band = meshExtractFilter2.GetOutput()
-    band = apply_vtk_geom_filter(band)
+    band = apply_vtk_geom_filter(get_elements_above_plane(extract_mesh_1, plane2))
 
     return band
 
@@ -149,18 +142,8 @@ def cut_into_two_parts(polydata, point_1, point_2, point_3):
     plane = initialize_plane(norm_1[0], point_1)
     plane2 = initialize_plane(-norm_1[0], point_1)
 
-    meshExtractFilter1 = vtk.vtkExtractGeometry()
-    meshExtractFilter1.SetInputData(polydata)
-    meshExtractFilter1.SetImplicitFunction(plane)
-    meshExtractFilter1.Update()
-    sub_1 = meshExtractFilter1.GetOutput()
-
-    meshExtractFilter2 = vtk.vtkExtractGeometry()
-    meshExtractFilter2.SetInputData(polydata)
-    meshExtractFilter2.ExtractBoundaryCellsOn()
-    meshExtractFilter2.SetImplicitFunction(plane2)
-    meshExtractFilter2.Update()
-    sub_2 = meshExtractFilter2.GetOutput()
+    sub_1 = get_elements_above_plane(polydata, plane)
+    sub_2 = get_elements_above_plane(polydata, plane2, extract_boundary_cells_on=True)
 
     return sub_1, sub_2
 

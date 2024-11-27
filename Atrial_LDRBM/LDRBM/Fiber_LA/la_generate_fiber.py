@@ -40,7 +40,8 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, generate_ids
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, generate_ids, \
+    get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -313,13 +314,9 @@ def la_generate_fiber(model, args, job):
 
     band_s = vtk_thr(epi, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv)
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(band_s)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
+    extracted_mesh = get_elements_above_plane(band_s, plane)
 
-    band_cell_ids = vtk_to_numpy(
-        meshExtractFilter.GetOutput().GetCellData().GetArray('Global_ids'))
+    band_cell_ids = vtk_to_numpy(extracted_mesh.GetCellData().GetArray('Global_ids'))
 
     if args.mesh_type == "bilayer":
         ab_grad_epi[band_cell_ids] = r_grad[band_cell_ids]

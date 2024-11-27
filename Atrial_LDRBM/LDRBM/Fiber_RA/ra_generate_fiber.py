@@ -41,7 +41,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
-    get_cells_with_ids, apply_extract_cell_filter
+    get_cells_with_ids, apply_extract_cell_filter, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -354,11 +354,7 @@ def ra_generate_fiber(model, args, job):
 
     plane = initialize_plane(norm_1, df["TV"])
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(Method.to_polydata(RAW_S))
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-    septal_surf = meshExtractFilter.GetOutput()
+    septal_surf = get_elements_above_plane(apply_vtk_geom_filter(RAW_S), plane)
 
     RAS_S = vtk_thr(septal_surf, 0, "CELLS", "phie_w", tao_ct_plus)
     RAS_S = vtk_thr(RAS_S, 0, "CELLS", "phie_r", 0.05)  # grad_r or w
@@ -375,11 +371,7 @@ def ra_generate_fiber(model, args, job):
 
     RAW_low = vtk_thr(no_TV_s, 0, "CELLS", "phie_r", max_phie_r_ivc)
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(RAW_low)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-    RAS_low = meshExtractFilter.GetOutput()
+    RAS_low = get_elements_above_plane(RAW_low, plane)
 
     RAS_low = vtk_thr(RAS_low, 0, "CELLS", "phie_w", 0)  # grad_r overwrites the previous
 
@@ -405,11 +397,7 @@ def ra_generate_fiber(model, args, job):
 
     plane = initialize_plane(norm_1, IVC_SEPT_CT_pt)
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(no_TV_s)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-    septal_surf = meshExtractFilter.GetOutput()
+    septal_surf = get_elements_above_plane(no_TV_s, plane)
 
     if args.debug:
         Method.writer_vtk(septal_surf, f'{args.mesh}_surf/' + "septal_surf_2.vtk")
@@ -593,11 +581,7 @@ def ra_generate_fiber(model, args, job):
 
     initialize_plane(norm_1, df["TV"])
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(TV_s)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-    TV_lat = meshExtractFilter.GetOutput()
+    TV_lat = get_elements_above_plane(TV_s, plane)
 
     TV_lat = apply_vtk_geom_filter(TV_lat)
 

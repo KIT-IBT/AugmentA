@@ -40,7 +40,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_norm
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata, generate_ids, get_center_of_mass, get_feature_edges
+    clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -460,12 +460,9 @@ def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
         appendFilter.AddInputData(temp)
     appendFilter.Update()
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(appendFilter.GetOutput())
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
+    extracted_mesh = get_elements_above_plane(appendFilter.GetOutput(), plane)
 
-    RSPV_id = int(vtk_to_numpy(meshExtractFilter.GetOutput().GetPointData().GetArray('id'))[0])
+    RSPV_id = int(vtk_to_numpy(extracted_mesh.GetPointData().GetArray('id'))[0])
 
     return RSPV_id
 
@@ -479,12 +476,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
 
     plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(LA)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-
-    surface = apply_vtk_geom_filter(meshExtractFilter.GetOutput())
+    surface = apply_vtk_geom_filter(get_elements_above_plane(LA, plane))
 
     """
     here we will extract the feature edge 
@@ -610,12 +602,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     surface = apply_vtk_geom_filter(model)
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(surface)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-
-    surface = apply_vtk_geom_filter(meshExtractFilter.GetOutput())
+    surface = apply_vtk_geom_filter(get_elements_above_plane(surface, plane))
 
     """
     here we will extract the feature edge 
@@ -632,12 +619,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     surface = apply_vtk_geom_filter(endo)
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(surface)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-
-    surface = apply_vtk_geom_filter(meshExtractFilter.GetOutput())
+    surface = apply_vtk_geom_filter(get_elements_above_plane(surface, plane))
 
     """
     here we will extract the feature edge 
@@ -656,18 +638,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     plane = initialize_plane(norm_1[0], tv_center)
     plane2 = initialize_plane(norm_2[0], tv_center)
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(tv)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
-
-    meshExtractFilter2 = vtk.vtkExtractGeometry()
-    meshExtractFilter2.SetInputData(tv)
-    meshExtractFilter2.ExtractBoundaryCellsOn()
-    meshExtractFilter2.SetImplicitFunction(plane2)
-    meshExtractFilter2.Update()
-
-    tv_f = apply_vtk_geom_filter(meshExtractFilter.GetOutput())
+    tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv, plane))
 
     tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_F.vtx'
@@ -678,7 +649,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
         f.write(f'{i}\n')
     f.close()
 
-    tv_s = apply_vtk_geom_filter(meshExtractFilter2.GetOutput())
+    tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv, plane2, extract_boundary_cells_on=True))
 
     tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
     fname = outdir + '/ids_TV_S.vtx'

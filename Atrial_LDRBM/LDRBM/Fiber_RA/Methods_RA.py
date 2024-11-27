@@ -36,7 +36,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, num
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata, vtk_append, apply_extract_cell_filter
+    clean_polydata, vtk_append, apply_extract_cell_filter, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -377,22 +377,13 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
 
     plane = initialize_plane(norm_1, point_start)
 
-    meshExtractFilter1 = vtk.vtkExtractGeometry()
-    meshExtractFilter1.SetInputData(polydata)
-    meshExtractFilter1.SetImplicitFunction(plane)
-    meshExtractFilter1.Update()
+    extracted_mesh_1 = get_elements_above_plane(polydata, plane)
 
     point_moved = point_start - 2 * args.scale * norm_1
 
     plane2 = initialize_plane(-norm_1, point_moved)
 
-    meshExtractFilter2 = vtk.vtkExtractGeometry()
-    meshExtractFilter2.SetInputData(meshExtractFilter1.GetOutput())
-    meshExtractFilter2.SetImplicitFunction(plane2)
-    meshExtractFilter2.Update()
-
-    band = meshExtractFilter2.GetOutput()
-    band = clean_polydata(apply_vtk_geom_filter(band))
+    band = clean_polydata(apply_vtk_geom_filter(get_elements_above_plane(extracted_mesh_1, plane2)))
 
     if args.debug:
         writer_vtk(band, f'{args.mesh}_surf/' + "band_" + str(StartVertex) + "_" + str(EndVertex) + ".vtk")
@@ -642,13 +633,10 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
 
     plane = initialize_plane(-norm_1[0], moved_center[0])
 
-    meshExtractFilter = vtk.vtkExtractGeometry()
-    meshExtractFilter.SetInputData(ra_tv_s_surface)
-    meshExtractFilter.SetImplicitFunction(plane)
-    meshExtractFilter.Update()
+    extracted_mesh = get_elements_above_plane(ra_tv_s_surface, plane)
 
     connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(meshExtractFilter.GetOutput())
+    connect.SetInputData(extracted_mesh)
     connect.SetExtractionModeToAllRegions()
     connect.Update()
     connect.SetExtractionModeToSpecifiedRegions()
