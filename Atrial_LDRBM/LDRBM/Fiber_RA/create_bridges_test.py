@@ -199,10 +199,13 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         ra_e = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
         ra_e = apply_vtk_geom_filter(ra_e)
 
-        biatrial_e = vtk_append([la_e, ra_e])
+        append_filter = vtk.vtkAppendFilter()
+        append_filter.AddInputData(la_e)
+        append_filter.AddInputData(ra_e)
+        append_filter.Update()  # la_ra_usg
 
         # Good till here!
-        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", biatrial_e)
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", append_filter.GetOutput())
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     for var in bridge_list:
@@ -282,10 +285,15 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
             cell_id_all.append(i)
 
         la_diff = list(set(cell_id_all).difference(set(earth_cell_ids_list)))
+        append_filter = vtk.vtkAppendFilter()
+        append_filter.MergePointsOn()
+        # append_filter.SetTolerance(0.01*args.scale)
+
+        append_filter.AddInputData(get_cells_with_ids(la_ra_usg, la_diff))
 
         if args.debug:
             vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/" + str(var) + "_append_earth.vtu",
-                                             vtk_append(get_cells_with_ids(la_ra_usg, la_diff), True))
+                                             append_filter.GetOutput())
 
     filename = job.ID + '/bridges/bb_fiber.dat'
     f = open(filename, 'rb')
