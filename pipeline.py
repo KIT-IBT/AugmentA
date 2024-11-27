@@ -26,6 +26,7 @@ under the License.
 """
 from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
 from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
+from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -99,17 +100,8 @@ def AugmentA(args):
                 polydata = apply_vtk_geom_filter(smart_reader(args.mesh))
 
                 mesh_from_vtk = pv.PolyData(polydata)
-                p = pv.Plotter(notebook=False)
-                p.add_mesh(mesh_from_vtk, 'r')
-                p.add_text('Select the appendage apex and close the window', position='lower_left')
-                p.enable_point_picking(mesh_from_vtk, use_picker=True)
-                p.show()
 
-                if p.picked_point is not None:
-                    apex = p.picked_point
-                else:
-                    raise ValueError("Please select the appendage apex")
-                p.close()
+                apex = pick_point(mesh_from_vtk, "appendage apex")
 
                 tree = cKDTree(mesh_from_vtk.points.astype(np.double))
                 dd, apex_id = tree.query(apex)
@@ -128,17 +120,8 @@ def AugmentA(args):
                     mesh_data["LAA_id"] = [apex_id]
 
                     mesh_from_vtk = pv.PolyData(polydata)
-                    p = pv.Plotter(notebook=False)
-                    p.add_mesh(mesh_from_vtk, 'r')
-                    p.add_text('Select the RA appendage apex and close the window', position='lower_left')
-                    p.enable_point_picking(mesh_from_vtk, use_picker=True)
-                    p.show()
 
-                    if p.picked_point is not None:
-                        apex = p.picked_point
-                    else:
-                        raise ValueError("Please select the appendage apex")
-                    p.close()
+                    apex = pick_point_with_preselection(mesh_from_vtk, "RA appendage apex", apex)
 
                     tree = cKDTree(mesh_from_vtk.points.astype(np.double))
                     dd, apex_id = tree.query(apex)
@@ -320,6 +303,7 @@ def AugmentA(args):
         bil['elemTag'][mask] = bil['elemTag'][mask] - 10
         mask = bil['elemTag'] > 50
         bil['elemTag'][mask] = bil['elemTag'][mask] - 50
+
         p = pv.Plotter(notebook=False)
         if not args.closed_surface:
             fibers = bil.glyph(orient="fiber", factor=0.5, geom=geom, scale="elemTag")

@@ -123,17 +123,7 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, vessels_cutt
         orifices = ['tricuspid valve', 'inferior vena cava', 'superior vena cava', 'coronary sinus']
 
     for r in orifices:
-        picked_pt = None
-        while picked_pt is None:
-            p = pv.Plotter(notebook=False)
-            p.add_mesh(meshfix.mesh, 'r')
-            p.add_text(f'Select the center of the {r} and close the window to cut, otherwise just close',
-                       position='lower_left')
-            p.enable_point_picking(meshfix.mesh, use_picker=True)
-            p.show()
-
-            picked_pt = p.picked_point
-            p.close()
+        picked_pt = pick_point(meshfix.mesh, f"center of the {r}")
         if r == 'mitral valve' or r == 'tricuspid valve':
             selected_radius = valve_cutting_radius
         else:

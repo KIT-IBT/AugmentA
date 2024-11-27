@@ -39,6 +39,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from standalones.open_orifices_manually import open_orifices_manually
+from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
@@ -217,16 +218,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     if MRI:
         cc = pv.PolyData(valve_center)
-        p = pv.Plotter(notebook=False)
-        p.add_mesh(meshfix.mesh, 'r')
-        p.add_text('Select the appendage apex and close the window', position='lower_left')
-        p.add_mesh(cc, color='w', point_size=30., render_points_as_spheres=True)
-        p.enable_point_picking(meshfix.mesh, use_picker=True)
 
-        p.show()
-
-        apex = p.picked_point
-        p.close()
+        apex = pick_point_with_preselection(meshfix.mesh, "appendage apex", cc)
 
         apex_id = find_closest_point(model, apex)
 
@@ -236,18 +229,13 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             RAA = apex_id
     else:
         transeptal_punture_id = -1
-        p = pv.Plotter(notebook=False)
+
         mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_clean.vtk")
-        p.add_mesh(mesh_from_vtk, 'r')
-        p.add_text('Select the transeptal punture and close the window', position='lower_left')
-        p.enable_point_picking(meshfix.mesh, use_picker=True)
 
-        p.show()
-
-        if p.picked_point is not None:
+        picked_point = pick_point(mesh_from_vtk, "transeptal puncture")
+        if picked_point is not None:
             transeptal_punture_id = vtk_to_numpy(model.GetPointData().GetArray('Ids'))[
-                find_closest_point(model, p.picked_point)]
-        p.close()
+                find_closest_point(model, picked_point)]
 
     for i in range(num):
         connect.AddSpecifiedRegion(i)
@@ -323,31 +311,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     vtk_polydata_writer(f"{full_path}/{atrium}_cutted.vtk", model)
     if debug:
-        if apex is not None:
-            point_cloud = pv.PolyData(apex)
-
-            p = pv.Plotter(notebook=False)
-            mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
-            p.add_mesh(mesh_from_vtk, 'r')
-            p.add_mesh(point_cloud, color='w', point_size=30., render_points_as_spheres=True)
-            p.enable_point_picking(meshfix.mesh, use_picker=True)
-            p.add_text('Select the appendage apex and close the window', position='lower_left')
-            p.show()
-
-            if p.picked_point is not None:
-                apex = p.picked_point
-            p.close()
-        else:
-            p = pv.Plotter(notebook=False)
-            mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
-            p.add_mesh(mesh_from_vtk, 'r')
-            p.enable_point_picking(meshfix.mesh, use_picker=True)
-            p.add_text('Select the appendage apex and close the window', position='lower_left')
-            p.show()
-
-            if p.picked_point is not None:
-                apex = p.picked_point
-            p.close()
+        mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
+        apex = pick_point_with_preselection(mesh_from_vtk, "appendage apex", apex)
 
     model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
 

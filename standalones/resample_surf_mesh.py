@@ -36,6 +36,7 @@ import vtk
 from scipy.spatial import cKDTree
 
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
+from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, get_cells_with_ids, \
@@ -196,38 +197,12 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
             mesh_curv = pv.read(f'{meshname}.obj')
 
         apex = mesh_curv.points[np.argmax(curv), :]
-
-        point_cloud = pv.PolyData(apex)
-
-        p = pv.Plotter(notebook=False)
-
-        p.add_mesh(meshin, color='r')
-        p.add_mesh(point_cloud, color='w', point_size=30. * scale, render_points_as_spheres=True)
-        p.enable_point_picking(meshin, use_picker=True)
-        p.add_text('Select the appendage apex and close the window', position='lower_left')
-
-        p.show()
-
-        if p.picked_point is None:
-            print("Please pick a point as apex")
-        else:
-            apex = p.picked_point
-            print("Apex coordinates: ", apex)
+        apex = pick_point_with_preselection(meshin, "appendage apex", apex)
+        print("Apex coordinates: ", apex)
 
     elif find_apex_with_curv == 0 and apex_id == -1:
-
-        p = pv.Plotter(notebook=False)
-
-        p.add_mesh(meshin, color='r')
-        p.enable_point_picking(meshin, use_picker=True)
-        p.add_text('Select the appendage apex and close the window', position='lower_left')  # Select the LAA first
-
-        p.show()
-        if p.picked_point is None:
-            print("Please pick a point as apex")
-        else:
-            apex = p.picked_point
-            print("Apex coordinates: ", apex)
+        apex = pick_point(meshin, "appendage apex")
+        print("Apex coordinates: ", apex)
 
     tree = cKDTree(meshin.points.astype(np.double))
     dist, apex_id = tree.query(apex)
@@ -239,18 +214,9 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
     if atrium == 'LA_RA':
         atrium = 'RA'
-        p = pv.Plotter(notebook=False)
 
-        p.add_mesh(meshin, color='r')
-        p.enable_point_picking(meshin, use_picker=True)
-        p.add_text('Select the RA appendage apex and close the window', position='lower_left')
-
-        p.show()
-        if p.picked_point is None:
-            print("Please pick a point as apex")
-        else:
-            apex = p.picked_point
-            print("Apex coordinates: ", apex)
+        apex = pick_point(meshin, "RA appendage apex")
+        print("Apex coordinates: ", apex)
 
         tree = cKDTree(meshin.points.astype(np.double))
         dist, apex_id = tree.query(apex)
