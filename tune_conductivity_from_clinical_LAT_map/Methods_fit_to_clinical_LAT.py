@@ -36,7 +36,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata, generate_ids
+    clean_polydata, generate_ids, get_cells_with_ids
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -207,17 +207,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
             for el in el_diff:
                 cell_diff.add(b_ids.index(el))
 
-            model_new_el = vtk.vtkIdList()
-
-            for var in cell_diff:
-                model_new_el.InsertNextId(var)
-
-            extract = vtk.vtkExtractCells()
-            extract.SetInputData(band)
-            extract.SetCellList(model_new_el)
-            extract.Update()
-
-            geo_port, _geo_filter = get_vtk_geom_filter_port(extract.GetOutputPort(), True)
+            geo_port, _geo_filter = get_vtk_geom_filter_port(get_cells_with_ids(band, cell_diff))
 
             # Mesh of all elements which are not belonging to the clean band
             el_removed = clean_polydata(geo_port, input_is_connection=True)

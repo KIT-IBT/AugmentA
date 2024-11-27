@@ -40,7 +40,8 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
+    get_cells_with_ids, apply_extract_cell_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -182,30 +183,13 @@ def ra_generate_fiber(model, args, job):
 
     TV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
 
-    ra_TV = vtk.vtkIdList()
-    for var in TV_ids:
-        ra_TV.InsertNextId(var)
-
-    extract = vtk.vtkExtractCells()
-    extract.SetInputData(model)
-    extract.SetCellList(ra_TV)
-    extract.Update()
-
-    TV_s = extract.GetOutput()
+    TV_s = get_cells_with_ids(model, TV_ids)
 
     ra_diff = list(
         set(list(vtk_to_numpy(model.GetCellData().GetArray('Global_ids')))).difference(
             set(TV_ids)))
-    ra_no_TV = vtk.vtkIdList()
-    for var in ra_diff:
-        ra_no_TV.InsertNextId(var)
 
-    extract = vtk.vtkExtractCells()
-    extract.SetInputData(model)
-    extract.SetCellList(ra_no_TV)
-    extract.Update()
-
-    no_TV_s = extract.GetOutput()
+    no_TV_s = get_cells_with_ids(model, ra_diff)
 
     # To check if TV was correctly identified
     if args.debug:
@@ -287,15 +271,7 @@ def ra_generate_fiber(model, args, job):
 
     ii = set([item for sublist in ii for item in sublist])
 
-    cell_ids = vtk.vtkIdList()
-    for i in ii:
-        cell_ids.InsertNextId(i)
-    extract = vtk.vtkExtractCells()
-    extract.SetInputData(CT_band)
-    extract.SetCellList(cell_ids)
-    extract.Update()
-
-    CT_band = extract.GetOutput()
+    CT_band = get_cells_with_ids(CT_band, ii)
 
     if args.debug:
         Method.writer_vtk(CT_band, f'{args.mesh}_surf/' + "ct_band_2.vtk")
@@ -332,15 +308,8 @@ def ra_generate_fiber(model, args, job):
     RAW_I_ids = vtk_to_numpy(CT_minus.GetCellData().GetArray('Global_ids'))
 
     ii = set(RAW_I_ids) - set(CT_SEPT_ids) - set(CT_band_ids)
-    cell_ids = vtk.vtkIdList()
-    for i in ii:
-        cell_ids.InsertNextId(i)
-    extract = vtk.vtkExtractCells()
-    extract.SetInputData(CT_minus)
-    extract.SetCellList(cell_ids)
-    extract.Update()
 
-    CT_minus = extract.GetOutput()
+    CT_minus = get_cells_with_ids(CT_minus, ii)
 
     RAW_I_ids = vtk_to_numpy(CT_minus.GetCellData().GetArray('Global_ids'))
 
@@ -579,11 +548,7 @@ def ra_generate_fiber(model, args, job):
         for var in CT_SEPT_ids:
             CT_id_list.InsertNextId(var)
 
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(model)
-        extract.SetCellList(CT_id_list)
-        extract.Update()
-        CT = extract.GetOutput()
+        CT = apply_extract_cell_filter(model, CT_id_list)
 
         CT_ids = vtk_to_numpy(CT.GetCellData().GetArray('Global_ids'))
 

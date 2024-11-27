@@ -38,7 +38,7 @@ from scipy.spatial import cKDTree
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, get_cells_with_ids
 
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -127,15 +127,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         tot_cells = set(list(range(reader.GetOutput().GetNumberOfCells())))
         cells_no_bd = tot_cells - bd_ids
-        cell_ids_no_bd = vtk.vtkIdList()
-        for i in cells_no_bd:
-            cell_ids_no_bd.InsertNextId(i)
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(reader.GetOutput())
-        extract.SetCellList(cell_ids_no_bd)
-        extract.Update()
 
-        earth = apply_vtk_geom_filter(extract.GetOutput())
+        earth = apply_vtk_geom_filter(get_cells_with_ids(reader.GetOutput(), cells_no_bd))
 
         connect = vtk.vtkConnectivityFilter()
         connect.SetInputData(clean_polydata(earth))

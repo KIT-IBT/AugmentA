@@ -43,7 +43,8 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, \
     vtk_unstructured_grid_writer, vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
+    apply_extract_cell_filter, get_cells_with_ids
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -267,12 +268,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
             for j in range(earth_cell_ids_temp.GetNumberOfIds()):
                 earth_cell_ids.InsertNextId(earth_cell_ids_temp.GetId(j))
                 earth_cell_ids_list += [earth_cell_ids_temp.GetId(j)]
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(la_ra_usg)
-        extract.SetCellList(earth_cell_ids)
-        extract.Update()
 
-        earth = apply_vtk_geom_filter(extract.GetOutput())
+        earth = apply_vtk_geom_filter(apply_extract_cell_filter(la_ra_usg, earth_cell_ids))
         earth = clean_polydata(earth)
 
         # meshNew = dsa.WrapDataObject(cleaner.GetOutput())
@@ -285,17 +282,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
             cell_id_all.append(i)
 
         la_diff = list(set(cell_id_all).difference(set(earth_cell_ids_list)))
-        la_ra_new = vtk.vtkIdList()
-        for item in la_diff:
-            la_ra_new.InsertNextId(item)
 
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(la_ra_usg)
-        extract.SetCellList(la_ra_new)
-        extract.Update()
         if args.debug:
             vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/" + str(var) + "_append_earth.vtu",
-                                             vtk_append(extract.GetOutput(), True))
+                                             vtk_append(get_cells_with_ids(la_ra_usg, la_diff), True))
 
     filename = job.ID + '/bridges/bb_fiber.dat'
     f = open(filename, 'rb')

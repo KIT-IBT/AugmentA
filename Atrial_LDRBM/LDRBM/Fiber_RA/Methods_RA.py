@@ -36,7 +36,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, num
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata, vtk_append
+    clean_polydata, vtk_append, apply_extract_cell_filter
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -757,13 +757,8 @@ def get_endo_ct_intersection_cells(endo, ct):
         for j in range(endo_cell_temp_id_list.GetNumberOfIds()):
             endo_cell_id_list.InsertNextId(endo_cell_temp_id_list.GetId(j))
     print(endo_cell_id_list.GetNumberOfIds())
-    extract = vtk.vtkExtractCells()
-    extract.SetInputData(endo)
-    extract.SetCellList(endo_cell_id_list)
-    extract.Update()
-    endo_ct = extract.GetOutput()
 
-    return endo_ct
+    return apply_extract_cell_filter(endo, endo_cell_id_list)
 
 
 def get_connection_point_la_and_ra_surface(appen_point, la_mv_surface, la_rpv_inf_surface, la_epi_surface,
