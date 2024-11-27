@@ -39,6 +39,7 @@ from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filte
     clean_polydata, generate_ids, get_cells_with_ids
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_opencarp_helper_methods.writer import write_to_dat
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -351,11 +352,7 @@ def low_CV(model, low_CV_thr, meshfold):
     sigma = np.ones((model.GetNumberOfCells(),))
 
     sigma[low_CV_ids] = 0.6 ** 2  # low_sigma
-
-    f = open(meshfold + '/low_CV.dat', 'w')
-    for i in sigma:
-        f.write(f"{i:.4f}\n")
-    f.close()
+    write_to_dat(meshfold + '/low_CV.dat', sigma)
 
 
 def dijkstra_path(polydata, StartVertex, EndVertex):

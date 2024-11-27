@@ -29,6 +29,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, con
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_opencarp_helper_methods.writer import write_to_dat
 
 EXAMPLE_DESCRIPTIVE_NAME = 'Tune conductivities to fit clinical LAT map'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
@@ -420,15 +421,8 @@ def run(args, job):
     slow_CV_old = np.ones((len(endo_ids),))
 
     # Create the conductivity scale map with ones factors as initial condition
-    f = open(simid + '/low_CV.dat', 'w')
-    for i in slow_CV:
-        f.write(f"{i:.4f}\n")
-    f.close()
-
-    f = open(simid + '/low_CV_old.dat', 'w')
-    for i in slow_CV:
-        f.write(f"{i:.4f}\n")
-    f.close()
+    write_to_dat(simid + '/low_CV.dat', slow_CV)
+    write_to_dat(simid + '/low_CV_old.dat', slow_CV)
 
     final_diff = []
     old_cells = np.array([], dtype=int)
@@ -671,10 +665,9 @@ def run(args, job):
 
                 LAT_diff = RMSE
                 os.rename(simid + '/low_CV.dat', simid + '/low_CV_old.dat')
-                f = open(simid + '/low_CV.dat', 'w')
-                for i in slow_CV:
-                    f.write(f"{i:.4f}\n")
-                f.close()
+
+                write_to_dat(simid + '/low_CV.dat', slow_CV)
+
                 it += 1
             else:
                 old_cells = np.union1d(old_cells, active_cells_old_old)
@@ -751,10 +744,8 @@ def run(args, job):
     print(f"Final last ACT: {last_ACT}")
     print(f"Final giL: {args.giL}")
     print(f"Final geL: {args.geL}")
-    f = open(job.ID + '/err.dat', 'w')
-    for i in final_diff:
-        f.write(f"{i:.4f}\n")
-    f.close()
+
+    write_to_dat(job.ID + '/err.dat', final_diff)
 
     if os.path.exists('RMSE_patients.txt'):
         append_write = 'a'  # append if already exists
@@ -769,10 +760,7 @@ def run(args, job):
     slow_CV_bil[endo_ids] = slow_CV
     slow_CV_bil[endo_ids + len(endo_ids)] = slow_CV
 
-    f = open(meshfold + f'/low_CV_3_{args.step}_{args.thr}.dat', 'w')
-    for i in slow_CV_bil:
-        f.write(f"{i:.4f}\n")
-    f.close()
+    write_to_dat(meshfold + f'/low_CV_3_{args.step}_{args.thr}.dat', slow_CV_bil)
 
     meshNew = dsa.WrapDataObject(new_endo)
     meshNew.PointData.append(lats, "lat_s")

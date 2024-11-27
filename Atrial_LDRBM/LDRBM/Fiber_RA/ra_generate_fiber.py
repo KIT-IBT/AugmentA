@@ -601,10 +601,8 @@ def ra_generate_fiber(model, args, job):
 
 
     elif args.mesh_type == "bilayer":
-
         fiber_endo = el.copy()
         tag_endo = np.copy(tag)
-
         surface = apply_vtk_geom_filter(endo)
 
     loc = vtk.vtkPointLocator()
