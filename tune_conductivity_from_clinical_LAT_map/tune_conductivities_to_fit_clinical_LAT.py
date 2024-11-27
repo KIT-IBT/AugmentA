@@ -27,6 +27,8 @@ under the License.
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
+from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 EXAMPLE_DESCRIPTIVE_NAME = 'Tune conductivities to fit clinical LAT map'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
@@ -386,19 +388,9 @@ def run(args, job):
 
     meshname_e = file_name
 
-    new_endo = Methods_fit_to_clinical_LAT.smart_reader(meshname_e + '.vtu')
-    cellid = vtk.vtkIdFilter()
-    cellid.CellIdsOn()
-    cellid.SetInputData(new_endo)
-    cellid.PointIdsOn()
-    cellid.FieldDataOn()
-    if int(vtk_version) >= 9:
-        cellid.SetPointIdsArrayName('Global_ids')
-        cellid.SetCellIdsArrayName('Global_ids')
-    else:
-        cellid.SetIdsArrayName('Global_ids')
-    cellid.Update()
-    new_endo = cellid.GetOutput()
+    new_endo = smart_reader(meshname_e + '.vtu')
+
+    new_endo = generate_ids(new_endo, "Global_ids", "Global_ids", True)
 
     with open('element_tag.csv') as f:
         reader = csv.DictReader(f)

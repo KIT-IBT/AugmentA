@@ -40,7 +40,7 @@ from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_t
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -122,18 +122,7 @@ def la_generate_fiber(model, args, job):
     phie_grad = model.GetCellData().GetArray('grad_phi')
     phie_grad = vtk_to_numpy(phie_grad)
 
-    cellid = vtk.vtkIdFilter()
-    cellid.CellIdsOn()
-    cellid.SetInputData(model)
-    cellid.PointIdsOn()
-    if int(vtk_version) >= 9:
-        cellid.SetPointIdsArrayName('Global_ids')
-        cellid.SetCellIdsArrayName('Global_ids')
-    else:
-        cellid.SetIdsArrayName('Global_ids')
-    cellid.Update()
-
-    model = cellid.GetOutput()
+    model = generate_ids(model, "Global_ids", "Global_ids")
 
     df = pd.read_csv(args.mesh + "_surf/rings_centroids.csv")
 

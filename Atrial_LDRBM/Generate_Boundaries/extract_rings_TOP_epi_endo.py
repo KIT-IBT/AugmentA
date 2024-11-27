@@ -40,7 +40,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_norm
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata
+    clean_polydata, generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -118,7 +118,7 @@ def label_atrial_orifices_TOP_epi_endo(mesh, LAA_id="", RAA_id="", LAA_base_id="
             centroids["RAA_base"] = RA_bs_point
 
         connect = vtk.vtkConnectivityFilter()
-        connect.SetInputConnection(geo_filter.GetOutputPort())
+        connect.SetInputData(mesh_surf)
         connect.SetExtractionModeToAllRegions()
         connect.ColorRegionsOn()
         connect.Update()
@@ -142,18 +142,9 @@ def label_atrial_orifices_TOP_epi_endo(mesh, LAA_id="", RAA_id="", LAA_base_id="
         warning("WARNING: Should be checkt for functionality extract_rings_TOP_epi_endo l145")
         thr = get_threshold_between(mesh_conn, LA_tag, LA_tag, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
 
-        geo_port, _geo_filter = get_vtk_geom_filter_port(thr.GetOutputPort(), True)
+        LA_poly = apply_vtk_geom_filter(thr.GetOutputPort(), True)
 
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_port)
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
-
-        LA = idFilter.GetOutput()
+        LA = generate_ids(LA_poly, "Ids", "Ids")
 
         vtkWrite(LA, outdir + '/LA.vtp')
 
@@ -179,18 +170,9 @@ def label_atrial_orifices_TOP_epi_endo(mesh, LAA_id="", RAA_id="", LAA_base_id="
 
         thr.ThresholdBetween(RA_tag, RA_tag)
         thr.Update()
-        geo_port, _geo_filter = get_vtk_geom_filter_port(thr.GetOutputPort(), True)
+        RA_poly = apply_vtk_geom_filter(thr.GetOutputPort(), True)
 
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_port)
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
-
-        RA = idFilter.GetOutput()
+        RA = generate_ids(RA_poly, "Ids", "Ids")
 
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(RA)
@@ -215,18 +197,11 @@ def label_atrial_orifices_TOP_epi_endo(mesh, LAA_id="", RAA_id="", LAA_base_id="
         vtkWrite(dataSet.VTKObject, outdir + '/RA_boundaries_tagged.vtp'.format(mesh))
 
     elif RAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir + '/LA.vtp'.format(mesh))
+        vtkWrite(mesh_surf, outdir + '/LA.vtp'.format(mesh))
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         centroids["LAA"] = LA_ap_point
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_filter.GetOutputPort())
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
-        LA = idFilter.GetOutput()
+
+        LA = generate_ids(mesh_surf, "Ids", "Ids")
         LA_rings = detect_and_mark_rings(LA, LA_ap_point)
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
         b_tag, centroids = mark_LA_rings(LAA_id, LA_rings, b_tag, centroids, outdir, LA)
@@ -237,18 +212,11 @@ def label_atrial_orifices_TOP_epi_endo(mesh, LAA_id="", RAA_id="", LAA_base_id="
         vtkWrite(dataSet.VTKObject, outdir + '/LA_boundaries_tagged.vtp'.format(mesh))
 
     elif LAA_id == "":
-        vtkWrite(geo_filter.GetOutput(), outdir + '/RA.vtp'.format(mesh))
+        vtkWrite(mesh_surf, outdir + '/RA.vtp'.format(mesh))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_filter.GetOutputPort())
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
+
         centroids["RAA"] = RA_ap_point
-        RA = idFilter.GetOutput()
+        RA = generate_ids(mesh_surf, "Ids", "Ids")
         RA_rings = detect_and_mark_rings(RA, RA_ap_point)
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
@@ -680,16 +648,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     endo = smart_reader(mesh[:-3] + 'endo.obj')
 
-    idFilter = vtk.vtkIdFilter()
-    idFilter.SetInputData(endo)
-    if int(vtk_version) >= 9:
-        idFilter.SetPointIdsArrayName('Ids')
-        idFilter.SetCellIdsArrayName('Ids')
-    else:
-        idFilter.SetIdsArrayName('Ids')
-    idFilter.Update()
-
-    endo = idFilter.GetOutput()
+    endo = generate_ids(endo, "Ids", "Ids")
 
     surface = apply_vtk_geom_filter(endo)
 

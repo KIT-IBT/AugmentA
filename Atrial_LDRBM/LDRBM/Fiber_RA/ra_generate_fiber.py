@@ -40,7 +40,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -162,18 +162,7 @@ def ra_generate_fiber(model, args, job):
     start_time = datetime.datetime.now()
     print('Calculating fibers... ' + str(start_time))
 
-    cellid = vtk.vtkIdFilter()
-    cellid.CellIdsOn()
-    cellid.SetInputData(model)  # vtkPolyData()
-    cellid.PointIdsOn()
-    if int(vtk_version) >= 9:
-        cellid.SetPointIdsArrayName('Global_ids')
-        cellid.SetCellIdsArrayName('Global_ids')
-    else:
-        cellid.SetIdsArrayName('Global_ids')
-    cellid.Update()
-
-    model = cellid.GetOutput()
+    model = generate_ids(model, "Global_ids", "Global_ids")
 
     # TV
 
@@ -276,7 +265,6 @@ def ra_generate_fiber(model, args, job):
 
     mesh_surf = apply_vtk_geom_filter(CT_band)
 
-
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(mesh_surf)
     loc.BuildLocator()
@@ -323,7 +311,6 @@ def ra_generate_fiber(model, args, job):
     IVC_CT_pt_id = loc.FindClosestPoint(np.array(IVC_CT_pt))
 
     no_IVC_s = apply_vtk_geom_filter(no_IVC_s)
-
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(no_IVC_s)
@@ -575,18 +562,7 @@ def ra_generate_fiber(model, args, job):
         PM and CT
         """
 
-        cellid = vtk.vtkIdFilter()
-        cellid.CellIdsOn()
-        cellid.SetInputData(meshNew.VTKObject)  # vtkPolyData()
-        cellid.PointIdsOn()
-        if int(vtk_version) >= 9:
-            cellid.SetPointIdsArrayName('Global_ids')
-            cellid.SetCellIdsArrayName('Global_ids')
-        else:
-            cellid.SetIdsArrayName('Global_ids')
-        cellid.Update()
-
-        model = cellid.GetOutput()
+        model = generate_ids(meshNew.VTKObject, "Global_ids", "Global_ids")
 
         endo = vtk.vtkUnstructuredGrid()
         endo.DeepCopy(model)
@@ -641,7 +617,6 @@ def ra_generate_fiber(model, args, job):
 
     CT = apply_vtk_geom_filter(CT)
 
-
     # calculate the norm vector
     v1 = np.array(df["IVC"]) - np.array(df["SVC"])
     v2 = np.array(df["TV"]) - np.array(df["IVC"])
@@ -694,7 +669,6 @@ def ra_generate_fiber(model, args, job):
 
         surface = apply_vtk_geom_filter(model)
 
-
         epi = vtk_thr(surface, 0, "POINTS", "phie_phi", 0.5)
 
         endo = vtk_thr(surface, 1, "POINTS", "phie_phi", 0.5)
@@ -708,7 +682,6 @@ def ra_generate_fiber(model, args, job):
         tag_endo = np.copy(tag)
 
         surface = apply_vtk_geom_filter(endo)
-
 
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(surface)
@@ -899,7 +872,6 @@ def ra_generate_fiber(model, args, job):
     if args.mesh_type == "vol":
         surface = apply_vtk_geom_filter(epi)
 
-
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(RAS_S)
     loc.BuildLocator()
@@ -993,7 +965,6 @@ def ra_generate_fiber(model, args, job):
 
             la_surf = apply_vtk_geom_filter(la)
 
-
             la_epi = vtk_thr(la_surf, 2, "CELLS", "elemTag", left_atrial_wall_epi, 99)
 
             df = pd.read_csv(meshname + "_LA_vol_surf/rings_centroids.csv")
@@ -1003,7 +974,6 @@ def ra_generate_fiber(model, args, job):
         ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
 
         la_epi = apply_vtk_geom_filter(la_epi)
-
 
         if args.mesh_type == "bilayer":
             ra_epi = apply_vtk_geom_filter(model)

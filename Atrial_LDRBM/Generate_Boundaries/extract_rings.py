@@ -40,7 +40,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_norm
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata
+    clean_polydata, generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -144,18 +144,9 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         warning("WARNING: Should be checkt for functionality extract_rings l151")
         thr = get_threshold_between(mesh_conn, LA_tag, LA_tag, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
 
-        geo_port, _geo_filter = get_vtk_geom_filter_port(thr.GetOutputPort(), True)
+        mesh_poly = apply_vtk_geom_filter(thr.GetOutputPort(), True)
 
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_port)
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
-
-        LA = idFilter.GetOutput()
+        LA = generate_ids(mesh_poly, "Ids", "Ids")
 
         vtkWrite(LA, outdir + '/LA.vtk')
 
@@ -181,18 +172,9 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
 
         thr.ThresholdBetween(RA_tag, RA_tag)
         thr.Update()
-        geo_port, _geo_filter = get_vtk_geom_filter_port(thr.GetOutputPort(), True)
+        RA_poly = apply_vtk_geom_filter(thr.GetOutputPort(), True)
 
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputConnection(geo_port)
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
-
-        RA = idFilter.GetOutput()
+        RA = generate_ids(RA_poly, "Ids", "Ids")
 
         loc = vtk.vtkPointLocator()
         loc.SetDataSet(RA)
@@ -224,15 +206,8 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         if mesh_surf.GetPointData().GetArray(array_name) is not None:
             # Remove previouse id so they match with indices
             mesh_surf.GetPointData().RemoveArray(array_name)
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputData(mesh_surf)
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
-        LA = idFilter.GetOutput()
+
+        LA = generate_ids(mesh_surf, "Ids", "Ids")
 
         LA_rings = detect_and_mark_rings(LA, LA_ap_point, outdir, debug)
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
@@ -246,16 +221,9 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
     elif LAA_id == "":
         vtkWrite(mesh_surf, outdir + '/RA.vtk'.format(mesh))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
-        idFilter = vtk.vtkIdFilter()
-        idFilter.SetInputData(mesh_surf)
-        if int(vtk_version) >= 9:
-            idFilter.SetPointIdsArrayName('Ids')
-            idFilter.SetCellIdsArrayName('Ids')
-        else:
-            idFilter.SetIdsArrayName('Ids')
-        idFilter.Update()
+
         centroids["RAA"] = RA_ap_point
-        RA = idFilter.GetOutput()
+        RA = generate_ids(mesh_surf, "Ids", "Ids")
         RA_rings = detect_and_mark_rings(RA, RA_ap_point, outdir, debug)
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)

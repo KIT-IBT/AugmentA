@@ -43,7 +43,7 @@ from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata
+    clean_polydata, generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -184,19 +184,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         # Cutting valve with fixed radius to ensure that it is the biggest ring
         model = cut_mesh_with_radius(model, valve_center, max_cutting_radius)
 
-    # model = smart_reader("{}/{}_valve.vtk".format(full_path, atrium))
-    cellid = vtk.vtkIdFilter()
-    cellid.CellIdsOn()
-    cellid.SetInputData(model)
-    cellid.PointIdsOn()
-    if int(vtk_version) >= 9:
-        cellid.SetPointIdsArrayName('Ids')
-        cellid.SetCellIdsArrayName('Ids')
-    else:
-        cellid.SetIdsArrayName('Ids')
-    cellid.Update()
-
-    model = cellid.GetOutput()
+    model = generate_ids(model, "Ids", "Ids")
 
     vtk_polydata_writer(f"{full_path}/{atrium}_curv.vtk", model, True)
 

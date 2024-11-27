@@ -36,7 +36,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata
+    clean_polydata, generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -53,19 +53,7 @@ def low_vol_LAT(args, path):
     model = convert_point_to_cell_data(model, ["bi"], ["lat"])
 
     # Create Points and Cells ids
-    cellid = vtk.vtkIdFilter()
-    cellid.CellIdsOn()
-    cellid.SetInputData(model)
-    cellid.PointIdsOn()
-    cellid.FieldDataOn()
-    if int(vtk_version) >= 9:
-        cellid.SetPointIdsArrayName('Global_ids')
-        cellid.SetCellIdsArrayName('Global_ids')
-    else:
-        cellid.SetIdsArrayName('Global_ids')
-    cellid.Update()
-
-    model = cellid.GetOutput()
+    model = generate_ids(model, "Global_ids", "Global_ids", True)
 
     # Compute elements centroids
     filter_cell_centers = vtk.vtkCellCenters()
@@ -401,19 +389,7 @@ def get_EAP(path_mod, path_fib):
     model = smart_reader(path_mod)
     mod_fib = smart_reader(path_fib)
 
-    cellid = vtk.vtkIdFilter()
-    cellid.CellIdsOn()
-    cellid.SetInputData(mod_fib)
-    cellid.PointIdsOn()
-    cellid.FieldDataOn()
-    if int(vtk_version) >= 9:
-        cellid.SetPointIdsArrayName('Global_ids')
-        cellid.SetCellIdsArrayName('Global_ids')
-    else:
-        cellid.SetIdsArrayName('Global_ids')
-    cellid.Update()
-
-    mod_fib = cellid.GetOutput()
+    mod_fib = generate_ids(mod_fib, "Global_ids", "Global_ids", True)
     LA_MV = vtk_thr(mod_fib, 1, "CELLS", "elemTag", 2)
     LAT_map = vtk_to_numpy(model.GetPointData().GetArray('LAT'))
 
