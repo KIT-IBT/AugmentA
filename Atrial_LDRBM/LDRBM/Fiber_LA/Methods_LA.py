@@ -40,6 +40,7 @@ from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_write
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, vtk_append, apply_extract_cell_filter, get_center_of_mass, get_feature_edges, \
     get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
@@ -255,12 +256,8 @@ def dijkstra_path_on_a_plane(polydata, StartVertex, EndVertex, plane_point):
 
     band = apply_vtk_geom_filter(get_elements_above_plane(extracted_mesh_1, plane2))
 
-    # print(band)
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(band)
-    loc.BuildLocator()
-    StartVertex = loc.FindClosestPoint(point_start)
-    EndVertex = loc.FindClosestPoint(point_end)
+    StartVertex = find_closest_point(band, point_start)
+    EndVertex = find_closest_point(band, point_end)
 
     points_data = dijkstra_path(band, StartVertex, EndVertex)
     return points_data
@@ -455,12 +452,8 @@ def get_ct_end_points_id(endo, ct, scv, icv):
     path_icv = np.asarray([np.mean(inter_icv[:, 0]), np.mean(inter_icv[:, 1]), np.mean(inter_icv[:, 2])])
     path_scv = np.asarray([np.mean(inter_scv[:, 0]), np.mean(inter_scv[:, 1]), np.mean(inter_scv[:, 2])])
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(endo)
-    loc.BuildLocator()
-
-    path_ct_id_icv = loc.FindClosestPoint(path_icv)
-    path_ct_id_scv = loc.FindClosestPoint(path_scv)
+    path_ct_id_icv = find_closest_point(endo, path_icv)
+    path_ct_id_scv = find_closest_point(endo, path_scv)
 
     return path_ct_id_icv, path_ct_id_scv
 
@@ -510,12 +503,9 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     else:
         center_point_icv = center_point_2
         center_point_scv = center_point_1
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(endo)
-    loc.BuildLocator()
 
-    path_tv_id_icv = loc.FindClosestPoint(center_point_icv)
-    path_tv_id_scv = loc.FindClosestPoint(center_point_scv)
+    path_tv_id_icv = find_closest_point(endo, center_point_icv)
+    path_tv_id_scv = find_closest_point(endo, center_point_scv)
 
     return path_tv_id_icv, path_tv_id_scv
 
@@ -600,25 +590,14 @@ def get_connection_point_la_and_ra(appen_point):
     la_epi_surface = smart_reader('../../Generate_Boundaries/LA/result/la_epi_surface.vtk')
     ra_epi_surface = smart_reader('../../Generate_Boundaries/RA/result/ra_epi_surface.vtk')
 
-    loc_mv = vtk.vtkPointLocator()
-    loc_mv.SetDataSet(la_mv_surface)
-    loc_mv.BuildLocator()
-
-    point_1_id = loc_mv.FindClosestPoint(appen_point)
+    point_1_id = find_closest_point(la_mv_surface, appen_point)
     point_1 = la_mv_surface.GetPoint(point_1_id)
 
-    loc_rpv_inf = vtk.vtkPointLocator()
-    loc_rpv_inf.SetDataSet(la_rpv_inf_surface)
-    loc_rpv_inf.BuildLocator()
-    point_2_id = loc_rpv_inf.FindClosestPoint(appen_point)
+    point_2_id = find_closest_point(la_rpv_inf_surface, appen_point)
     point_2 = la_rpv_inf_surface.GetPoint(point_2_id)
 
-    loc_endo = vtk.vtkPointLocator()
-    loc_endo.SetDataSet(endo)
-    loc_endo.BuildLocator()
-
-    point_1_id_endo = loc_endo.FindClosestPoint(point_1)
-    point_2_id_endo = loc_endo.FindClosestPoint(point_2)
+    point_1_id_endo = find_closest_point(endo, point_1)
+    point_2_id_endo = find_closest_point(endo, point_2)
 
     bb_aux_l_points = dijkstra_path(apply_vtk_geom_filter(endo), point_1_id_endo, point_2_id_endo)
     length = len(bb_aux_l_points)
@@ -629,18 +608,10 @@ def get_connection_point_la_and_ra(appen_point):
 
     ra_epi_surface = apply_vtk_geom_filter(ra_epi_surface)
 
-    loc_la_epi = vtk.vtkPointLocator()
-    loc_la_epi.SetDataSet(la_epi_surface)
-    loc_la_epi.BuildLocator()
-
-    loc_ra_epi = vtk.vtkPointLocator()
-    loc_ra_epi.SetDataSet(ra_epi_surface)
-    loc_ra_epi.BuildLocator()
-
-    la_connect_point_id = loc_la_epi.FindClosestPoint(la_connect_point)
+    la_connect_point_id = find_closest_point(la_epi_surface, la_connect_point)
     la_connect_point = la_epi_surface.GetPoint(la_connect_point_id)
 
-    ra_connect_point_id = loc_ra_epi.FindClosestPoint(la_connect_point)
+    ra_connect_point_id = find_closest_point(ra_epi_surface, la_connect_point)
     ra_connect_point = ra_epi_surface.GetPoint(ra_connect_point_id)
 
     return la_connect_point, ra_connect_point
@@ -733,21 +704,14 @@ def get_bachmann_path_left(appendage_basis, lpv_sup_basis):
     endo = smart_reader('../../Generate_Boundaries/LA/result/la_endo_surface.vtk')
     epi = smart_reader('../../Generate_Boundaries/LA/result/la_epi_surface.vtk')
 
-    loc_mv = vtk.vtkPointLocator()
-    loc_mv.SetDataSet(la_mv_surface)
-    loc_mv.BuildLocator()
-
-    loc_epi = vtk.vtkPointLocator()
-    loc_epi.SetDataSet(epi)
-    loc_epi.BuildLocator()
-
-    appendage_basis_id = loc_epi.FindClosestPoint(appendage_basis)
-    lpv_sup_basis_id = loc_epi.FindClosestPoint(lpv_sup_basis)
+    appendage_basis_id = find_closest_point(epi, appendage_basis)
+    lpv_sup_basis_id = find_closest_point(epi, lpv_sup_basis)
 
     left_inf_pv_center = get_mean_point(la_lpv_inf_surface)
-    point_l1_id = loc_mv.FindClosestPoint(left_inf_pv_center)
+    point_l1_id = find_closest_point(la_mv_surface, left_inf_pv_center)
     point_l1 = la_mv_surface.GetPoint(point_l1_id)
-    bb_mv_id = loc_epi.FindClosestPoint(point_l1)
+
+    bb_mv_id = find_closest_point(epi, point_l1)
 
     bb_1_points = dijkstra_path(apply_vtk_geom_filter(epi), lpv_sup_basis_id, appendage_basis_id)
     bb_2_points = dijkstra_path(apply_vtk_geom_filter(epi), appendage_basis_id, bb_mv_id)
@@ -810,22 +774,14 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
     MV = thresh.GetOutput()
 
     # Get the closest point to the inferior appendage base in the MV
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(MV)
-    loc.BuildLocator()
-
-    bb_mv = MV.GetPoint(loc.FindClosestPoint(bb_mv_laa))
+    bb_mv = MV.GetPoint(find_closest_point(MV, bb_mv_laa))
     thresh = get_threshold_between(epi, left_atrial_appendage_epi, left_atrial_appendage_epi,
                                    "vtkDataObject::FIELD_ASSOCIATION_CELLS", "elemTag")
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(thresh.GetOutput())
-    # loc.SetDataSet(epi)
-    loc.BuildLocator()
-    LAA_pt_far_from_LIPV_id = loc.FindClosestPoint(LAA_pt_far_from_LIPV)
-    inf_appendage_basis_id = loc.FindClosestPoint(inf_appendage_basis)
-    sup_appendage_basis_id = loc.FindClosestPoint(sup_appendage_basis)
-    bb_mv_id = loc.FindClosestPoint(bb_mv)
+    LAA_pt_far_from_LIPV_id = find_closest_point(thresh.GetOutput(), LAA_pt_far_from_LIPV)
+    inf_appendage_basis_id = find_closest_point(thresh.GetOutput(), inf_appendage_basis)
+    sup_appendage_basis_id = find_closest_point(thresh.GetOutput(), sup_appendage_basis)
+    bb_mv_id = find_closest_point(thresh.GetOutput(), bb_mv)
 
     bb_left = get_wide_bachmann_path_left(thresh.GetOutput(), inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id,
                                           LAA_pt_far_from_LIPV_id)
@@ -835,10 +791,7 @@ def compute_wide_BB_path_left(epi, df, left_atrial_appendage_epi, mitral_valve_e
 
 
 def get_in_surf1_closest_point_in_surf2(surf1, surf2, pt_id_in_surf2):
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(surf1)
-    loc.BuildLocator()
-    return loc.FindClosestPoint(surf2.GetPoint(pt_id_in_surf2))
+    return find_closest_point(surf1, surf2.GetPoint(pt_id_in_surf2))
 
 
 def get_wide_bachmann_path_left(epi, inf_appendage_basis_id, sup_appendage_basis_id, bb_mv_id, LAA_pt_far_from_LIPV_id):

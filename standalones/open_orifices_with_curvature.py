@@ -44,6 +44,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_cells_with_ids, get_center_of_mass
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
@@ -226,10 +227,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
         apex = p.picked_point
         p.close()
-        loc = vtk.vtkPointLocator()
-        loc.SetDataSet(model)
-        loc.BuildLocator()
-        apex_id = loc.FindClosestPoint(apex)
+
+        apex_id = find_closest_point(model, apex)
 
         if atrium == "LA":
             LAA = apex_id
@@ -246,11 +245,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
         p.show()
 
         if p.picked_point is not None:
-            loc = vtk.vtkPointLocator()
-            loc.SetDataSet(model)
-            loc.BuildLocator()
             transeptal_punture_id = vtk_to_numpy(model.GetPointData().GetArray('Ids'))[
-                loc.FindClosestPoint(p.picked_point)]
+                find_closest_point(model, p.picked_point)]
         p.close()
 
     for i in range(num):
@@ -354,10 +350,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
             p.close()
 
     model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(model)
-    loc.BuildLocator()
-    apex_id = loc.FindClosestPoint(apex)
+
+    apex_id = find_closest_point(model, apex)
     if atrium == "LA":
         LAA = apex_id
     elif atrium == "RA":

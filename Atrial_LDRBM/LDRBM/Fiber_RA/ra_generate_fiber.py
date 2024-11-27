@@ -42,6 +42,7 @@ from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_g
     vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
     get_cells_with_ids, apply_extract_cell_filter, get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -249,13 +250,9 @@ def ra_generate_fiber(model, args, job):
 
     mesh_surf = apply_vtk_geom_filter(CT_band)
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(mesh_surf)
-    loc.BuildLocator()
+    IVC_CT_pt_id = find_closest_point(mesh_surf, np.array(IVC_CT_pt))
 
-    IVC_CT_pt_id = loc.FindClosestPoint(np.array(IVC_CT_pt))
-
-    SVC_CT_pt_id = loc.FindClosestPoint(np.array(SVC_CT_pt))
+    SVC_CT_pt_id = find_closest_point(mesh_surf, np.array(SVC_CT_pt))
 
     CT_ub_pts = Method.dijkstra_path(mesh_surf, IVC_CT_pt_id, SVC_CT_pt_id)
 
@@ -280,21 +277,13 @@ def ra_generate_fiber(model, args, job):
 
     tao_RAA = np.max(vtk_to_numpy(CT_band.GetCellData().GetArray('phie_v2')))
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(CT_band)
-    loc.BuildLocator()
-
-    IVC_CT_pt_id = loc.FindClosestPoint(np.array(IVC_CT_pt))
+    IVC_CT_pt_id = find_closest_point(CT_band, np.array(IVC_CT_pt))
 
     no_IVC_s = apply_vtk_geom_filter(no_IVC_s)
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(no_IVC_s)
-    loc.BuildLocator()
-
-    IVC_CT_pt_id = loc.FindClosestPoint(np.array(CT_band.GetPoint(IVC_CT_pt_id)))
-    IVC_max_r_CT_pt_id = loc.FindClosestPoint(np.array(IVC_max_r_CT_pt))
-    IVC_SEPT_CT_pt_id = loc.FindClosestPoint(np.array(IVC_SEPT_CT_pt))
+    IVC_CT_pt_id = find_closest_point(no_IVC_s, np.array(CT_band.GetPoint(IVC_CT_pt_id)))
+    IVC_max_r_CT_pt_id = find_closest_point(no_IVC_s, np.array(IVC_max_r_CT_pt))
+    IVC_SEPT_CT_pt_id = find_closest_point(no_IVC_s, np.array(IVC_SEPT_CT_pt))
 
     CT_SEPT_path = np.concatenate((Method.dijkstra_path(no_IVC_s, IVC_CT_pt_id, IVC_max_r_CT_pt_id),
                                    Method.dijkstra_path(no_IVC_s, IVC_max_r_CT_pt_id, IVC_SEPT_CT_pt_id)), axis=0)
@@ -426,11 +415,7 @@ def ra_generate_fiber(model, args, job):
 
     tag[RAA_ids] = right_atrial_appendage_epi
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(CT_band)
-    loc.BuildLocator()
-
-    RAA_CT_pt = CT_band.GetPoint(loc.FindClosestPoint(np.array(df["RAA"])))
+    RAA_CT_pt = CT_band.GetPoint(find_closest_point(CT_band, np.array(df["RAA"])))
 
     CT = CT_band
 
@@ -554,19 +539,12 @@ def ra_generate_fiber(model, args, job):
                 vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtu", meshNew.VTKObject)
     center = np.asarray((np.array(df["SVC"]) + np.array(df["IVC"])) / 2)
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(CT)
-    loc.BuildLocator()
+    point1_id = find_closest_point(CT, IVC_max_r_CT_pt)
+    point2_id = find_closest_point(CT, SVC_CT_pt)
 
-    point1_id = loc.FindClosestPoint(IVC_max_r_CT_pt)
-    point2_id = loc.FindClosestPoint(SVC_CT_pt)
-
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(TV_s)
-    loc.BuildLocator()
-
-    point3_id = loc.FindClosestPoint(IVC_max_r_CT_pt)
-    point4_id = loc.FindClosestPoint(np.array(df["RAA"]))  # this is also the id for Bachmann-Bundle on the right atrium
+    point3_id = find_closest_point(TV_s, IVC_max_r_CT_pt)
+    point4_id = find_closest_point(TV_s,
+                                   np.array(df["RAA"]))  # this is also the id for Bachmann-Bundle on the right atrium
 
     CT = apply_vtk_geom_filter(CT)
 
@@ -595,13 +573,10 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.create_pts(ct_points_data, 'ct_points_data', f'{args.mesh}_surf/')
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(TV_lat)
-    loc.BuildLocator()
+    point3_id = find_closest_point(TV_lat, TV_s.GetPoint(point3_id))
 
-    point3_id = loc.FindClosestPoint(TV_s.GetPoint(point3_id))
-    point4_id = loc.FindClosestPoint(
-        TV_s.GetPoint(point4_id))  # this is also the id for Bachmann-Bundle on the right atrium
+    # this is also the id for Bachmann-Bundle on the right atrium
+    point4_id = find_closest_point(TV_lat, TV_s.GetPoint(point4_id))
 
     tv_points_data = Method.dijkstra_path(TV_lat, point3_id, point4_id)
 
@@ -635,6 +610,7 @@ def ra_generate_fiber(model, args, job):
     loc = vtk.vtkPointLocator()
     loc.SetDataSet(surface)
     loc.BuildLocator()
+
     point_apx_id = loc.FindClosestPoint(np.array(df["RAA"]))
     pm_ct_id_list = []
     for i in range(len(ct_points_data)):
@@ -651,11 +627,8 @@ def ra_generate_fiber(model, args, job):
     print("Creating Pectinate muscle 1")
     # the first PM is the one to the appendage
     # pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
-    loc = vtk.vtkPointLocator()
 
-    loc.SetDataSet(surface)
-    loc.BuildLocator()
-    RAA_CT_id = loc.FindClosestPoint(RAA_CT_pt)
+    RAA_CT_id = find_closest_point(surface, RAA_CT_pt)
 
     # Pectinate muscle going from the septum spurius to the RAA apex
     pm = Method.dijkstra_path(surface, RAA_CT_id, point_apx_id)
@@ -821,20 +794,12 @@ def ra_generate_fiber(model, args, job):
     if args.mesh_type == "vol":
         surface = apply_vtk_geom_filter(epi)
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(RAS_S)
-    loc.BuildLocator()
-
-    bb_c_id = loc.FindClosestPoint((np.array(df["TV"]) + np.array(df["SVC"])) / 2)
-
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(surface)
-    loc.BuildLocator()
+    bb_c_id = find_closest_point(RAS_S, (np.array(df["TV"]) + np.array(df["SVC"])) / 2)
 
     # Bachmann-Bundle starting point
-    bb_1_id = loc.FindClosestPoint(SVC_CT_pt)
-    bb_2_id = loc.FindClosestPoint(TV_lat.GetPoint(point4_id))
-    bb_c_id = loc.FindClosestPoint(RAS_S.GetPoint(bb_c_id))
+    bb_1_id = find_closest_point(surface, SVC_CT_pt)
+    bb_2_id = find_closest_point(surface, TV_lat.GetPoint(point4_id))
+    bb_c_id = find_closest_point(surface, RAS_S.GetPoint(bb_c_id))
 
     bachmann_bundle_points_data_1 = Method.dijkstra_path(surface, bb_1_id, bb_c_id)
 
@@ -930,18 +895,10 @@ def ra_generate_fiber(model, args, job):
         else:
             ra_epi = surface
 
-        loc_la_epi = vtk.vtkPointLocator()
-        loc_la_epi.SetDataSet(la_epi)
-        loc_la_epi.BuildLocator()
-
-        loc_ra_epi = vtk.vtkPointLocator()
-        loc_ra_epi.SetDataSet(ra_epi)
-        loc_ra_epi.BuildLocator()
-
-        ra_a_id = loc_ra_epi.FindClosestPoint(ra_bb_center)
-        la_c_id = loc_la_epi.FindClosestPoint(ra_bb_center)
-        ra_b_id = loc_ra_epi.FindClosestPoint(la_epi.GetPoint(la_c_id))
-        la_d_id = loc_la_epi.FindClosestPoint(la_appendage_basis_point)
+        ra_a_id = find_closest_point(ra_epi, ra_bb_center)
+        la_c_id = find_closest_point(la_epi, ra_bb_center)
+        ra_b_id = find_closest_point(ra_epi, la_epi.GetPoint(la_c_id))
+        la_d_id = find_closest_point(la_epi, la_appendage_basis_point)
 
         path_1 = Method.dijkstra_path(ra_epi, ra_a_id, ra_b_id)
         path_2 = Method.dijkstra_path(la_epi, la_c_id, la_d_id)

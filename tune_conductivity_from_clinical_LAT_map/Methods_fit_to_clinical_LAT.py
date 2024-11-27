@@ -37,6 +37,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, con
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_cells_with_ids
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -136,10 +137,7 @@ def low_vol_LAT(args, path):
 
         max_pt = np.mean(not_low_volt_endo_pts[ii][ids], axis=0)
 
-        loc = vtk.vtkPointLocator()
-        loc.SetDataSet(not_low_volt_endo)
-        loc.BuildLocator()
-        args.max_LAT_id = loc.FindClosestPoint(max_pt)
+        args.max_LAT_id = find_closest_point(not_low_volt_endo, max_pt)
         max_pt = np.array(not_low_volt_endo.GetPoint(args.max_LAT_id))
         args.LaAT = np.max(LAT_not_low_volt)
 
@@ -150,10 +148,7 @@ def low_vol_LAT(args, path):
 
         stim_pt = np.mean(not_low_volt_endo_pts[ii][ids], axis=0)
 
-        loc = vtk.vtkPointLocator()
-        loc.SetDataSet(not_low_volt_endo)
-        loc.BuildLocator()
-        stim_pt_id = loc.FindClosestPoint(stim_pt)
+        stim_pt_id = find_closest_point(not_low_volt_endo, stim_pt)
         stim_pt = np.array(not_low_volt_endo.GetPoint(stim_pt_id))
         min_LAT = np.min(LAT_not_low_volt[ii])
 

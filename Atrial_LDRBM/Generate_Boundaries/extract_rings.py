@@ -41,6 +41,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, num
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -132,11 +133,8 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         id_vec = vtk_to_numpy(mesh_conn.GetPointData().GetArray("RegionID"))
 
         # It can happen that the connectivity filter changes the ids
-        loc = vtk.vtkPointLocator()
-        loc.SetDataSet(mesh_conn)
-        loc.BuildLocator()
-        LAA_id = loc.FindClosestPoint(LA_ap_point)
-        RAA_id = loc.FindClosestPoint(RA_ap_point)
+        LAA_id = find_closest_point(mesh_conn, LA_ap_point)
+        RAA_id = find_closest_point(mesh_conn, RA_ap_point)
 
         LA_tag = id_vec[int(LAA_id)]
         RA_tag = id_vec[int(RAA_id)]
@@ -150,16 +148,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
 
         vtkWrite(LA, outdir + '/LA.vtk')
 
-        loc = vtk.vtkPointLocator()
-        loc.SetDataSet(LA)
-        loc.BuildLocator()
-        LAA_id = loc.FindClosestPoint(LA_ap_point)
+        LAA_id = find_closest_point(LA, LA_ap_point)
 
         if LAA_base_id != "":
-            loc = vtk.vtkPointLocator()
-            loc.SetDataSet(LA)
-            loc.BuildLocator()
-            LAA_base_id = loc.FindClosestPoint(LA_bs_point)
+            LAA_base_id = find_closest_point(LA, LA_bs_point)
 
         b_tag = np.zeros((LA.GetNumberOfPoints(),))
 
@@ -176,16 +168,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
 
         RA = generate_ids(RA_poly, "Ids", "Ids")
 
-        loc = vtk.vtkPointLocator()
-        loc.SetDataSet(RA)
-        loc.BuildLocator()
-        RAA_id = loc.FindClosestPoint(RA_ap_point)
+        RAA_id = find_closest_point(RA, RA_ap_point)
 
         if LAA_base_id != "":
-            loc = vtk.vtkPointLocator()
-            loc.SetDataSet(RA)
-            loc.BuildLocator()
-            RAA_base_id = loc.FindClosestPoint(RA_bs_point)
+            RAA_base_id = find_closest_point(RA, RA_bs_point)
 
         vtkWrite(RA, outdir + '/RA.vtk')
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
@@ -536,20 +522,13 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
         f.write(f'{i}\n')
     f.close()
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(MV_ring[0].vtk_polydata)
-    loc.BuildLocator()
+    lpv_mv = find_closest_point(MV_ring[0].vtk_polydata, lpv_mean)
+    rpv_mv = find_closest_point(MV_ring[0].vtk_polydata, rpv_mean)
 
-    lpv_mv = loc.FindClosestPoint(lpv_mean)
-    rpv_mv = loc.FindClosestPoint(rpv_mean)
-
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(boundary_edges)
-    loc.BuildLocator()
-    lpv_bb = loc.FindClosestPoint(lpv_mean)
-    rpv_bb = loc.FindClosestPoint(rpv_mean)
-    lpv_mv = loc.FindClosestPoint(MV_ring[0].vtk_polydata.GetPoint(lpv_mv))
-    rpv_mv = loc.FindClosestPoint(MV_ring[0].vtk_polydata.GetPoint(rpv_mv))
+    lpv_bb = find_closest_point(boundary_edges, lpv_mean)
+    rpv_bb = find_closest_point(boundary_edges, rpv_mean)
+    lpv_mv = find_closest_point(boundary_edges, MV_ring[0].vtk_polydata.GetPoint(lpv_mv))
+    rpv_mv = find_closest_point(boundary_edges, MV_ring[0].vtk_polydata.GetPoint(rpv_mv))
 
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(boundary_edges)

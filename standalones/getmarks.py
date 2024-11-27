@@ -33,6 +33,7 @@ import vtk
 
 import standalones.function as function
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 
 
@@ -71,18 +72,16 @@ def get_landmarks(mesh, prealigned=1, scale=1):
     thr = get_threshold_between(model, 5, 5, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     rsv = thr.GetOutput()
 
-    thr = get_threshold_between(model, 4, 4,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag" )
+    thr = get_threshold_between(model, 4, 4, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     riv = thr.GetOutput()
 
-
-    thr=get_threshold_between(model,3,3,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
+    thr = get_threshold_between(model, 3, 3, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     lsv = thr.GetOutput()
 
-
-    thr=get_threshold_between(model,2,2,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
+    thr = get_threshold_between(model, 2, 2, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     liv = thr.GetOutput()
 
-    thr=get_threshold_between(model,1,1,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
+    thr = get_threshold_between(model, 1, 1, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "boundary_tag")
     mv = thr.GetOutput()
 
     rsv_points = vtk_to_numpy(rsv.GetPoints().GetData())
@@ -113,23 +112,17 @@ def get_landmarks(mesh, prealigned=1, scale=1):
     mv_l_fuzzy, mv_r_fuzzy = function.get_mv_l_and_r(mv_band, center_lpv)
 
     # mv_anterior
-    loc_an = vtk.vtkPointLocator()
-    loc_an.SetDataSet(mv_anterior)
-    loc_an.BuildLocator()
-    mv_an_l = mv_anterior.GetPoint(loc_an.FindClosestPoint(mv_l_fuzzy))
-    mv_an_r = mv_anterior.GetPoint(loc_an.FindClosestPoint(mv_r_fuzzy))
+    mv_an_l = mv_anterior.GetPoint(find_closest_point(mv_anterior, mv_l_fuzzy))
+    mv_an_r = mv_anterior.GetPoint(find_closest_point(mv_anterior, mv_r_fuzzy))
 
     # mv_posterior
-    loc_po = vtk.vtkPointLocator()
-    loc_po.SetDataSet(mv_posterior)
-    loc_po.BuildLocator()
-    mv_po_l = mv_posterior.GetPoint(loc_po.FindClosestPoint(mv_l_fuzzy))
-    mv_po_r = mv_posterior.GetPoint(loc_po.FindClosestPoint(mv_r_fuzzy))
+    mv_po_l = mv_posterior.GetPoint(find_closest_point(mv_posterior, mv_l_fuzzy))
+    mv_po_r = mv_posterior.GetPoint(find_closest_point(mv_posterior, mv_r_fuzzy))
 
-    path_an = function.dijkstra_path(function.to_polydata(mv_anterior), loc_an.FindClosestPoint(mv_l_fuzzy),
-                                     loc_an.FindClosestPoint(mv_r_fuzzy))
-    path_po = function.dijkstra_path(function.to_polydata(mv_posterior), loc_po.FindClosestPoint(mv_l_fuzzy),
-                                     loc_po.FindClosestPoint(mv_r_fuzzy))
+    path_an = function.dijkstra_path(function.to_polydata(mv_anterior), find_closest_point(mv_anterior, mv_l_fuzzy),
+                                     find_closest_point(mv_anterior, mv_r_fuzzy))
+    path_po = function.dijkstra_path(function.to_polydata(mv_posterior), find_closest_point(mv_posterior, mv_l_fuzzy),
+                                     find_closest_point(mv_posterior, mv_r_fuzzy))
 
     length_an = len(path_an)
     mv_an_middle = path_an[int(length_an * 0.5)]

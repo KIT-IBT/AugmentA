@@ -40,6 +40,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_po
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
 from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 
@@ -149,10 +150,8 @@ def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, vessels_cutt
     apex = pick_point(mesh_from_vtk, "atrial appendage apex")
 
     model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(model)
-    loc.BuildLocator()
-    apex_id = loc.FindClosestPoint(apex)
+
+    apex_id = find_closest_point(model, apex)
     if atrium == "LA":
         LAA = apex_id
     elif atrium == "RA":

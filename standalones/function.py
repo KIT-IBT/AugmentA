@@ -33,6 +33,7 @@ from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_norm
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, \
     get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
 
 
@@ -197,10 +198,7 @@ def get_mv_l_and_r(mv_band, center_lpv):
 
 
 def get_closest_point_id_from_polydata(polydata, coordiante):
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(polydata)
-    loc.BuildLocator()
-    return loc.FindClosestPoint(coordiante)
+    return find_closest_point(polydata, coordiante)
 
 
 def multidim_intersect(arr1, arr2):

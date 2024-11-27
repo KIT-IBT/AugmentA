@@ -45,6 +45,7 @@ from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructur
     vtk_unstructured_grid_writer, vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
     apply_extract_cell_filter, get_cells_with_ids
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -137,12 +138,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     tv_ra = vtk_thr(ra_epi, 2, "CELLS", "elemTag", tricuspid_valve_epi, tricuspid_valve_epi)
 
     # Find middle and upper posterior bridges points
-
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(ra_septum)
-    loc.BuildLocator()
-    point_septum_SVC = ra_septum.GetPoint(loc.FindClosestPoint(SVC_p))
-    point_septum_IVC = ra_septum.GetPoint(loc.FindClosestPoint(IVC_p))
+    point_septum_SVC = ra_septum.GetPoint(find_closest_point(ra_septum, SVC_p))
+    point_septum_IVC = ra_septum.GetPoint(find_closest_point(ra_septum, IVC_p))
 
     SVC_IVC_septum_path = Method.dijkstra_path_coord(ra_epi_surface, point_septum_SVC, point_septum_IVC)
 
@@ -164,15 +161,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     # Coronary sinus bridge point
 
-    loc = vtk.vtkPointLocator()  # it happened that the point is too close to the edge and the heart is not found
-    loc.SetDataSet(mv_la)
-    loc.BuildLocator()
-    point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p + TV_p * 0.1))
+    # it happened that the point is too close to the edge and the heart is not found
+    point_CS_on_MV = mv_la.GetPoint(find_closest_point(mv_la, CS_p + TV_p * 0.1))
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(ra_septum)
-    loc.BuildLocator()
-    point_CS_bridge = ra_septum.GetPoint(loc.FindClosestPoint(point_CS_on_MV))
+    point_CS_bridge = ra_septum.GetPoint(find_closest_point(ra_septum, point_CS_on_MV))
 
     csb_tube, csb_sphere_1, csb_sphere_2, csb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface,
                                                                                           ra_epi_surface,
