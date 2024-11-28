@@ -34,7 +34,8 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, \
     get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
+    ExtractionModes
 
 
 def to_polydata(mesh):
@@ -162,10 +163,7 @@ def dijkstra_path(polydata, StartVertex, EndVertex):
 
 
 def get_mv_l_and_r(mv_band, center_lpv):
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(mv_band)
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+    connect = init_connectivity_filter(mv_band, ExtractionModes.ALL_REGIONS)
     connect.SetExtractionModeToSpecifiedRegions()
     connect.AddSpecifiedRegion(1)
     connect.Update()

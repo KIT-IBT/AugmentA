@@ -41,7 +41,8 @@ from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filte
     clean_polydata, vtk_append, apply_extract_cell_filter, get_center_of_mass, get_feature_edges, \
     get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
+    ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
     get_threshold_between
@@ -468,10 +469,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
 
     plane = initialize_plane(-norm_1[0], moved_center[0])
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(get_elements_above_plane(ra_tv_surface, plane))
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+    connect = init_connectivity_filter(get_elements_above_plane(ra_tv_surface, plane), ExtractionModes.ALL_REGIONS)
     connect.SetExtractionModeToSpecifiedRegions()
     connect.AddSpecifiedRegion(1)
     connect.Update()
@@ -508,18 +506,6 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     path_tv_id_scv = find_closest_point(endo, center_point_scv)
 
     return path_tv_id_icv, path_tv_id_scv
-
-
-def extract_largest_region(mesh):
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(mesh)
-    connect.SetExtractionModeToLargestRegion()
-    connect.Update()
-    surface = connect.GetOutput()
-
-    surface = apply_vtk_geom_filter(surface)
-
-    return clean_polydata(surface)
 
 
 def assign_ra_appendage(model, SCV, appex_point, tag):
@@ -833,10 +819,7 @@ def find_tau(model, ub, lb, low_up, scalar):
         else:
             thresh = get_upper_threshold(model, (ub + lb) / 2, "vtkDataObject::FIELD_ASSOCIATION_CELLS", scalar)
 
-        connect = vtk.vtkConnectivityFilter()
-        connect.SetInputData(thresh.GetOutput())
-        connect.SetExtractionModeToAllRegions()
-        connect.Update()
+        connect = init_connectivity_filter(thresh.GetOutput(), ExtractionModes.ALL_REGIONS)
         num = connect.GetNumberOfExtractedRegions()
 
         print("Iteration: ", k)

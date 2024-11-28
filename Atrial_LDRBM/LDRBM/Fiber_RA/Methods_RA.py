@@ -40,7 +40,8 @@ from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_g
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, vtk_append, apply_extract_cell_filter, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
+    ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -604,10 +605,7 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
 
     extracted_mesh = get_elements_above_plane(ra_tv_s_surface, plane)
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(extracted_mesh)
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+    connect = init_connectivity_filter(extracted_mesh, ExtractionModes.ALL_REGIONS)
     connect.SetExtractionModeToSpecifiedRegions()
     connect.AddSpecifiedRegion(1)
     connect.Update()
@@ -643,18 +641,6 @@ def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, 
     path_tv_id_scv = find_closest_point(endo, center_point_scv)
 
     return path_tv_id_icv, path_tv_id_scv
-
-
-def extract_largest_region(mesh):
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(mesh)
-    connect.SetExtractionModeToLargestRegion()
-    connect.Update()
-    surface = connect.GetOutput()
-
-    surface = apply_vtk_geom_filter(surface)
-
-    return clean_polydata(surface)
 
 
 def assign_ra_appendage(model, SCV, appex_point, tag, elemTag):

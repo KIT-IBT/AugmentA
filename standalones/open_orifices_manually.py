@@ -25,21 +25,15 @@ specific language governing permissions and limitations
 under the License.  
 """
 import argparse
-import collections
 
-import numpy as np
 import pymeshfix
 import pyvista as pv
 import vtk
-from scipy.spatial import cKDTree
-from vtk.numpy_interface import dataset_adapter as dsa
 
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from Atrial_LDRBM.Generate_Boundaries import extract_rings
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
 from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
@@ -166,53 +160,6 @@ def run():
 def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
     return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
                                                                                thr2)
-
-
-def extract_largest_region(mesh):
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(mesh)
-    connect.SetExtractionModeToLargestRegion()
-    connect.Update()
-    surface = connect.GetOutput()
-
-    surface = apply_vtk_geom_filter(surface)
-
-    return clean_polydata(surface)
-
-
-def point_array_mapper(mesh1, mesh2, idat):
-    pts1 = vtk_to_numpy(mesh1.GetPoints().GetData())
-    pts2 = vtk_to_numpy(mesh2.GetPoints().GetData())
-
-    tree = cKDTree(pts1)
-
-    dd, ii = tree.query(pts2, workers=-1)
-
-    meshNew = dsa.WrapDataObject(mesh2)
-    if idat == "all":
-        for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk_to_numpy(
-                mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
-            if isinstance(data[0], collections.abc.Sized):
-                data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
-            else:
-                data2 = np.zeros((len(pts2),), dtype=data.dtype)
-
-            data2 = data[ii]
-            data2 = np.where(np.isnan(data2), 10000, data2)
-
-            meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
-    else:
-        data = vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
-        if isinstance(data[0], collections.abc.Sized):
-            data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
-        else:
-            data2 = np.zeros((len(pts2),), dtype=data.dtype)
-
-        data2 = data[ii]
-        meshNew.PointData.append(data2, idat)
-
-    return meshNew.VTKObject
 
 
 if __name__ == '__main__':

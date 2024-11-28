@@ -43,7 +43,8 @@ from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_g
     vtk_xml_unstructured_grid_writer, write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, generate_ids, \
     get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, init_connectivity_filter, \
+    ExtractionModes
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -135,10 +136,8 @@ def la_generate_fiber(model, args, job):
     print('Calculating tao_lpv done! tap_lpv = ', tao_lpv)
 
     thr = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(thr)
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+
+    connect = init_connectivity_filter(thr, ExtractionModes.ALL_REGIONS)
 
     PVs = dict()
     # Distinguish between LIPV and LSPV
@@ -165,10 +164,7 @@ def la_generate_fiber(model, args, job):
 
     thr = vtk_thr(model, 0, "CELLS", "phie_v", tao_rpv)
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(thr)
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+    connect = init_connectivity_filter(thr, ExtractionModes.ALL_REGIONS)
 
     # Distinguish between RIPV and RSPV
     PVs = Method.distinguish_PVs(connect, PVs, df, "RIPV", "RSPV")

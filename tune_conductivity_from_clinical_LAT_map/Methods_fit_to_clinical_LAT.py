@@ -38,6 +38,7 @@ from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructur
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_cells_with_ids
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.writer import write_to_dat
 
@@ -185,11 +186,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
 
         b_ids = vtk_to_numpy(band.GetCellData().GetArray('Global_ids')).astype(int)
 
-        connect = vtk.vtkConnectivityFilter()
-        connect.SetInputData(band)
-        connect.SetExtractionModeToClosestPointRegion()
-        connect.SetClosestPoint(stim_pt)
-        connect.Update()
+        connect = init_connectivity_filter(band, ExtractionModes.CLOSEST_POINT, closest_point=stim_pt)
         largest_band = connect.GetOutput()
 
         l_b_ids = vtk_to_numpy(largest_band.GetCellData().GetArray('Global_ids')).astype(int)
@@ -217,10 +214,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
 
             tree = cKDTree(pts)
 
-            connect = vtk.vtkConnectivityFilter()
-            connect.SetInputData(el_removed)
-            connect.SetExtractionModeToSpecifiedRegions()
-            connect.Update()
+            connect = init_connectivity_filter(el_removed, ExtractionModes.SPECIFIED_REGIONS)
             num = connect.GetNumberOfExtractedRegions()
             for n in range(num):
                 connect.AddSpecifiedRegion(n)
@@ -272,10 +266,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
     tree = cKDTree(pts)
 
     # Find elements at the boundary of the areas to clean, which are gonna be used for the fitting of the conductivities
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(endo_to_interpolate)
-    connect.SetExtractionModeToSpecifiedRegions()
-    connect.Update()
+    connect = init_connectivity_filter(endo_to_interpolate, ExtractionModes.SPECIFIED_REGIONS)
     num = connect.GetNumberOfExtractedRegions()
     for n in range(num):
         connect.AddSpecifiedRegion(n)
@@ -381,14 +372,3 @@ def get_EAP(path_mod, path_fib):
     stim_pt = model.GetPoint(LA_MV_ids[np.argmin(LAT_map[LA_MV_ids])])
 
     return stim_pt
-
-
-def extract_largest_region(mesh):
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(mesh)
-    connect.SetExtractionModeToLargestRegion()
-    connect.Update()
-    surface = connect.GetOutput()
-
-    surface = apply_vtk_geom_filter(surface)
-    return clean_polydata(surface)

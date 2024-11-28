@@ -38,7 +38,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
@@ -208,7 +208,7 @@ def ra_generate_fiber(model, args, job):
     IVC_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v", tao_icv)  # Changed 0-1 because ICV and SVC are inverted
     no_IVC_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_v", tao_icv)  # Changed 1-0
 
-    IVC_s = Method.extract_largest_region(IVC_s)  # Added
+    IVC_s = extract_largest_region(IVC_s)  # Added
 
     max_phie_r_ivc = np.max(vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r'))) + 0.2
 
@@ -217,7 +217,7 @@ def ra_generate_fiber(model, args, job):
     SVC_s = vtk_thr(RAW_s, 1, "CELLS", "phie_v", tao_scv)  # Changed 1->0
     no_SVC_s = vtk_thr(RAW_s, 0, "CELLS", "phie_v", tao_scv)  # Changed 0->1
 
-    SVC_s = Method.extract_largest_region(SVC_s)
+    SVC_s = extract_largest_region(SVC_s)
 
     if args.debug:  # CHECK
         Method.writer_vtk(IVC_s, f'{args.mesh}_surf/' + "ivc_s.vtk")
@@ -241,10 +241,10 @@ def ra_generate_fiber(model, args, job):
         IVC_s.GetPointData().GetArray('phie_r'))))  # not always the best choice for pm1
 
     CT_band = vtk_thr(RAW_s, 2, "CELLS", "phie_w", 0.1, tao_ct_plus)  # grad_w
-    CT_band = Method.extract_largest_region(CT_band)
+    CT_band = extract_largest_region(CT_band)
     CT_ub = vtk_thr(RAW_s, 2, "CELLS", "phie_w", tao_ct_plus - 0.02, tao_ct_plus)  # grad_w
 
-    CT_ub = Method.extract_largest_region(CT_ub)
+    CT_ub = extract_largest_region(CT_ub)
 
     if args.debug:
         Method.writer_vtk(CT_band, f'{args.mesh}_surf/' + "ct_band.vtk")

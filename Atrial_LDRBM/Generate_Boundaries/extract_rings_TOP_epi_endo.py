@@ -42,7 +42,8 @@ from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_write
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane, \
+    init_connectivity_filter, ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
@@ -118,12 +119,7 @@ def label_atrial_orifices_TOP_epi_endo(mesh, LAA_id="", RAA_id="", LAA_base_id="
             centroids["LAA_base"] = LA_bs_point
             centroids["RAA_base"] = RA_bs_point
 
-        connect = vtk.vtkConnectivityFilter()
-        connect.SetInputData(mesh_surf)
-        connect.SetExtractionModeToAllRegions()
-        connect.ColorRegionsOn()
-        connect.Update()
-        mesh_conn = connect.GetOutput()
+        mesh_conn = init_connectivity_filter(mesh_surf, ExtractionModes.ALL_REGIONS, True).GetOutput()
         mesh_conn.GetPointData().GetArray("RegionId").SetName("RegionID")
         id_vec = vtk_to_numpy(mesh_conn.GetPointData().GetArray("RegionID"))
 
@@ -229,10 +225,7 @@ def detect_and_mark_rings(surf, ap_point):
 
     "Splitting rings"
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(boundary_edges)
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+    connect = init_connectivity_filter(boundary_edges, ExtractionModes.ALL_REGIONS)
     num = connect.GetNumberOfExtractedRegions()
 
     connect.SetExtractionModeToSpecifiedRegions()
@@ -563,10 +556,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     ivc_points = ivc.GetPoints().GetData()
     ivc_points = vtk_to_numpy(ivc_points)
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(gamma_top_epi)
-    connect.SetExtractionModeToSpecifiedRegions()
-    connect.Update()
+    connect = init_connectivity_filter(gamma_top_epi, ExtractionModes.SPECIFIED_REGIONS)
     num = connect.GetNumberOfExtractedRegions()
     for i in range(num):
         connect.AddSpecifiedRegion(i)
@@ -606,10 +596,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     pts_in_top_epi = vtk_to_numpy(top_cut_epi.GetPointData().GetArray("Ids"))
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(gamma_top_endo)
-    connect.SetExtractionModeToSpecifiedRegions()
-    connect.Update()
+    connect = init_connectivity_filter(gamma_top_endo, ExtractionModes.SPECIFIED_REGIONS)
     num = connect.GetNumberOfExtractedRegions()
     for i in range(num):
         connect.AddSpecifiedRegion(i)
@@ -680,10 +667,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     thresh_geo = apply_vtk_geom_filter(thresh.GetOutputPort(), True)
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(thresh_geo)
-    connect.SetExtractionModeToSpecifiedRegions()
-    connect.Update()
+    connect = init_connectivity_filter(thresh_geo, ExtractionModes.SPECIFIED_REGIONS)
     num = connect.GetNumberOfExtractedRegions()
 
     for i in range(num):
@@ -726,10 +710,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     mv_id_endo = vtk_to_numpy(top_cut_endo.GetPointData().GetArray("Ids"))[0]
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(thresh_geo)
-    connect.SetExtractionModeToSpecifiedRegions()
-    connect.Update()
+    connect = init_connectivity_filter(thresh_geo, ExtractionModes.SPECIFIED_REGIONS)
     num = connect.GetNumberOfExtractedRegions()
 
     for i in range(num):

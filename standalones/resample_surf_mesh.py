@@ -41,6 +41,7 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, get_cells_with_ids, \
     get_feature_edges
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
@@ -128,10 +129,7 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         earth = apply_vtk_geom_filter(get_cells_with_ids(reader.GetOutput(), cells_no_bd))
 
-        connect = vtk.vtkConnectivityFilter()
-        connect.SetInputData(clean_polydata(earth))
-        connect.SetExtractionModeToLargestRegion()
-        connect.Update()
+        connect = init_connectivity_filter(clean_polydata(earth), ExtractionModes.LARGEST_REGION)
 
         vtk_obj_writer(f'{meshname}_cleaned.obj', clean_polydata(connect.GetOutput()))
         mesh_data["vol"] = [vol]

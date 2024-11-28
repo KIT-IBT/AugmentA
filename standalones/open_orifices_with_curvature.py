@@ -37,9 +37,10 @@ import vtk
 from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
-import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region, vtk_thr
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
@@ -48,6 +49,8 @@ from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filte
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
+from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 pv.set_plot_theme('dark')
@@ -170,7 +173,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                                           debug)
 
         if debug and atrium == 'RA':
-            writer_vtk(valve, f"{full_path}/{atrium}_clean_with_curv_" + "valve.vtk")
+            vtk_polydata_writer(valve, f"{full_path}/{atrium}_clean_with_curv_" + "valve.vtk")
 
         center_of_mass = filters.get_center_of_mass(valve, False)
 
@@ -201,15 +204,10 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     vtk_unstructured_grid_writer(f"{full_path}/{atrium}_h_curv.vtk", high_c, True)
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(high_c)
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+    connect = init_connectivity_filter(high_c, ExtractionModes.ALL_REGIONS)
     num = connect.GetNumberOfExtractedRegions()
 
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(high_c)
-    connect.SetExtractionModeToSpecifiedRegions()
+    connect = init_connectivity_filter(high_c, ExtractionModes.SPECIFIED_REGIONS)
 
     rings = []
 
@@ -254,10 +252,8 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
                 if len(set(pt_high_c).intersection(pts_low_v)) > 0:  # the region is both high curvature and low voltage
                     pt_max_curv = np.asarray(model.GetPoint(Gl_pt_id.index(pt_high_c[np.argmax(curv_s)])))
                     el_low_vol = set()
-                    connect2 = vtk.vtkConnectivityFilter()
-                    connect2.SetInputData(low_v)
-                    connect2.SetExtractionModeToAllRegions()
-                    connect2.Update()
+
+                    connect2 = init_connectivity_filter(low_v, ExtractionModes.ALL_REGIONS)
                     num2 = connect2.GetNumberOfExtractedRegions()
 
                     connect2.SetExtractionModeToSpecifiedRegions()
@@ -333,76 +329,6 @@ def run():
     apex_id = open_orifices_with_curvature(args.mesh, args.atrium, args.MRI, args.scale, args.size,
                                            args.min_cutting_radius, args.max_cutting_radius, args.LAA, args.RAA,
                                            args.debug)
-
-
-def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
-                                                                               thr2)
-
-
-def extract_largest_region(mesh):
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(mesh)
-    connect.SetExtractionModeToLargestRegion()
-    connect.Update()
-    surface = connect.GetOutput()
-
-    surface = apply_vtk_geom_filter(surface)
-    return clean_polydata(surface)
-
-
-def point_array_mapper(mesh1, mesh2, idat):
-    pts1 = vtk_to_numpy(mesh1.GetPoints().GetData())
-    pts2 = vtk_to_numpy(mesh2.GetPoints().GetData())
-
-    tree = cKDTree(pts1)
-
-    dd, ii = tree.query(pts2, workers=-1)
-
-    meshNew = dsa.WrapDataObject(mesh2)
-    if idat == "all":
-        for i in range(mesh1.GetPointData().GetNumberOfArrays()):
-            data = vtk_to_numpy(
-                mesh1.GetPointData().GetArray(mesh1.GetPointData().GetArrayName(i)))
-            if isinstance(data[0], collections.abc.Sized):
-                data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
-            else:
-                data2 = np.zeros((len(pts2),), dtype=data.dtype)
-
-            data2 = data[ii]
-            data2 = np.where(np.isnan(data2), 10000, data2)
-
-            meshNew.PointData.append(data2, mesh1.GetPointData().GetArrayName(i))
-    else:
-        data = vtk_to_numpy(mesh1.GetPointData().GetArray(idat))
-        if isinstance(data[0], collections.abc.Sized):
-            data2 = np.zeros((len(pts2), len(data[0])), dtype=data.dtype)
-        else:
-            data2 = np.zeros((len(pts2),), dtype=data.dtype)
-
-        data2 = data[ii]
-        meshNew.PointData.append(data2, idat)
-
-    return meshNew.VTKObject
-
-
-def create_pts(array_points, array_name, mesh_dir):
-    f = open(f"{mesh_dir}{array_name}.pts", "w")
-    f.write("0 0 0\n")
-    for i in range(len(array_points)):
-        f.write(f"{array_points[i][0]} {array_points[i][1]} {array_points[i][2]}\n")
-    f.close()
-
-
-def to_polydata(mesh):
-    polydata = apply_vtk_geom_filter(mesh)
-
-    return polydata
-
-
-def writer_vtk(mesh, filename):
-    vtk_polydata_writer(filename, to_polydata(mesh))
-
 
 if __name__ == '__main__':
     run()
