@@ -15,7 +15,7 @@ to you under the Apache License, Version 2.0 (the
 "License"); you may not use this file except in compliance
 with the License.  You may obtain a copy of the License at
 
-  http://www.apache.org/licenses/LICENSE-2.0
+  https://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing,
 software distributed under the License is distributed on an
@@ -76,9 +76,6 @@ def la_generate_fiber(model, args, job):
     inferior_right_pulmonary_vein_epi = int(tag_dict['inferior_right_pulmonary_vein_epi'])
     left_atrial_appendage_epi = int(tag_dict['left_atrial_appendage_epi'])
     left_atrial_wall_epi = int(tag_dict['left_atrial_wall_epi'])
-    left_atrial_lateral_wall_epi = int(tag_dict['left_atrial_lateral_wall_epi'])
-    left_septum_wall_epi = int(tag_dict['left_septum_wall_epi'])
-    left_atrial_roof_epi = int(tag_dict['left_atrial_roof_epi'])
 
     # load endo tags
     mitral_valve_endo = int(tag_dict['mitral_valve_endo'])
@@ -88,23 +85,14 @@ def la_generate_fiber(model, args, job):
     inferior_right_pulmonary_vein_endo = int(tag_dict['inferior_right_pulmonary_vein_endo'])
     left_atrial_appendage_endo = int(tag_dict['left_atrial_appendage_endo'])
     left_atrial_wall_endo = int(tag_dict['left_atrial_wall_endo'])
-    left_atrial_lateral_wall_endo = int(tag_dict['left_atrial_lateral_wall_endo'])
-    left_septum_wall_endo = int(tag_dict['left_septum_wall_endo'])
-    left_atrial_roof_endo = int(tag_dict['left_atrial_roof_endo'])
     bachmann_bundel_left = int(tag_dict['bachmann_bundel_left'])
 
-    tao_mv = 0.85
-
     # ab
-    ab = model.GetCellData().GetArray('phie_ab')
     ab_grad = model.GetCellData().GetArray('grad_ab')
-    ab = vtk_to_numpy(ab)
     ab_grad = vtk_to_numpy(ab_grad)
 
     # v
-    v = model.GetCellData().GetArray('phie_v')
     v_grad = model.GetCellData().GetArray('grad_v')
-    v = vtk_to_numpy(v)
     v_grad = vtk_to_numpy(v_grad)
 
     # r
@@ -112,15 +100,6 @@ def la_generate_fiber(model, args, job):
     r_grad = model.GetCellData().GetArray('grad_r')
     r = vtk_to_numpy(r)
     r_grad = vtk_to_numpy(r_grad)
-
-    # r2
-    r2 = model.GetCellData().GetArray('phie_r2')
-    r2 = vtk_to_numpy(r2)
-
-    # phie
-    if args.mesh_type == "vol":
-        phie = model.GetCellData().GetArray('phie_phi')
-        phie = vtk_to_numpy(phie)
 
     phie_grad = model.GetCellData().GetArray('grad_phi')
     phie_grad = vtk_to_numpy(phie_grad)
@@ -194,10 +173,6 @@ def la_generate_fiber(model, args, job):
         endo_ids = np.setdiff1d(endo_ids, epi_ids)
 
         tag[endo_ids] = left_atrial_wall_endo
-
-    LAA_s = vtk_thr(model, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv + 0.01)
-
-    LAA_s = vtk_thr(LAA_s, 0, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - 0.03)
 
     ## Optimize shape of LAA solving a laplacian with 0 in LAA and 1 in the boundary of LAA_s
 
