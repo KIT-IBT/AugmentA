@@ -35,9 +35,9 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import laplace_0_1
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
@@ -191,7 +191,7 @@ def la_generate_fiber(model, args, job):
 
         tag_endo[LAA_ids] = tag_dict['left_atrial_appendage_endo']
 
-        tag_endo = copy_valve_ids(PVs["LIPV"], PVs["LSPV"], PVs["RIPV"], PVs["RSPV"], tag_dict, tag_endo)
+        tag_endo = copy_valve_ids(PVs["LIPV"], PVs["LSPV"], PVs["RIPV"], PVs["RSPV"], tag_dict, tag_endo, "endo")
 
         ids_to_clone = [PVs["RIPV"], PVs["LIPV"], PVs["RSPV"], PVs["LSPV"]]
         ab_grad = clone_ids(v_grad, ab_grad, ids_to_clone)
@@ -201,7 +201,7 @@ def la_generate_fiber(model, args, job):
 
         tag_epi[LAA_ids] = left_atrial_appendage_epi
 
-        tag_epi = copy_valve_ids(PVs["LIPV"], PVs["LSPV"], PVs["RIPV"], PVs["RSPV"], tag_dict, tag_epi)
+        tag_epi = copy_valve_ids(PVs["LIPV"], PVs["LSPV"], PVs["RIPV"], PVs["RSPV"], tag_dict, tag_epi, "epi")
 
         ab_grad_epi = np.copy(ab_grad)
 
@@ -219,7 +219,7 @@ def la_generate_fiber(model, args, job):
         RSPV_ids_endo = np.intersect1d(PVs["RSPV"], endo_ids)
         LSPV_ids_endo = np.intersect1d(PVs["LSPV"], endo_ids)
 
-        tag = copy_valve_ids(LIPV_ids_endo, LSPV_ids_endo, RIPV_ids_endo, RSPV_ids_endo, tag_dict, tag)
+        tag = copy_valve_ids(LIPV_ids_endo, LSPV_ids_endo, RIPV_ids_endo, RSPV_ids_endo, tag_dict, tag,"endo")
 
         id_to_clone = [RIPV_ids_endo, RSPV_ids_endo, LIPV_ids_endo, LSPV_ids_endo]
         ab_grad = clone_ids(v_grad, ab_grad, id_to_clone)
@@ -237,7 +237,7 @@ def la_generate_fiber(model, args, job):
         RSPV_ids_epi = np.intersect1d(PVs["RSPV"], epi_ids)
         LSPV_ids_epi = np.intersect1d(PVs["LSPV"], epi_ids)
 
-        tag = copy_valve_ids(LIPV_ids_epi, LSPV_ids_epi, RIPV_ids_epi, RSPV_ids_epi, tag_dict, tag)
+        tag = copy_valve_ids(LIPV_ids_epi, LSPV_ids_epi, RIPV_ids_epi, RSPV_ids_epi, tag_dict, tag, "epi")
 
     # Get epi bundle band
 
@@ -476,9 +476,9 @@ def clone_ids(source, dest, id_to_clone):
     return dest
 
 
-def copy_valve_ids(LIPV_ids, LSPV_ids, RIPV_ids, RSPV_ids, tag_source, tag_goal):
-    tag_goal[RIPV_ids] = tag_source['inferior_right_pulmonary_vein_endo']
-    tag_goal[LIPV_ids] = tag_source['inferior_left_pulmonary_vein_endo']
-    tag_goal[RSPV_ids] = tag_source['superior_right_pulmonary_vein_endo']
-    tag_goal[LSPV_ids] = tag_source['superior_left_pulmonary_vein_endo']
+def copy_valve_ids(LIPV_ids, LSPV_ids, RIPV_ids, RSPV_ids, tag_source, tag_goal, extension):
+    tag_goal[RIPV_ids] = tag_source[f'inferior_right_pulmonary_vein_{extension}']
+    tag_goal[LIPV_ids] = tag_source[f'inferior_left_pulmonary_vein_{extension}']
+    tag_goal[RSPV_ids] = tag_source[f'superior_right_pulmonary_vein_{extension}']
+    tag_goal[LSPV_ids] = tag_source[f'superior_left_pulmonary_vein_{extension}']
     return tag_goal
