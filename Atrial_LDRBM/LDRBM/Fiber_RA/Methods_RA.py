@@ -33,7 +33,8 @@ import standalones.function
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from Atrial_LDRBM.LDRBM.Fiber_LA import Methods_LA
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import generate_spline_points
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors, \
+    get_normalized_cross_product
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_to_pts, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
@@ -253,8 +254,7 @@ def generate_sheet_dir(args, model, job):
     sheet = np.cross(normals, fiber)
     sheet = np.where(sheet == [0, 0, 0], [1, 0, 0], sheet).astype("float32")
     # normalize
-    abs_sheet = np.linalg.norm(sheet, axis=1, keepdims=True)
-    sheet_norm = sheet / abs_sheet
+    sheet_norm = normalize_vectors(sheet)
 
     '''
     writing

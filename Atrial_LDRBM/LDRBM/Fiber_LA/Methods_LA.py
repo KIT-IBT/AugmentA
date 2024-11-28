@@ -33,7 +33,8 @@ from scipy.spatial.distance import cosine
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import standalones.function
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr, get_normalized_cross_product
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \

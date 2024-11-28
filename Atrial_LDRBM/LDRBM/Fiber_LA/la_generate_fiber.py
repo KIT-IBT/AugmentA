@@ -35,6 +35,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import laplace_0_1
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
@@ -271,14 +272,9 @@ def la_generate_fiber(model, args, job):
         et = phie_grad_norm
         print('############### et ###############')
 
-        # k
-        k_endo = ab_grad
-        k_epi = ab_grad_epi
-        print('############### k ###############')
+        en_endo = calculate_en(et, ab_grad)
 
-        en_endo = calculate_en(et, k_endo)
-
-        en_epi = calculate_en(et, k_epi)
+        en_epi = calculate_en(et, ab_grad_epi)
 
         print('############### en ###############')
         # el
@@ -286,10 +282,7 @@ def la_generate_fiber(model, args, job):
         el_epi = np.cross(en_epi, et)
         print('############### el ###############')
 
-        abs_v_grad = np.linalg.norm(v_grad, axis=1, keepdims=True)
-        abs_v_grad = np.where(abs_v_grad != 0, abs_v_grad, 1)
-        v_grad_norm = v_grad / abs_v_grad
-
+        v_grad_norm = normalize_vectors(v_grad)
         ### Subendo PVs bundle selection
 
         el_endo[PVs["LIPV"]] = v_grad_norm[PVs["LIPV"]]
@@ -345,9 +338,7 @@ def la_generate_fiber(model, args, job):
         el = np.cross(en, et)
         print('############### el ###############')
 
-        abs_v_grad = np.linalg.norm(v_grad, axis=1, keepdims=True)
-        abs_v_grad = np.where(abs_v_grad != 0, abs_v_grad, 1)
-        v_grad_norm = v_grad / abs_v_grad
+        v_grad_norm = normalize_vectors(v_grad)
 
         ### Subendo PVs bundle selection
 
@@ -475,9 +466,7 @@ def la_generate_fiber(model, args, job):
 
 def calculate_en(et, k):
     en = k - et * np.sum(k * et, axis=1).reshape(len(et), 1)
-    abs_en = np.linalg.norm(en, axis=1, keepdims=True)
-    abs_en = np.where(abs_en != 0, abs_en, 1)
-    en = en / abs_en
+    en = normalize_vectors(en)
     return en
 
 

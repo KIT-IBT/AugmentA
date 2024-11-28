@@ -29,7 +29,7 @@ import numpy as np
 import scipy.spatial as spatial
 import vtk
 
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import get_normalized_cross_product
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, \
     get_elements_above_plane

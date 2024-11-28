@@ -37,6 +37,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import calculate_en
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
@@ -451,10 +452,7 @@ def ra_generate_fiber(model, args, job):
     tag[SN_ids] = sinus_node
 
     print('Bundles selection...done')
-    # normalize the gradient phie
-    abs_phie_grad = np.linalg.norm(phie_grad, axis=1, keepdims=True)
-    abs_phie_grad = np.where(abs_phie_grad != 0, abs_phie_grad, 1)
-    phie_grad_norm = phie_grad / abs_phie_grad
+    phie_grad_norm = normalize_vectors(phie_grad)
 
     ##### Local coordinate system #####
     # et
