@@ -25,7 +25,6 @@ specific language governing permissions and limitations
 under the License.  
 """
 import argparse
-import collections
 import os
 import sys
 import warnings
@@ -34,13 +33,11 @@ import numpy as np
 import pymeshfix
 import pyvista as pv
 import vtk
-from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from standalones.open_orifices_manually import open_orifices_manually
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region, vtk_thr
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts
 from vtk_opencarp_helper_methods.vtk_methods import filters
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer

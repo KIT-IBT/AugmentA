@@ -39,9 +39,7 @@ from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plan
 
 
 def to_polydata(mesh):
-    polydata = apply_vtk_geom_filter(mesh)
-
-    return polydata
+    return apply_vtk_geom_filter(mesh)
 
 
 def get_mean_point(ring_points):
@@ -98,23 +96,17 @@ def find_points_on_mv(mv_points, center_lpv):
     kDTree.FindClosestNPoints(1, center_lpv, id_list)
     index = id_list.GetId(0)
     res_1 = mv_points_array_1[index]
-    distance = []
-    for i in range(len(mv_points_array_1)):
-        d = np.linalg.norm(mv_points_array_1[i] - res_1, ord=None, axis=None, keepdims=False)
-        distance += [d]
-    res_2 = mv_points_array_1[distance.index(max(distance))]
+    distances = np.linalg.norm(mv_points_array_1 - res_1, axis=1)
+    res_2 = mv_points_array_1[np.argmax(distances)]
 
-    distance_diff = []
-    for i in range(len(mv_points_array_1)):
-        d_mv_l = np.linalg.norm(mv_points_array_1[i] - res_1, ord=None, axis=None, keepdims=False)
-        d_mv_r = np.linalg.norm(mv_points_array_1[i] - res_2, ord=None, axis=None, keepdims=False)
-        distance_diff += [abs(d_mv_l - d_mv_r)]
+    d_mv_l = np.linalg.norm(mv_points_array_1 - res_1, axis=1)  # Distances to res_1
+    d_mv_r = np.linalg.norm(mv_points_array_1 - res_2, axis=1)  # Distances to res_2
+    distance_diff = np.abs(d_mv_l - d_mv_r)  # Absolute differences
+
     res_3 = mv_points_array_1[distance_diff.index(min(distance_diff))]
 
-    distance_2 = []
-    for i in range(len(mv_points_array_1)):
-        d_2 = np.linalg.norm(mv_points_array_1[i] - res_3, ord=None, axis=None, keepdims=False)
-        distance_2 += [d_2]
+    distance_2 = np.linalg.norm(mv_points_array_1 - res_3, axis=1)
+
     res_4 = mv_points_array_1[distance_2.index(max(distance_2))]
 
     return res_1, res_2, res_3, res_4
@@ -150,12 +142,12 @@ def cut_into_two_parts(polydata, point_1, point_2, point_3):
     return sub_1, sub_2
 
 
-def dijkstra_path(polydata, StartVertex, EndVertex):
+def dijkstra_path(polydata, start_vertex, end_vertex):
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(polydata)
     # attention the return value will be reversed
-    path.SetStartVertex(EndVertex)
-    path.SetEndVertex(StartVertex)
+    path.SetStartVertex(end_vertex)
+    path.SetEndVertex(start_vertex)
     path.Update()
     points_data = path.GetOutput().GetPoints().GetData()
     points_data = vtk_to_numpy(points_data)
@@ -171,9 +163,8 @@ def get_mv_l_and_r(mv_band, center_lpv):
     # Clean unused points
     surface = to_polydata(connect.GetOutput())
 
-    points_data = clean_polydata(surface).GetPoints().GetData()
-    ring = vtk_to_numpy(points_data)
-    center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
+    ring = vtk_to_numpy(clean_polydata(surface).GetPoints().GetData())
+    center_point_1 = np.mean(ring, axis=0)
 
     connect.DeleteSpecifiedRegion(1)
     connect.AddSpecifiedRegion(0)
@@ -181,9 +172,9 @@ def get_mv_l_and_r(mv_band, center_lpv):
 
     # Clean unused points
     surface = to_polydata(connect.GetOutput())
-    points_data = clean_polydata(surface).GetPoints().GetData()
-    ring = vtk_to_numpy(points_data)
-    center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
+    ring = vtk_to_numpy(clean_polydata(surface).GetPoints().GetData())
+    center_point_2 = np.mean(ring, axis=0)
+
     dis_1 = np.linalg.norm(center_point_1 - center_lpv)
     dis_2 = np.linalg.norm(center_point_2 - center_lpv)
     if dis_1 > dis_2:

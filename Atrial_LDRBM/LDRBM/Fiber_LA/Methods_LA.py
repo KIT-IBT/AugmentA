@@ -32,6 +32,7 @@ from scipy.spatial import cKDTree
 from scipy.spatial.distance import cosine
 from vtk.numpy_interface import dataset_adapter as dsa
 
+import standalones.function
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr, get_normalized_cross_product
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
@@ -229,15 +230,7 @@ def creat_tube_around_spline(points_data, radius):
 
 
 def dijkstra_path(polydata, StartVertex, EndVertex):
-    path = vtk.vtkDijkstraGraphGeodesicPath()
-    path.SetInputData(polydata)
-    # attention the return value will be reversed
-    path.SetStartVertex(EndVertex)
-    path.SetEndVertex(StartVertex)
-    path.Update()
-    points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk_to_numpy(points_data)
-    return points_data
+    return standalones.function.dijkstra_path(polydata, StartVertex, EndVertex)
 
 
 def dijkstra_path_on_a_plane(polydata, StartVertex, EndVertex, plane_point):
@@ -408,10 +401,7 @@ def get_mean_point(data):
 
 
 def multidim_intersect(arr1, arr2):
-    arr1_view = arr1.view([('', arr1.dtype)] * arr1.shape[1])
-    arr2_view = arr2.view([('', arr2.dtype)] * arr2.shape[1])
-    intersected = np.intersect1d(arr1_view, arr2_view)
-    return intersected.view(arr1.dtype).reshape(-1, arr1.shape[1])
+    return standalones.function.multidim_intersect(arr1, arr2)
 
 
 def multidim_intersect_bool(arr1, arr2):

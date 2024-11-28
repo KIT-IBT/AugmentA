@@ -346,18 +346,6 @@ def low_CV(model, low_CV_thr, meshfold):
     write_to_dat(meshfold + '/low_CV.dat', sigma)
 
 
-def dijkstra_path(polydata, StartVertex, EndVertex):
-    path = vtk.vtkDijkstraGraphGeodesicPath()
-    path.SetInputData(polydata)
-    # attention the return value will be reversed
-    path.SetStartVertex(EndVertex)
-    path.SetEndVertex(StartVertex)
-    path.Update()
-    points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk_to_numpy(points_data)
-    return points_data
-
-
 def get_EAP(path_mod, path_fib):
     model = smart_reader(path_mod)
     mod_fib = smart_reader(path_fib)

@@ -29,6 +29,7 @@ import vtk
 from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
+import standalones.function
 import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
 from Atrial_LDRBM.LDRBM.Fiber_LA import Methods_LA
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import generate_spline_points
@@ -283,7 +284,8 @@ def creat_tube_around_spline(points_data, radius):
 
     # Generate the radius scalars
     tubeRadius = vtk.vtkDoubleArray()
-    n = generate_spline_points(points_data).GetNumberOfPoints()
+    spline_points = generate_spline_points(points_data)
+    n = spline_points.GetNumberOfPoints()
     tubeRadius.SetNumberOfTuples(n)
     tubeRadius.SetName("TubeRadius")
 
@@ -297,13 +299,13 @@ def creat_tube_around_spline(points_data, radius):
         tubeRadius.SetTuple1(i, r)
 
     # Add the scalars to the polydata
-    tubePolyData = functionSource.GetOutput()
-    tubePolyData.GetPointData().AddArray(tubeRadius)
-    tubePolyData.GetPointData().SetActiveScalars("TubeRadius")
+    tube_poly_data = spline_points
+    tube_poly_data.GetPointData().AddArray(tubeRadius)
+    tube_poly_data.GetPointData().SetActiveScalars("TubeRadius")
 
     # Create the tubes TODO: SidesShareVerticesOn()???
     tuber = vtk.vtkTubeFilter()
-    tuber.SetInputData(tubePolyData)
+    tuber.SetInputData(tube_poly_data)
     tuber.SetNumberOfSides(40)
     tuber.SidesShareVerticesOn()
     tuber.SetVaryRadiusToVaryRadiusByAbsoluteScalar()
@@ -319,30 +321,14 @@ def creat_tube_around_spline(points_data, radius):
 
 
 def dijkstra_path(polydata, StartVertex, EndVertex):
-    path = vtk.vtkDijkstraGraphGeodesicPath()
-    path.SetInputData(polydata)
-
-    path.SetStartVertex(EndVertex)
-    path.SetEndVertex(StartVertex)
-    path.Update()
-    points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk_to_numpy(points_data)
-    return points_data
+    return standalones.function.dijkstra_path(polydata, StartVertex, EndVertex)
 
 
 def dijkstra_path_coord(polydata, StartVertex, EndVertex):
     StartVertex = find_closest_point(polydata, StartVertex)
     EndVertex = find_closest_point(polydata, EndVertex)
 
-    path = vtk.vtkDijkstraGraphGeodesicPath()
-    path.SetInputData(polydata)
-
-    path.SetStartVertex(EndVertex)
-    path.SetEndVertex(StartVertex)
-    path.Update()
-    points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk_to_numpy(points_data)
-    return points_data
+    return dijkstra_path(polydata, StartVertex, EndVertex)
 
 
 def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point):
@@ -542,55 +528,7 @@ def get_mean_point(data):
 
 
 def multidim_intersect(arr1, arr2):
-    arr1_view = arr1.view([('', arr1.dtype)] * arr1.shape[1])
-    arr2_view = arr2.view([('', arr2.dtype)] * arr2.shape[1])
-    intersected = np.intersect1d(arr1_view, arr2_view)
-    return intersected.view(arr1.dtype).reshape(-1, arr1.shape[1])
-
-
-def multidim_intersect_bool(arr1, arr2):
-    arr1_view = arr1.view([('', arr1.dtype)] * arr1.shape[1])
-    arr2_view = arr2.view([('', arr2.dtype)] * arr2.shape[1])
-    intersected = np.intersect1d(arr1_view, arr2_view)
-    if len(intersected.view(arr1.dtype).reshape(-1, arr1.shape[1])) == 0:
-        res = 0
-    else:
-        res = 1
-    return res
-
-
-def get_ct_end_points_id(endo, ct, scv, icv):
-    # endo
-    points_data = endo.GetPoints().GetData()
-    endo_points = vtk_to_numpy(points_data)
-
-    # ct
-    points_data = ct.GetPoints().GetData()
-    ct_points = vtk_to_numpy(points_data)
-
-    # scv
-    points_data = scv.GetPoints().GetData()
-    scv_points = vtk_to_numpy(points_data)
-
-    # icv
-    points_data = icv.GetPoints().GetData()
-    icv_points = vtk_to_numpy(points_data)
-
-    # intersection
-    # inter_ct_endo = multidim_intersect(endo_points, ct_points)
-    # inter_icv = multidim_intersect(inter_ct_endo, icv_points)
-    # inter_scv = multidim_intersect(inter_ct_endo, scv_points)`
-    inter_icv = multidim_intersect(ct_points, icv_points)
-    inter_scv = multidim_intersect(ct_points, scv_points)
-
-    # calculating mean point
-    path_icv = np.asarray([np.mean(inter_icv[:, 0]), np.mean(inter_icv[:, 1]), np.mean(inter_icv[:, 2])])
-    path_scv = np.asarray([np.mean(inter_scv[:, 0]), np.mean(inter_scv[:, 1]), np.mean(inter_scv[:, 2])])
-
-    path_ct_id_icv = find_closest_point(endo, path_icv)
-    path_ct_id_scv = find_closest_point(endo, path_scv)
-
-    return path_ct_id_icv, path_ct_id_scv
+    return standalones.function.multidim_intersect(arr1, arr2)
 
 
 def get_tv_end_points_id(endo, ra_tv_s_surface, ra_ivc_surface, ra_svc_surface, ra_tv_surface):
