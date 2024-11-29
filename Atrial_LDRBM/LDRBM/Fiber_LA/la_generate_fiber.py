@@ -219,7 +219,7 @@ def la_generate_fiber(model, args, job):
         RSPV_ids_endo = np.intersect1d(PVs["RSPV"], endo_ids)
         LSPV_ids_endo = np.intersect1d(PVs["LSPV"], endo_ids)
 
-        tag = copy_valve_ids(LIPV_ids_endo, LSPV_ids_endo, RIPV_ids_endo, RSPV_ids_endo, tag_dict, tag,"endo")
+        tag = copy_valve_ids(LIPV_ids_endo, LSPV_ids_endo, RIPV_ids_endo, RSPV_ids_endo, tag_dict, tag, "endo")
 
         id_to_clone = [RIPV_ids_endo, RSPV_ids_endo, LIPV_ids_endo, LSPV_ids_endo]
         ab_grad = clone_ids(v_grad, ab_grad, id_to_clone)
