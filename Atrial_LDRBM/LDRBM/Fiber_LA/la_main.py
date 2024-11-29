@@ -35,6 +35,7 @@ from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import la_generate_fiber
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import la_laplace
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 
 def parser():
@@ -81,41 +82,11 @@ def jobID(args):
 
 @tools.carpexample(parser, jobID)
 def run(args, job):
-    LA_mesh = args.mesh + '_surf/LA'
-
-    if args.mesh_type == "bilayer":
-        reader = vtk.vtkPolyDataReader()
-    else:
-        reader = vtk.vtkPolyDataReader()
-        # reader = vtk.vtkUnstructuredGridReader()
-    reader.SetFileName(LA_mesh + '.vtk')
-    reader.Update()
-    LA = reader.GetOutput()
-
-    if args.normals_outside:
-        reverse = vtk.vtkReverseSense()
-        reverse.ReverseCellsOn()
-        reverse.ReverseNormalsOn()
-        reverse.SetInputConnection(reader.GetOutputPort())
-        reverse.Update()
-
-        LA = reverse.GetOutput()
-
-    pts = vtk_to_numpy(LA.GetPoints().GetData())
-
-    write_to_pts(LA_mesh + '.pts', pts)
-
-    write_to_elem( LA_mesh + '.elem', LA, np.ones(LA.GetNumberOfCells(), dtype=int))
-
-    fibers = np.zeros((LA.GetNumberOfCells(), 6))
-    fibers[:, 0] = 1
-    fibers[:, 4] = 1
-
-    warnings.warn("Test if lon is storred correctly la_main.py l116 ff.")
-    write_to_lon(LA_mesh + '.lon', fibers, [fiber[3:6] for fiber in fibers], precession=1)
+    LA = init_mesh_and_fibers(args, "LA")
 
     start_time = datetime.datetime.now()
     init_start_time = datetime.datetime.now()
+
     print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
     output_laplace = la_laplace(args, job, LA)
     end_time = datetime.datetime.now()
@@ -132,6 +103,47 @@ def run(args, job):
     fin_end_time = datetime.datetime.now()
     tot_running_time = fin_end_time - init_start_time
     print('Total running time: ' + str(tot_running_time))
+
+
+def init_mesh_and_fibers(args, atrium):
+    """
+    Initializes the mesh and fibers for the fiber generation.
+    Sores both to disk for further processing.
+
+    :param args:
+    :param atrium: 'LA' or 'RA'
+    :return: The loaded mesh
+    """
+    mesh = args.mesh + f'_surf/{atrium}'
+    atrial_mesh = smart_reader(mesh + '.vtk')
+    if args.normals_outside:
+        reverse = vtk.vtkReverseSense()
+        reverse.ReverseCellsOn()
+        reverse.ReverseNormalsOn()
+        reverse.SetInputData(atrial_mesh)
+        reverse.Update()
+
+        atrial_mesh = reverse.GetOutput()
+    pts = vtk_to_numpy(atrial_mesh.GetPoints().GetData())
+    write_to_pts(mesh + '.pts', pts)
+    write_to_elem(mesh + '.elem', atrial_mesh, np.ones(atrial_mesh.GetNumberOfCells(), dtype=int))
+    init_fibers(atrial_mesh, atrium, mesh)
+    return atrial_mesh
+
+
+def init_fibers(atrial_mesh, atrium, mesh):
+    """
+    Initializes fibers with ones and stores them to disk for further processing.
+    :param atrial_mesh:
+    :param atrium:
+    :param mesh:
+    :return:
+    """
+    fibers = np.zeros((atrial_mesh.GetNumberOfCells(), 6))
+    fibers[:, 0] = 1
+    fibers[:, 4] = 1
+    warnings.warn(f"Test if lon is stored correctly {atrium}_main.py l116 ff.")
+    write_to_lon(mesh + '.lon', fibers, [fiber[3:6] for fiber in fibers], precession=1)
 
 
 if __name__ == '__main__':

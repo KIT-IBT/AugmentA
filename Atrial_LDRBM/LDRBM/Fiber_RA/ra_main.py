@@ -34,6 +34,7 @@ import vtk
 from carputils import tools
 
 import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_main import init_mesh_and_fibers
 from Atrial_LDRBM.LDRBM.Fiber_RA.create_bridges import add_free_bridge
 from Atrial_LDRBM.LDRBM.Fiber_RA.ra_generate_fiber import ra_generate_fiber
 from Atrial_LDRBM.LDRBM.Fiber_RA.ra_laplace import ra_laplace
@@ -98,30 +99,7 @@ def jobID(args):
 
 @tools.carpexample(parser, jobID)
 def run(args, job):
-    RA_mesh = args.mesh + '_surf/RA'
-    RA = smart_reader(RA_mesh + '.vtk')
-
-    if args.normals_outside:
-        reverse = vtk.vtkReverseSense()
-        reverse.ReverseCellsOn()
-        reverse.ReverseNormalsOn()
-        reverse.SetInputData(RA)
-        reverse.Update()
-
-        RA = reverse.GetOutput()
-
-    pts = vtk_to_numpy(RA.GetPoints().GetData())
-
-    write_to_pts(RA_mesh + '.pts', pts)
-
-    write_to_elem(RA_mesh + '.elem', RA, np.ones(RA.GetNumberOfCells(), dtype=int))
-
-    fibers = np.zeros((RA.GetNumberOfCells(), 6))
-    fibers[:, 0] = 1
-    fibers[:, 4] = 1
-
-    write_to_lon(RA_mesh + '.lon', fibers, [fiber[3:6] for fiber in fibers])
-    warnings.warn("Test if lon is storred correctly ra_main.py l120 ff.")
+    RA = init_mesh_and_fibers(args, "RA")
 
     start_time = datetime.datetime.now()
     print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
