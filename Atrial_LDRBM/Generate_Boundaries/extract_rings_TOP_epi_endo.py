@@ -36,15 +36,14 @@ from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 from vtk.numpy_interface import dataset_adapter as dsa
 
-from Atrial_LDRBM.Generate_Boundaries.extract_rings import get_region_not_including_ids
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
+from Atrial_LDRBM.Generate_Boundaries.extract_rings import get_region_not_including_ids, is_top_endo_epi_cut, split_tv
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane, \
-    init_connectivity_filter, ExtractionModes
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, init_connectivity_filter, \
+    ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
@@ -487,7 +486,7 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA, outdir):
     write_to_vtx(outdir + '/ids_RPV_LPV.vtx', rpv_lpv)
 
 
-def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
+def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, out_dir):
     for r in rings:
         if r.name == "TV":
             tv_center = np.array(r.center)
@@ -499,11 +498,11 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
             ivc_center = np.array(r.center)
             ivc = r.vtk_polydata
 
-    plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
+    tv_f_plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
 
     surface = apply_vtk_geom_filter(model)
 
-    surface = apply_vtk_geom_filter(get_elements_above_plane(surface, plane))
+    surface = apply_vtk_geom_filter(get_elements_above_plane(surface, tv_f_plane))
 
     """
     here we will extract the feature edge 
@@ -520,7 +519,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     surface = apply_vtk_geom_filter(endo)
 
-    surface = apply_vtk_geom_filter(get_elements_above_plane(surface, plane))
+    surface = apply_vtk_geom_filter(get_elements_above_plane(surface, tv_f_plane))
 
     """
     here we will extract the feature edge 
@@ -529,27 +528,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     gamma_top_endo = get_feature_edges(surface, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
                                        non_manifold_edges_on=False)
 
-    """
-    separate the tv into tv tv-f and tv-f
-    """
-
-    norm_1 = get_normalized_cross_product(tv_center, svc_center, ivc_center)
-    norm_2 = - norm_1
-
-    plane = initialize_plane(norm_1[0], tv_center)
-    plane2 = initialize_plane(norm_2[0], tv_center)
-
-    tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv, plane))
-
-    tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
-
-    write_to_vtx(outdir + '/ids_TV_F.vtx', tv_f_ids)
-
-    tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv, plane2, extract_boundary_cells_on=True))
-
-    tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
-
-    write_to_vtx(outdir + '/ids_TV_S.vtx', tv_s_ids)
+    split_tv(out_dir, tv, tv_center, ivc_center, svc_center)
 
     svc_points = svc.GetPoints().GetData()
     svc_points = vtk_to_numpy(svc_points)
@@ -566,23 +545,10 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
         # Clean unused points
         surface = clean_polydata(surface)
         points = surface.GetPoints().GetData()
-        points = vtk_to_numpy(points)
-        points = points.tolist()
+        points = vtk_to_numpy(points).tolist()
 
-        in_ivc = False
-        in_svc = False
-        # if there is point of group i in both svc and ivc then it is the "top_endo+epi" we need
-        while in_ivc == False and in_svc == False:
-            for var in points:
-                if var in ivc_points:
-                    in_ivc = True
-                if var in svc_points:
-                    in_svc = True
-            if in_ivc and in_svc:
-                top_epi_id = region_id
-                break
-            else:
-                break
+        if is_top_endo_epi_cut(ivc_points, svc_points, points):
+            top_epi_id = region_id
 
         # delete added region id
         connect.DeleteSpecifiedRegion(region_id)
@@ -606,23 +572,10 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
         # Clean unused points
         surface = clean_polydata(surface)
         points = surface.GetPoints().GetData()
-        points = vtk_to_numpy(points)
-        points = points.tolist()
+        points = vtk_to_numpy(points).tolist()
 
-        in_ivc = False
-        in_svc = False
-        # if there is point of group i in both svc and ivc then it is the "top_endo+epi" we need
-        while in_ivc == False and in_svc == False:
-            for var in points:
-                if var in ivc_points:
-                    in_ivc = True
-                if var in svc_points:
-                    in_svc = True
-            if in_ivc and in_svc:
-                top_endo_id = region_id
-                break
-            else:
-                break
+        if is_top_endo_epi_cut(ivc_points, svc_points, points):
+            top_endo_id = region_id
 
         # delete added region id
         connect.DeleteSpecifiedRegion(region_id)
@@ -673,7 +626,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     # Clean unused points
     top_epi = vtk_to_numpy(clean_polydata(surface).GetPointData().GetArray("Ids"))
 
-    write_to_vtx(outdir + '/ids_TOP_EPI.vtx', top_epi)
+    write_to_vtx(out_dir + '/ids_TOP_EPI.vtx', top_epi)
 
     to_delete = np.zeros((len(pts_in_top_endo),), dtype=int)
     for region_id in range(len(pts_in_top_endo)):
@@ -694,7 +647,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     # Clean unused points
     top_endo = vtk_to_numpy(clean_polydata(surface).GetPointData().GetArray("Ids"))
 
-    write_to_vtx(outdir + '/ids_TOP_ENDO.vtx', top_endo)
+    write_to_vtx(out_dir + '/ids_TOP_ENDO.vtx', top_endo)
 
 
 if __name__ == '__main__':
