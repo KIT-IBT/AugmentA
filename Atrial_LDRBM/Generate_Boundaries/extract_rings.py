@@ -40,8 +40,8 @@ from vtk_opencarp_helper_methods.mathematical_operations.vector_operations impor
 from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
-    clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
+    get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane, \
     init_connectivity_filter, ExtractionModes
@@ -531,9 +531,6 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     if debug:
         vtk_write(surface_over_tv_f, outdir + '/cutted_RA.vtk')
 
-    """
-    separate the tv into tv tv-f and tv-f
-    """
     split_tv(outdir, tv, tv_center, ivc_center, svc_center)
 
     svc_points = svc.GetPoints().GetData()
@@ -566,41 +563,47 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
 
     thresh = get_lower_threshold(meshNew.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
 
-    geo_port, _geo_filter = get_vtk_geom_filter_port(thresh.GetOutputPort(), True)
+    threshed_mesh = apply_vtk_geom_filter(thresh.GetOutputPort(), True)
 
     mv_id = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))[0]
 
-    connect = init_connectivity_filter(geo_port, ExtractionModes.SPECIFIED_REGIONS)
-    num_regions = connect.GetNumberOfExtractedRegions()
+    top_endo_ids = get_top_endo_ids(mv_id, threshed_mesh)
+    write_to_vtx(outdir + '/ids_TOP_ENDO.vtx', top_endo_ids)
 
+
+def get_top_endo_ids(mv_id, threshed_mesh):
+    region_without_mv = get_region_not_including_ids(threshed_mesh, mv_id)
+    top_endo_ids = vtk_to_numpy(clean_polydata(region_without_mv).GetPointData().GetArray("Ids"))
+    return top_endo_ids
+
+
+def get_region_not_including_ids(mesh, ids):
+    connect = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
+    num_regions = connect.GetNumberOfExtractedRegions()
     for region_id in range(num_regions):
         connect.AddSpecifiedRegion(region_id)
         connect.Update()
-        surface_over_tv_f = connect.GetOutput()
+        surface = connect.GetOutput()
         # Clean unused points
-        surface_over_tv_f = clean_polydata(surface_over_tv_f)
+        surface = clean_polydata(surface)
 
-        pts_surf = vtk_to_numpy(surface_over_tv_f.GetPointData().GetArray("Ids"))
+        pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
 
-        if mv_id not in pts_surf:
+        if ids not in pts_surf:
             found_id = region_id
             break
 
         # delete added region id
         connect.DeleteSpecifiedRegion(region_id)
         connect.Update()
-
     connect.AddSpecifiedRegion(found_id)
     connect.Update()
-    surface_over_tv_f = clean_polydata(connect.GetOutput())
-
-    top_endo = vtk_to_numpy(surface_over_tv_f.GetPointData().GetArray("Ids"))
-
-    write_to_vtx(outdir + '/ids_TOP_ENDO.vtx', top_endo)
+    return connect.GetOutput()
 
 
 def extract_top_cut(outdir, surface_over_tv_f, ivc_points, svc_points, debug):
-    gamma_top = get_feature_edges(surface_over_tv_f, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
+    gamma_top = get_feature_edges(surface_over_tv_f, boundary_edges_on=True, feature_edges_on=False,
+                                  manifold_edges_on=False,
                                   non_manifold_edges_on=False)
     if debug:
         surface_over_tv_f = apply_vtk_geom_filter(gamma_top)

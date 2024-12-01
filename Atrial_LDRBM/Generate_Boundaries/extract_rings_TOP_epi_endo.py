@@ -36,6 +36,7 @@ from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 from vtk.numpy_interface import dataset_adapter as dsa
 
+from Atrial_LDRBM.Generate_Boundaries.extract_rings import get_region_not_including_ids
 from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
@@ -557,9 +558,9 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     ivc_points = vtk_to_numpy(ivc_points)
 
     connect = init_connectivity_filter(gamma_top_epi, ExtractionModes.SPECIFIED_REGIONS)
-    num = connect.GetNumberOfExtractedRegions()
-    for i in range(num):
-        connect.AddSpecifiedRegion(i)
+    num_regions = connect.GetNumberOfExtractedRegions()
+    for region_id in range(num_regions):
+        connect.AddSpecifiedRegion(region_id)
         connect.Update()
         surface = connect.GetOutput()
         # Clean unused points
@@ -578,13 +579,13 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
                 if var in svc_points:
                     in_svc = True
             if in_ivc and in_svc:
-                top_epi_id = i
+                top_epi_id = region_id
                 break
             else:
                 break
 
         # delete added region id
-        connect.DeleteSpecifiedRegion(i)
+        connect.DeleteSpecifiedRegion(region_id)
         connect.Update()
 
     connect.AddSpecifiedRegion(top_epi_id)
@@ -597,9 +598,9 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     pts_in_top_epi = vtk_to_numpy(top_cut_epi.GetPointData().GetArray("Ids"))
 
     connect = init_connectivity_filter(gamma_top_endo, ExtractionModes.SPECIFIED_REGIONS)
-    num = connect.GetNumberOfExtractedRegions()
-    for i in range(num):
-        connect.AddSpecifiedRegion(i)
+    num_regions = connect.GetNumberOfExtractedRegions()
+    for region_id in range(num_regions):
+        connect.AddSpecifiedRegion(region_id)
         connect.Update()
         surface = connect.GetOutput()
         # Clean unused points
@@ -618,13 +619,13 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
                 if var in svc_points:
                     in_svc = True
             if in_ivc and in_svc:
-                top_endo_id = i
+                top_endo_id = region_id
                 break
             else:
                 break
 
         # delete added region id
-        connect.DeleteSpecifiedRegion(i)
+        connect.DeleteSpecifiedRegion(region_id)
         connect.Update()
 
     connect.AddSpecifiedRegion(top_endo_id)
@@ -656,9 +657,9 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     # tree = cKDTree(pts_in_top_epi)
 
-    for i in range(len(pts_in_top_epi)):
-        if pts_in_top_epi[i] in pts_in_svc_epi or pts_in_top_epi[i] in pts_in_ivc_epi:
-            to_delete[i] = 1
+    for region_id in range(len(pts_in_top_epi)):
+        if pts_in_top_epi[region_id] in pts_in_svc_epi or pts_in_top_epi[region_id] in pts_in_ivc_epi:
+            to_delete[region_id] = 1
 
     meshNew = dsa.WrapDataObject(top_cut_epi)
     meshNew.PointData.append(to_delete, "delete")
@@ -667,29 +668,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     thresh_geo = apply_vtk_geom_filter(thresh.GetOutputPort(), True)
 
-    connect = init_connectivity_filter(thresh_geo, ExtractionModes.SPECIFIED_REGIONS)
-    num = connect.GetNumberOfExtractedRegions()
-
-    for i in range(num):
-        connect.AddSpecifiedRegion(i)
-        connect.Update()
-        surface = connect.GetOutput()
-        # Clean unused points
-        surface = clean_polydata(surface)
-
-        pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
-
-        if tv_id_epi not in pts_surf:
-            found_id = i
-            break
-
-        # delete added region id
-        connect.DeleteSpecifiedRegion(i)
-        connect.Update()
-
-    connect.AddSpecifiedRegion(found_id)
-    connect.Update()
-    surface = connect.GetOutput()
+    surface = get_region_not_including_ids(thresh_geo, tv_id_epi)
 
     # Clean unused points
     top_epi = vtk_to_numpy(clean_polydata(surface).GetPointData().GetArray("Ids"))
@@ -697,9 +676,9 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
     write_to_vtx(outdir + '/ids_TOP_EPI.vtx', top_epi)
 
     to_delete = np.zeros((len(pts_in_top_endo),), dtype=int)
-    for i in range(len(pts_in_top_endo)):
-        if pts_in_top_endo[i] in pts_in_svc_endo or pts_in_top_endo[i] in pts_in_ivc_endo:
-            to_delete[i] = 1
+    for region_id in range(len(pts_in_top_endo)):
+        if pts_in_top_endo[region_id] in pts_in_svc_endo or pts_in_top_endo[region_id] in pts_in_ivc_endo:
+            to_delete[region_id] = 1
 
     meshNew = dsa.WrapDataObject(top_cut_endo)
     meshNew.PointData.append(to_delete, "delete")
@@ -710,29 +689,7 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, outdir):
 
     mv_id_endo = vtk_to_numpy(top_cut_endo.GetPointData().GetArray("Ids"))[0]
 
-    connect = init_connectivity_filter(thresh_geo, ExtractionModes.SPECIFIED_REGIONS)
-    num = connect.GetNumberOfExtractedRegions()
-
-    for i in range(num):
-        connect.AddSpecifiedRegion(i)
-        connect.Update()
-        surface = connect.GetOutput()
-        # Clean unused points
-        surface = clean_polydata(surface)
-
-        pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
-
-        if tv_id_endo not in pts_surf:
-            found_id = i
-            break
-
-        # delete added region id
-        connect.DeleteSpecifiedRegion(i)
-        connect.Update()
-
-    connect.AddSpecifiedRegion(found_id)
-    connect.Update()
-    surface = connect.GetOutput()
+    surface = get_region_not_including_ids(thresh_geo, tv_id_endo)
 
     # Clean unused points
     top_endo = vtk_to_numpy(clean_polydata(surface).GetPointData().GetArray("Ids"))
