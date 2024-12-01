@@ -536,54 +536,14 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, out_dir):
     ivc_points = ivc.GetPoints().GetData()
     ivc_points = vtk_to_numpy(ivc_points)
 
-    connect = init_connectivity_filter(gamma_top_epi, ExtractionModes.SPECIFIED_REGIONS)
-    num_regions = connect.GetNumberOfExtractedRegions()
-    for region_id in range(num_regions):
-        connect.AddSpecifiedRegion(region_id)
-        connect.Update()
-        surface = connect.GetOutput()
-        # Clean unused points
-        surface = clean_polydata(surface)
-        points = surface.GetPoints().GetData()
-        points = vtk_to_numpy(points).tolist()
-
-        if is_top_endo_epi_cut(ivc_points, svc_points, points):
-            top_epi_id = region_id
-
-        # delete added region id
-        connect.DeleteSpecifiedRegion(region_id)
-        connect.Update()
-
-    connect.AddSpecifiedRegion(top_epi_id)
-    connect.Update()
-    surface = connect.GetOutput()
+    surface = get_top_endo_epi_cut(gamma_top_epi, ivc_points, svc_points)
 
     # Clean unused points
     top_cut_epi = clean_polydata(surface)
 
     pts_in_top_epi = vtk_to_numpy(top_cut_epi.GetPointData().GetArray("Ids"))
 
-    connect = init_connectivity_filter(gamma_top_endo, ExtractionModes.SPECIFIED_REGIONS)
-    num_regions = connect.GetNumberOfExtractedRegions()
-    for region_id in range(num_regions):
-        connect.AddSpecifiedRegion(region_id)
-        connect.Update()
-        surface = connect.GetOutput()
-        # Clean unused points
-        surface = clean_polydata(surface)
-        points = surface.GetPoints().GetData()
-        points = vtk_to_numpy(points).tolist()
-
-        if is_top_endo_epi_cut(ivc_points, svc_points, points):
-            top_endo_id = region_id
-
-        # delete added region id
-        connect.DeleteSpecifiedRegion(region_id)
-        connect.Update()
-
-    connect.AddSpecifiedRegion(top_endo_id)
-    connect.Update()
-    surface = connect.GetOutput()
+    surface = get_top_endo_epi_cut(gamma_top_endo, ivc_points, svc_points)
 
     # Clean unused points
     top_cut_endo = clean_polydata(surface)
@@ -648,6 +608,30 @@ def cutting_plane_to_identify_tv_f_tv_s_epi_endo(mesh, model, rings, out_dir):
     top_endo = vtk_to_numpy(clean_polydata(surface).GetPointData().GetArray("Ids"))
 
     write_to_vtx(out_dir + '/ids_TOP_ENDO.vtx', top_endo)
+
+
+def get_top_endo_epi_cut(gamma_top, ivc_points, svc_points):
+    connect = init_connectivity_filter(gamma_top, ExtractionModes.SPECIFIED_REGIONS)
+    num_regions = connect.GetNumberOfExtractedRegions()
+    for region_id in range(num_regions):
+        connect.AddSpecifiedRegion(region_id)
+        connect.Update()
+        surface = connect.GetOutput()
+        # Clean unused points
+        surface = clean_polydata(surface)
+        points = surface.GetPoints().GetData()
+        points = vtk_to_numpy(points).tolist()
+
+        if is_top_endo_epi_cut(ivc_points, svc_points, points):
+            top_id = region_id
+
+        # delete added region id
+        connect.DeleteSpecifiedRegion(region_id)
+        connect.Update()
+    connect.AddSpecifiedRegion(top_id)
+    connect.Update()
+    surface = connect.GetOutput()
+    return surface
 
 
 if __name__ == '__main__':
