@@ -37,6 +37,7 @@ from sklearn.cluster import KMeans
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
@@ -109,7 +110,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
     for r in fname:
         os.remove(r)
     # Biatrial geometry
-    if (LAA_id != "" and RAA_id != ""):
+    if LAA_id != "" and RAA_id != "":
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
 
@@ -141,7 +142,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
 
         LA = generate_ids(mesh_poly, "Ids", "Ids")
 
-        vtkWrite(LA, outdir + '/LA.vtk')
+        vtk_write(LA, outdir + '/LA.vtk')
 
         LAA_id = find_closest_point(LA, LA_ap_point)
 
@@ -155,7 +156,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
 
-        vtkWrite(dataSet.VTKObject, outdir + '/LA_boundaries_tagged.vtk'.format(mesh))
+        vtk_write(dataSet.VTKObject, outdir + '/LA_boundaries_tagged.vtk'.format(mesh))
 
         thr.ThresholdBetween(RA_tag, RA_tag)
         thr.Update()
@@ -168,7 +169,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         if LAA_base_id != "":
             RAA_base_id = find_closest_point(RA, RA_bs_point)
 
-        vtkWrite(RA, outdir + '/RA.vtk')
+        vtk_write(RA, outdir + '/RA.vtk')
         b_tag = np.zeros((RA.GetNumberOfPoints(),))
         RA_rings = detect_and_mark_rings(RA, RA_ap_point, outdir, debug)
         b_tag, centroids, RA_rings = mark_RA_rings(RAA_id, RA_rings, b_tag, centroids, outdir)
@@ -177,10 +178,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
 
-        vtkWrite(dataSet.VTKObject, outdir + '/RA_boundaries_tagged.vtk'.format(mesh))
+        vtk_write(dataSet.VTKObject, outdir + '/RA_boundaries_tagged.vtk'.format(mesh))
 
     elif RAA_id == "":
-        vtkWrite(mesh_surf, outdir + '/LA.vtk'.format(mesh))
+        vtk_write(mesh_surf, outdir + '/LA.vtk'.format(mesh))
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         centroids["LAA"] = LA_ap_point
         array_name = "Ids"
@@ -197,10 +198,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(LA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
 
-        vtkWrite(dataSet.VTKObject, outdir + '/LA_boundaries_tagged.vtk'.format(mesh))
+        vtk_write(dataSet.VTKObject, outdir + '/LA_boundaries_tagged.vtk'.format(mesh))
 
     elif LAA_id == "":
-        vtkWrite(mesh_surf, outdir + '/RA.vtk'.format(mesh))
+        vtk_write(mesh_surf, outdir + '/RA.vtk'.format(mesh))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
 
         centroids["RAA"] = RA_ap_point
@@ -213,7 +214,7 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         dataSet = dsa.WrapDataObject(RA)
         dataSet.PointData.append(b_tag, 'boundary_tag')
 
-        vtkWrite(dataSet.VTKObject, outdir + '/RA_boundaries_tagged.vtk'.format(mesh))
+        vtk_write(dataSet.VTKObject, outdir + '/RA_boundaries_tagged.vtk'.format(mesh))
 
     df = pd.DataFrame(centroids)
     df.to_csv(outdir + "/rings_centroids.csv", float_format="%.2f", index=False)
@@ -250,7 +251,7 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
 
         # be careful overwrite previous rings
         if debug:
-            vtkWrite(surface, outdir + '/ring_' + str(i) + '.vtk')
+            vtk_write(surface, outdir + '/ring_' + str(i) + '.vtk')
 
         ring_surf = vtk.vtkPolyData()
         ring_surf.DeepCopy(surface)
@@ -521,48 +522,19 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
             ivc_center = np.array(r.center)
             ivc = r.vtk_polydata
 
-    plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
+    tv_f_plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
 
-    surface = apply_vtk_geom_filter(model)
+    model_surface = apply_vtk_geom_filter(model)
 
-    surface = apply_vtk_geom_filter(get_elements_above_plane(surface, plane))
-
-    if debug:
-        vtkWrite(surface, outdir + '/cutted_RA.vtk')
-
-    """
-    here we will extract the feature edge 
-    """
-
-    gamma_top = get_feature_edges(surface, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
-                                  non_manifold_edges_on=False)
+    surface_over_tv_f = apply_vtk_geom_filter(get_elements_above_plane(model_surface, tv_f_plane))
 
     if debug:
-        surface = apply_vtk_geom_filter(gamma_top)
-
-        vtkWrite(surface, outdir + '/gamma_top.vtk')
+        vtk_write(surface_over_tv_f, outdir + '/cutted_RA.vtk')
 
     """
     separate the tv into tv tv-f and tv-f
     """
-    norm_1 = get_normalized_cross_product(tv_center, svc_center, ivc_center)
-    norm_2 = - norm_1
-
-    plane = initialize_plane(norm_1[0], tv_center)
-
-    plane2 = initialize_plane(norm_2[0], tv_center)
-
-    tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv, plane))
-
-    tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
-
-    write_to_vtx(outdir + '/ids_TV_F.vtx', tv_f_ids)
-
-    tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv, plane2, extract_boundary_cells_on=True))
-
-    tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
-
-    write_to_vtx(outdir + '/ids_TV_S.vtx', tv_s_ids)
+    split_tv(outdir, tv, tv_center, ivc_center, svc_center)
 
     svc_points = svc.GetPoints().GetData()
     svc_points = vtk_to_numpy(svc_points)
@@ -570,56 +542,14 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     ivc_points = svc.GetPoints().GetData()  # Changed
     ivc_points = vtk_to_numpy(ivc_points)
 
-    connect = init_connectivity_filter(gamma_top, ExtractionModes.SPECIFIED_REGIONS)
-    num = connect.GetNumberOfExtractedRegions()
+    """
+    here we will extract the feature edge 
+    """
 
-    for i in range(num):
-        connect.AddSpecifiedRegion(i)
-        connect.Update()
-        surface = connect.GetOutput()
-
-        if debug:
-            vtkWrite(surface, outdir + f'/gamma_top_{str(i)}.vtk')
-
-        # Clean unused points
-        surface = clean_polydata(surface)
-
-        points = surface.GetPoints().GetData()
-        points = vtk_to_numpy(points)
-        points = points.tolist()
-
-        if debug:
-            create_pts(points, f'/border_points_{str(i)}', outdir)
-
-        in_ivc = False
-        in_svc = False
-        # if there is point of group i in both svc and ivc then it is the "top_endo+epi" we need
-        while in_ivc == False and in_svc == False:
-            for var in points:
-                if var in ivc_points:
-                    in_ivc = True
-                if var in svc_points:
-                    in_svc = True
-            if in_ivc and in_svc:
-                top_endo_id = i
-                break
-            else:
-                top_endo_id = i  # comment this line if errors
-                break
-
-        # delete added region id
-        connect.DeleteSpecifiedRegion(i)
-        connect.Update()
-    # It can happen that the first i=region(0) is the CS. Remove the -1 if that is the case
-    connect.AddSpecifiedRegion(top_endo_id - 1)  # Find the id in the points dividing the RA, avoid CS
-    connect.Update()
-    surface = connect.GetOutput()
-
-    # Clean unused points
-    top_cut = clean_polydata(surface)
+    top_cut = extract_top_cut(outdir, surface_over_tv_f, ivc_points, svc_points, debug)
 
     if debug:
-        vtkWrite(top_cut, outdir + '/top_endo_epi.vtk')  # If this is the CS, then change top_endo_id in 877
+        vtk_write(top_cut, outdir + '/top_endo_epi.vtk')  # If this is the CS, then change top_endo_id in 877
 
     pts_in_top = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))
     pts_in_svc = vtk_to_numpy(svc.GetPointData().GetArray("Ids"))
@@ -627,9 +557,9 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
 
     to_delete = np.zeros((len(pts_in_top),), dtype=int)
 
-    for i in range(len(pts_in_top)):
-        if pts_in_top[i] in pts_in_svc or pts_in_top[i] in pts_in_ivc:
-            to_delete[i] = 1
+    for region_id in range(len(pts_in_top)):
+        if pts_in_top[region_id] in pts_in_svc or pts_in_top[region_id] in pts_in_ivc:
+            to_delete[region_id] = 1
 
     meshNew = dsa.WrapDataObject(top_cut)
     meshNew.PointData.append(to_delete, "delete")
@@ -641,49 +571,127 @@ def cutting_plane_to_identify_tv_f_tv_s(model, rings, outdir, debug):
     mv_id = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))[0]
 
     connect = init_connectivity_filter(geo_port, ExtractionModes.SPECIFIED_REGIONS)
-    num = connect.GetNumberOfExtractedRegions()
+    num_regions = connect.GetNumberOfExtractedRegions()
 
-    for i in range(num):
-        connect.AddSpecifiedRegion(i)
+    for region_id in range(num_regions):
+        connect.AddSpecifiedRegion(region_id)
         connect.Update()
-        surface = connect.GetOutput()
+        surface_over_tv_f = connect.GetOutput()
         # Clean unused points
-        surface = clean_polydata(surface)
+        surface_over_tv_f = clean_polydata(surface_over_tv_f)
 
-        pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
+        pts_surf = vtk_to_numpy(surface_over_tv_f.GetPointData().GetArray("Ids"))
 
         if mv_id not in pts_surf:
-            found_id = i
+            found_id = region_id
             break
 
         # delete added region id
-        connect.DeleteSpecifiedRegion(i)
+        connect.DeleteSpecifiedRegion(region_id)
         connect.Update()
 
     connect.AddSpecifiedRegion(found_id)
     connect.Update()
-    surface = clean_polydata(connect.GetOutput())
+    surface_over_tv_f = clean_polydata(connect.GetOutput())
 
-    top_endo = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
+    top_endo = vtk_to_numpy(surface_over_tv_f.GetPointData().GetArray("Ids"))
 
     write_to_vtx(outdir + '/ids_TOP_ENDO.vtx', top_endo)
 
 
+def extract_top_cut(outdir, surface_over_tv_f, ivc_points, svc_points, debug):
+    gamma_top = get_feature_edges(surface_over_tv_f, boundary_edges_on=True, feature_edges_on=False, manifold_edges_on=False,
+                                  non_manifold_edges_on=False)
+    if debug:
+        surface_over_tv_f = apply_vtk_geom_filter(gamma_top)
+
+        vtk_write(surface_over_tv_f, outdir + '/gamma_top.vtk')
+    connect = init_connectivity_filter(gamma_top, ExtractionModes.SPECIFIED_REGIONS)
+    num_regions = connect.GetNumberOfExtractedRegions()
+    for region_id in range(num_regions):
+        connect.AddSpecifiedRegion(region_id)
+        connect.Update()
+        surface_over_tv_f = clean_polydata(connect.GetOutput())
+
+        if debug:
+            vtk_write(surface_over_tv_f, outdir + f'/gamma_top_{str(region_id)}.vtk')
+
+        boarder_points = surface_over_tv_f.GetPoints().GetData()
+        boarder_points = vtk_to_numpy(boarder_points).tolist()
+
+        if debug:
+            create_pts(boarder_points, f'/border_points_{str(region_id)}', outdir)
+
+        if is_top_endo_epi_cut(ivc_points, svc_points, boarder_points):
+            top_endo_id = region_id
+        else:
+            print(f"Region {region_id} is not the top cut for endo and epi")
+
+        # delete added region id
+        connect.DeleteSpecifiedRegion(region_id)
+        connect.Update()
+    # It can happen that the first i=region(0) is the CS. Remove the -1 if that is the case
+    connect.AddSpecifiedRegion(top_endo_id - 1)  # Find the id in the points dividing the RA, avoid CS
+    connect.Update()
+    surface_over_tv_f = connect.GetOutput()
+    # Clean unused points
+    top_cut = clean_polydata(surface_over_tv_f)
+    return top_cut
+
+
+def split_tv(out_dir, tv, tv_center, ivc_center, svc_center):
+    """
+    Splits the tricuspid valve along the svc to ivc axis
+    :param out_dir: Output directory where the two parts are stored
+    :param tv: The tricuspid valve geometry
+    :param tv_center: Center of the tricuspid valve
+    :param ivc_center: Center of the ivc
+    :param svc_center: Center of the svc
+    :return:
+    """
+    norm_1 = get_normalized_cross_product(tv_center, svc_center, ivc_center)
+    tv_f_plane = initialize_plane(norm_1[0], tv_center)
+    tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv, tv_f_plane))
+    tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
+    write_to_vtx(out_dir + '/ids_TV_F.vtx', tv_f_ids)
+
+    norm_2 = - norm_1
+    tv_s_plane = initialize_plane(norm_2[0], tv_center)
+    tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv, tv_s_plane, extract_boundary_cells_on=True))
+    tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
+    write_to_vtx(out_dir + '/ids_TV_S.vtx', tv_s_ids)
+
+
+def is_top_endo_epi_cut(ivc_points, svc_points, points):
+    """
+    Returns if the given region cuts the mesh into top and lower cut for endo and epi
+    :param ivc_points: Points labeled as IVC (Inferior vena cava)
+    :param svc_points: Points labeled as SVC (Superior vena cava)
+    :param points: all points associated with this region
+    :return:
+    """
+    in_ivc = False
+    in_svc = False
+    # if there is point of region_id in both svc and ivc then it is the "top_endo+epi" we need
+    for var in points:
+        if var in ivc_points:
+            in_ivc = True
+        if var in svc_points:
+            in_svc = True
+        if in_ivc and in_svc:
+            return True
+    return False
+
+
 def create_pts(array_points, array_name, mesh_dir):
-    f = open(f"{mesh_dir}{array_name}.pts", "w")
-    f.write("0 0 0\n")
-    for i in range(len(array_points)):
-        f.write(f"{array_points[i][0]} {array_points[i][1]} {array_points[i][2]}\n")
-    f.close()
+    write_to_pts(f"{mesh_dir}{array_name}.pts", array_points)
 
 
 def to_polydata(mesh):
-    polydata = apply_vtk_geom_filter(mesh)
-
-    return polydata
+    return apply_vtk_geom_filter(mesh)
 
 
-def vtkWrite(input_data, name):
+def vtk_write(input_data, name):
     vtk_polydata_writer(name, input_data)
 
 
