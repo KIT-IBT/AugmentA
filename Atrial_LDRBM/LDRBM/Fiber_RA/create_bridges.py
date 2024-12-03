@@ -304,9 +304,9 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         mesh_D = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj")
         mesh_E = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_earth.obj")
         # # Warning: set -1 if pts normals are pointing outside
-        output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
-            # Use difference if the endo normals are pointing inside
-        #    output_mesh_2 = pymesh.boolean(mesh_E, mesh_D, operation="difference", engine="corefinement")
+        #output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
+        # Use difference if the endo normals are pointing inside
+        output_mesh_2 = pymesh.boolean(mesh_E, mesh_D, operation="difference", engine="corefinement")
         pymesh.save_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj", output_mesh_2, ascii=True)
         print("Union between earth and bridges in " + var)
 
