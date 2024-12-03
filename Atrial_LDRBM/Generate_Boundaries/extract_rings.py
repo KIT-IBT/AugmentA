@@ -654,7 +654,7 @@ def split_tv(out_dir, tv, tv_center, ivc_center, svc_center):
     :param svc_center: Center of the svc
     :return:
     """
-    norm_1 = get_normalized_cross_product(tv_center, svc_center, ivc_center)
+    norm_1 = -get_normalized_cross_product(tv_center, svc_center, ivc_center)
     tv_f_plane = initialize_plane(norm_1, tv_center)
     tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv, tv_f_plane))
     tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
