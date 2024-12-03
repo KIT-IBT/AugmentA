@@ -164,7 +164,7 @@ def ra_laplace(args, job, model):
         if args.mesh_type == "vol":
             vtk_xml_unstructured_grid_writer(simid + "/RA_with_laplace.vtu", meshNew.VTKObject)
         else:
-            vtk_polydata_writer(simid + "/RA_with_laplace.vtp", meshNew.VTKObject)
+            vtk_polydata_writer(simid + "/RA_with_laplace.vtp", meshNew.VTKObject, store_xml=True)
 
     """
     calculate the gradient
