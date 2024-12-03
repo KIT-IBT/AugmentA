@@ -148,54 +148,13 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     # and save the results in the out_dict dictionary
     out_dict = ms.get_geometric_measures()
 
-    # get the average edge length from the dictionary
-    avg_edge_length = out_dict['avg_edge_length']
+    tgt_edge_length = (target_mesh_resolution * scale) + 0.1
 
-    tgt_edge_length = (target_mesh_resolution * scale)+0.1
+    out_dict = resample_mesh_set(ms, out_dict, scale, target_mesh_resolution, tgt_edge_length)
 
-    loc_tgt_edge_length = target_mesh_resolution * scale
-    it = 1
-    print(f"Current resolution: {avg_edge_length / scale} mm")
-    print(f"Target resolution: {tgt_edge_length / scale} mm")
-    while avg_edge_length > tgt_edge_length * 1.05 or avg_edge_length < tgt_edge_length * 0.95 or it < 3:
-
-        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(loc_tgt_edge_length))
-        if it == 1:
-            ms.apply_coord_laplacian_smoothing()
-        out_dict = ms.get_geometric_measures()
-
-        avg_edge_length = out_dict['avg_edge_length']
-        print(f"Current resolution: {avg_edge_length / scale} mm")
-        if avg_edge_length > tgt_edge_length * 1.05:
-            loc_tgt_edge_length = tgt_edge_length * 0.95
-            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
-        elif avg_edge_length < tgt_edge_length * 0.95:
-            loc_tgt_edge_length = tgt_edge_length * 1.05
-            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
-        else:
-            break
-        it += 1
-
+    #second run of resampling to be smoother for laplacian generation
     tgt_edge_length = tgt_edge_length - 0.1
-    print("Current resolution: {} mm".format(avg_edge_length / scale))
-    print("Target resolution: {} mm".format(tgt_edge_length / scale))
-    while avg_edge_length > tgt_edge_length * 1.05 or avg_edge_length < tgt_edge_length * 0.95 or it < 3:
-        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(loc_tgt_edge_length))
-        if it == 1:
-            ms.apply_coord_laplacian_smoothing()
-        out_dict = ms.get_geometric_measures()
-
-        avg_edge_length = out_dict['avg_edge_length']
-        print("Current resolution: {} mm".format(avg_edge_length / scale))
-        if avg_edge_length > tgt_edge_length * 1.05:
-            loc_tgt_edge_length = tgt_edge_length * 0.95
-            print("New target resolution: {} mm".format(loc_tgt_edge_length / scale))
-        elif avg_edge_length < tgt_edge_length * 0.95:
-            loc_tgt_edge_length = tgt_edge_length * 1.05
-            print("New target resolution: {} mm".format(loc_tgt_edge_length / scale))
-        else:
-            break
-        it += 1
+    out_dict = resample_mesh_set(ms, out_dict, scale, target_mesh_resolution, tgt_edge_length)
 
     mesh_data["avg_edge_length"] = [out_dict['avg_edge_length']]
     mesh_data["surf"] = [out_dict['surface_area']]
@@ -257,6 +216,43 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
     fname = f'{meshname}_res_mesh_data.csv'
     df = pd.DataFrame(mesh_data)
     df.to_csv(fname, float_format="%.2f", index=False)
+
+
+
+def resample_mesh_set(mesh_set, out_dict, scale, target_mesh_resolution, tgt_edge_length):
+    """
+    Resample mesh based on the target mesh resolution
+    :param mesh_set:
+    :param out_dict: Dictonary which stores the avg_edge_length
+    :param scale: Scale of the mesh
+    :param target_mesh_resolution:
+    :param tgt_edge_length:
+    :return:
+    """
+    avg_edge_length = out_dict['avg_edge_length']
+    loc_tgt_edge_length = target_mesh_resolution * scale
+    it = 1
+    print(f"Current resolution: {avg_edge_length / scale} mm")
+    print(f"Target resolution: {tgt_edge_length / scale} mm")
+    while avg_edge_length > tgt_edge_length * 1.05 or avg_edge_length < tgt_edge_length * 0.95 or it < 3:
+
+        mesh_set.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(loc_tgt_edge_length))
+        if it == 1:
+            mesh_set.apply_coord_laplacian_smoothing()
+        out_dict = mesh_set.get_geometric_measures()
+
+        avg_edge_length = out_dict['avg_edge_length']
+        print(f"Current resolution: {avg_edge_length / scale} mm")
+        if avg_edge_length > tgt_edge_length * 1.05:
+            loc_tgt_edge_length = tgt_edge_length * 0.95
+            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
+        elif avg_edge_length < tgt_edge_length * 0.95:
+            loc_tgt_edge_length = tgt_edge_length * 1.05
+            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
+        else:
+            break
+        it += 1
+    return out_dict
 
 
 def run():
