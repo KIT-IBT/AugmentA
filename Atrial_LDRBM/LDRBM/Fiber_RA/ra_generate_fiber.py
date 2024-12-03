@@ -37,10 +37,10 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import calculate_en
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
@@ -244,6 +244,7 @@ def ra_generate_fiber(model, args, job):
 
     CT_band = vtk_thr(RAW_s, 2, "CELLS", "phie_w", 0.1, tao_ct_plus)  # grad_w
     CT_band = extract_largest_region(CT_band)
+
     CT_ub = vtk_thr(RAW_s, 2, "CELLS", "phie_w", tao_ct_plus - 0.02, tao_ct_plus)  # grad_w
 
     CT_ub = extract_largest_region(CT_ub)
@@ -504,6 +505,8 @@ def ra_generate_fiber(model, args, job):
 
         CT = vtk_thr(model, 2, "CELLS", "elemTag", crista_terminalis, crista_terminalis)
 
+        CT = extract_largest_region(CT)  # clean so path can be found
+
         CT_ids = vtk_to_numpy(CT.GetCellData().GetArray('Global_ids'))
 
     elif args.mesh_type == "vol":
@@ -536,8 +539,8 @@ def ra_generate_fiber(model, args, job):
     point2_id = find_closest_point(CT, SVC_CT_pt)
 
     point3_id = find_closest_point(TV_s, IVC_max_r_CT_pt)
-    point4_id = find_closest_point(TV_s,
-                                   np.array(df["RAA"]))  # this is also the id for Bachmann-Bundle on the right atrium
+    RAA_on_tv_s = find_closest_point(TV_s,
+                                     np.array(df["RAA"]))  # this is also the id for Bachmann-Bundle on the right atrium
 
     CT = apply_vtk_geom_filter(CT)
 
@@ -550,7 +553,7 @@ def ra_generate_fiber(model, args, job):
     n = np.linalg.norm(norm)
     norm_1 = norm / n
 
-    initialize_plane(norm_1, df["TV"])
+    plane = initialize_plane(norm_1, df["TV"])
 
     TV_lat = get_elements_above_plane(TV_s, plane)
 
@@ -569,9 +572,9 @@ def ra_generate_fiber(model, args, job):
     point3_id = find_closest_point(TV_lat, TV_s.GetPoint(point3_id))
 
     # this is also the id for Bachmann-Bundle on the right atrium
-    point4_id = find_closest_point(TV_lat, TV_s.GetPoint(point4_id))
+    RAA_on_tv_lat = find_closest_point(TV_lat, TV_s.GetPoint(RAA_on_tv_s))
 
-    tv_points_data = Method.dijkstra_path(TV_lat, point3_id, point4_id)
+    tv_points_data = Method.dijkstra_path(TV_lat, point3_id, RAA_on_tv_lat)
 
     if args.debug:
         Method.create_pts(tv_points_data, 'tv_points_data', f'{args.mesh}_surf/')
@@ -642,7 +645,7 @@ def ra_generate_fiber(model, args, job):
 
         tree = cKDTree(centroids_array)
 
-        ii = tree.query_ball_point(pm, r=w_pm, n_jobs=-1)
+        ii = tree.query_ball_point(pm, r=w_pm, workers=-1)
 
         ii = list(set([item for sublist in ii for item in sublist]))
 
@@ -781,7 +784,7 @@ def ra_generate_fiber(model, args, job):
 
     # Bachmann-Bundle starting point
     bb_1_id = find_closest_point(surface, SVC_CT_pt)
-    bb_2_id = find_closest_point(surface, TV_lat.GetPoint(point4_id))
+    bb_2_id = find_closest_point(surface, TV_lat.GetPoint(RAA_on_tv_lat))
     bb_c_id = find_closest_point(surface, RAS_S.GetPoint(bb_c_id))
 
     bachmann_bundle_points_data_1 = Method.dijkstra_path(surface, bb_1_id, bb_c_id)
