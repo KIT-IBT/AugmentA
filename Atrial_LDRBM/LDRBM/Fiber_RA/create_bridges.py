@@ -59,15 +59,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     bridge_radius = 1.65 * args.scale
 
-    bachmann_bundel_left = int(tag_dict['bachmann_bundel_left'])
-    bachmann_bundel_right = int(tag_dict['bachmann_bundel_right'])
     bachmann_bundel_internal = int(tag_dict['bachmann_bundel_internal'])
     middle_posterior_bridge_left = int(tag_dict['middle_posterior_bridge_left'])
-    middle_posterior_bridge_right = int(tag_dict['middle_posterior_bridge_right'])
     upper_posterior_bridge_left = int(tag_dict['upper_posterior_bridge_left'])
-    upper_posterior_bridge_right = int(tag_dict['upper_posterior_bridge_right'])
     coronary_sinus_bridge_left = int(tag_dict['coronary_sinus_bridge_left'])
-    coronary_sinus_bridge_right = int(tag_dict['coronary_sinus_bridge_right'])
     right_atrial_septum_epi = int(tag_dict['right_atrial_septum_epi'])
     left_atrial_wall_epi = int(tag_dict["left_atrial_wall_epi"])
     mitral_valve_epi = int(tag_dict["mitral_valve_epi"])
@@ -164,7 +159,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         # add the mesh to the MeshSet
         ms.add_mesh(m, "bridge_mesh")
         # apply filter
-        ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4 * args.scale, adaptive=True)
+        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(0.4 * args.scale), adaptive=True)
         ms.save_current_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj", \
                              save_vertex_color=False, save_vertex_normal=False, save_face_color=False,
                              save_wedge_texcoord=False, save_wedge_normal=False)
@@ -324,7 +319,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         # if args.just_bridges and var == 'BB_intern_bridges':
         # job.ID='../'+job.ID# Change if you enter from ra_main and not from pipeline.py, otherwise comment the line
         ms.load_new_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj")
-        ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4 * args.scale, adaptive=True)
+        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(0.4 * args.scale), adaptive=True)
         ms.save_current_mesh(job.ID + "/bridges/" + str(var) + "_union.obj", save_vertex_color=False,
                              save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False,
                              save_wedge_normal=False)
@@ -455,7 +450,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_endo.vtu", endo)  # Has elemTag! :,
         bilayer = Method.generate_bilayer(args, job, endo, epi, 0.12 * args.scale)  # Does not have elemTag :(!
 
-        Method.write_bilayer(args, job)
+        Method.write_bilayer(bilayer, args, job)
 
     else:
 
