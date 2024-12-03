@@ -136,9 +136,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
         RA_tag = id_vec[int(RAA_id)]
 
         warning("WARNING: Should be checkt for functionality extract_rings l151")
-        thr = get_threshold_between(mesh_conn, LA_tag, LA_tag, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
+        la_threshold_filter = get_threshold_between(mesh_conn, LA_tag, LA_tag,
+                                                    "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
 
-        mesh_poly = apply_vtk_geom_filter(thr.GetOutputPort(), True)
+        mesh_poly = apply_vtk_geom_filter(la_threshold_filter.GetOutputPort(), True)
 
         LA = generate_ids(mesh_poly, "Ids", "Ids")
 
@@ -158,9 +159,10 @@ def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_i
 
         vtk_write(dataSet.VTKObject, outdir + '/LA_boundaries_tagged.vtk'.format(mesh))
 
-        thr.ThresholdBetween(RA_tag, RA_tag)
-        thr.Update()
-        RA_poly = apply_vtk_geom_filter(thr.GetOutputPort(), True)
+        ra_threshold_filter = get_threshold_between(mesh_conn, RA_tag, RA_tag,
+                                                    "vtkDataObject::FIELD_ASSOCIATION_POINTS",
+                                                    "RegionID")
+        RA_poly = apply_vtk_geom_filter(ra_threshold_filter.GetOutputPort(), True)
 
         RA = generate_ids(RA_poly, "Ids", "Ids")
 
@@ -634,7 +636,7 @@ def extract_top_cut(outdir, surface_over_tv_f, ivc_points, svc_points, debug):
         connect.DeleteSpecifiedRegion(region_id)
         connect.Update()
     # It can happen that the first i=region(0) is the CS. Remove the -1 if that is the case
-    connect.AddSpecifiedRegion(top_endo_id - 1)  # Find the id in the points dividing the RA, avoid CS
+    connect.AddSpecifiedRegion(top_endo_id)  # Find the id in the points dividing the RA, avoid CS
     connect.Update()
     surface_over_tv_f = connect.GetOutput()
     # Clean unused points
@@ -653,13 +655,13 @@ def split_tv(out_dir, tv, tv_center, ivc_center, svc_center):
     :return:
     """
     norm_1 = get_normalized_cross_product(tv_center, svc_center, ivc_center)
-    tv_f_plane = initialize_plane(norm_1[0], tv_center)
+    tv_f_plane = initialize_plane(norm_1, tv_center)
     tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv, tv_f_plane))
     tv_f_ids = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
     write_to_vtx(out_dir + '/ids_TV_F.vtx', tv_f_ids)
 
     norm_2 = - norm_1
-    tv_s_plane = initialize_plane(norm_2[0], tv_center)
+    tv_s_plane = initialize_plane(norm_2, tv_center)
     tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv, tv_s_plane, extract_boundary_cells_on=True))
     tv_s_ids = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
     write_to_vtx(out_dir + '/ids_TV_S.vtx', tv_s_ids)

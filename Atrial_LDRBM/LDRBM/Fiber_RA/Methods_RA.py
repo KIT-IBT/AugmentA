@@ -169,12 +169,12 @@ def write_bilayer(bilayer, args, job):
 
     write_to_pts(f'{file_name}.pts', pts)
 
-    tag_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
+    tag_epi = vtk_to_numpy(bilayer.GetCellData().GetArray('elemTag'))
 
     write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
 
-    el_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
-    sheet_epi = vtk.util.vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
+    el_epi = vtk_to_numpy(bilayer.GetCellData().GetArray('fiber'))
+    sheet_epi = vtk_to_numpy(bilayer.GetCellData().GetArray('sheet'))
 
     write_to_lon(f'{file_name}.lon', el_epi, sheet_epi)
 
