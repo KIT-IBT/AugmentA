@@ -28,6 +28,7 @@ from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
 from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.normal_orientation import are_normals_outside
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
 EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
@@ -70,6 +71,10 @@ def AugmentA(args):
 
     extension = args.mesh.split('.')[-1]
     meshname = args.mesh[:-(len(extension) + 1)]
+
+    if args.normals_outside < 0:
+        # value not set
+        args.normals_outside = int(are_normals_outside(smart_reader(args.mesh)))
 
     if args.closed_surface:
         separate_epi_endo(args.mesh, args.atrium)

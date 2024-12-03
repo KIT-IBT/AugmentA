@@ -89,7 +89,7 @@ def parser():
                         help='target mesh resolution in mm')
     parser.add_argument('--normals_outside',
                         type=int,
-                        default=1,
+                        default=-1,
                         help='set to 1 if surface normals are pointing outside, 0 otherwise')
     parser.add_argument('--add_bridges',
                         type=int,
