@@ -245,7 +245,7 @@ def la_generate_fiber(model, args, job):
     rpv_mean = np.mean([df["RIPV"].to_numpy(), df["RSPV"].to_numpy()], axis=0)
     mv_mean = df["MV"].to_numpy()
 
-    plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
+    plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean, invert_norm=True)
 
     band_s = vtk_thr(epi, 0, "CELLS", "phie_r2", max_phie_r2_tau_lpv)
 
