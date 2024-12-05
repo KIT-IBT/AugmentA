@@ -886,6 +886,14 @@ def distinguish_PVs(connect, PVs, df, name1, name2):
 
 
 def optimize_shape_PV(surface, num, bound):
+    """
+    optimizes a PV ring by checking for the difference between centers of equidistant spaced slices of the ring.
+    This slicing is based on phie_v.
+    :param surface:
+    :param num: Number of slices
+    :param bound: 0 for positive phie_v 1 for negative phie_v
+    :return:
+    """
     if bound == 0:
         phie_v = np.max(vtk_to_numpy(surface.GetCellData().GetArray('phie_v')))
     else:
@@ -894,24 +902,45 @@ def optimize_shape_PV(surface, num, bound):
     arr = np.linspace(bound, phie_v, num)
 
     c_mass_l = []
+    is_complete_ring_list = []
     found = 0
     for l in range(num - 1):
         if bound == 0:
             out = vtk_thr(surface, 2, "CELLS", "phie_v", arr[l], arr[l + 1])
         else:
             out = vtk_thr(surface, 2, "CELLS", "phie_v", arr[l + 1], arr[l])
-
+        is_complete_ring_list.append(check_for_ring_completeness(out))
         center = get_center_of_mass(apply_vtk_geom_filter(out), False)
         c_mass_l.append(center)
 
-    v1 = np.array(c_mass_l[0]) - np.array(c_mass_l[1])
-    for l in range(1, num - 2):
+    non_zero_indices = np.nonzero(is_complete_ring_list)[0]
+    first_valid_ring_index = num if len(non_zero_indices) < 1 else non_zero_indices[0]
+    if first_valid_ring_index > num - 3:
+        # no optimization needed
+        return 0, 0
+
+    v1 = np.array(c_mass_l[first_valid_ring_index]) - np.array(c_mass_l[first_valid_ring_index + 1])
+    for l in range(first_valid_ring_index, num - 2):
         v2 = np.array(c_mass_l[l]) - np.array(c_mass_l[l + 1])
-        if 1 - cosine(v1, v2) < 0:
+        if 1 - cosine(v1, v2) < 0 and is_complete_ring_list[l]:
             found = 1
             break
 
     return found, arr[l - 1]
+
+
+def check_for_ring_completeness(ring_mesh, min_points=50, max_regions=2):
+    """
+    Check if the given input is a valid ring.
+    Should split in maximum 2 regions and have more than 50
+    :param max_regions: Maximum number of individual regions the rings is allowed to have
+    :param min_points: Minimum number of points the ring has to have
+    :param ring_mesh: A vtk mesh containing the ring
+    :return: True if the ring fits the defined parameters
+    """
+    connect_region = init_connectivity_filter(ring_mesh, ExtractionModes.ALL_REGIONS)
+    num_con_reg = connect_region.GetNumberOfExtractedRegions()
+    return 1 if (num_con_reg <= max_regions) and ring_mesh.GetNumberOfPoints() > min_points else 0
 
 
 def generate_spline_points(input_points):
