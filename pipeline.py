@@ -24,10 +24,12 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+
 from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
 from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.mapper import mapp_ids_for_folder
 from vtk_opencarp_helper_methods.vtk_methods.normal_orientation import are_normals_outside
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
@@ -219,7 +221,9 @@ def AugmentA(args):
             meshin = pv.read(f'{processed_mesh}.ply')
             pv.save_meshio(f'{processed_mesh}.obj', meshin, "obj")
 
-        elif not args.resample_input and not args.find_appendage:  # do not resample and do not find appendage
+
+
+        else:  # do not resample and do not find appendage
 
             processed_mesh = meshname  # Provide mesh with _res in  the name
 
@@ -253,8 +257,13 @@ def AugmentA(args):
             # Atrial region annotation and fiber generation using LDRBM
             if args.closed_surface:
                 generate_mesh(meshname_old + f'_{args.atrium}')
-                generate_surf_id(meshname_old, args.atrium)
+                generate_surf_id(meshname_old, args.atrium, args.resample_input)
                 processed_mesh = meshname_old + f"_{args.atrium}_vol"
+                resampled = "_res" if args.resample_input else ""
+                old_folder = meshname + resampled + "_surf"
+                origin_mesh = smart_reader(old_folder + "/LA.vtk")
+                volumetric_mesh = smart_reader(processed_mesh + "_surf/LA.vtk")
+                mapp_ids_for_folder(old_folder, processed_mesh + "_surf", origin_mesh, volumetric_mesh)
                 la_main.run(
                     ["--mesh", processed_mesh, "--np", str(n_cpu), "--normals_outside", str(0), "--mesh_type", "vol",
                      "--ofmt", args.ofmt, "--debug", str(args.debug), "--overwrite-behaviour", "append"])

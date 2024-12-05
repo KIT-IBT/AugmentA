@@ -43,7 +43,7 @@ def write_surf_ids(outdir, name, ii):
     write_to_vtx(outdir + f'/ids_{name}.vtx', ii)
 
 
-def generate_surf_id(meshname, atrium):
+def generate_surf_id(meshname, atrium, resampled=False):
     """The whole model"""
 
     vol = smart_reader(meshname + f"_{atrium}_vol.vtk")
@@ -61,7 +61,8 @@ def generate_surf_id(meshname, atrium):
         os.makedirs(outdir)
 
     shutil.copyfile(meshname + f"_{atrium}_vol.vtk", outdir + f'/{atrium}.vtk')
-    shutil.copyfile(meshname + f"_{atrium}_epi_surf/rings_centroids.csv", outdir + '/rings_centroids.csv')
+    resampled = "_res" if resampled else ""
+    shutil.copyfile(meshname + f"_{atrium}_epi{resampled}_surf/rings_centroids.csv", outdir + '/rings_centroids.csv')
 
     write_surf_ids(outdir, "EPI", ii)
 

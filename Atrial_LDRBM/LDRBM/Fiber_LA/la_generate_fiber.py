@@ -100,9 +100,9 @@ def la_generate_fiber(model, args, job):
     tao_lpv = Method.find_tau(model, ub, lb, "low", "phie_v")
     print('Calculating tao_lpv done! tap_lpv = ', tao_lpv)
 
-    thr = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
+    thr_phi_v = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
 
-    connect = init_connectivity_filter(thr, ExtractionModes.ALL_REGIONS)
+    connect = init_connectivity_filter(thr_phi_v, ExtractionModes.ALL_REGIONS)
 
     PVs = dict()
     # Distinguish between LIPV and LSPV
@@ -110,12 +110,12 @@ def la_generate_fiber(model, args, job):
 
     model = laplace_0_1(args, job, model, "RPV", "LAA", "phie_ab2")
 
-    thr = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
+    thr_lpv = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
 
-    phie_r2_tau_lpv = vtk_to_numpy(thr.GetCellData().GetArray('phie_r2'))
+    phie_r2_tau_lpv = vtk_to_numpy(thr_lpv.GetCellData().GetArray('phie_r2'))
     max_phie_r2_tau_lpv = np.max(phie_r2_tau_lpv)
 
-    phie_ab_tau_lpv = vtk_to_numpy(thr.GetPointData().GetArray('phie_ab2'))
+    phie_ab_tau_lpv = vtk_to_numpy(thr_lpv.GetPointData().GetArray('phie_ab2'))
     max_phie_ab_tau_lpv = np.max(phie_ab_tau_lpv)
 
     print("max_phie_r2_tau_lpv ", max_phie_r2_tau_lpv)
