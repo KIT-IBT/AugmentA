@@ -1,3 +1,3 @@
 [submodule "VTK_openCARP_helper_methods"]
 	path = VTK_openCARP_helper_methods
-	url = https://github.com/KIT-IBT/VTK_openCARP_helper_methods.git
+	url = https://gitlab.kit.edu/kit/ibt-public/vtk_opencarp_helper_methods.git
