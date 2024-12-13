@@ -194,7 +194,7 @@ def la_generate_fiber(model, args, job):
         tag_endo = copy_valve_ids(PVs["LIPV"], PVs["LSPV"], PVs["RIPV"], PVs["RSPV"], tag_dict, tag_endo, "endo")
 
         ids_to_clone = [PVs["RIPV"], PVs["LIPV"], PVs["RSPV"], PVs["LSPV"]]
-        ab_grad = clone_ids(v_grad, ab_grad, ids_to_clone)
+        ab_grad = copy_elements_by_id(v_grad, ab_grad, ids_to_clone)
         # tagging epi-layer
 
         tag_epi[MV_ids] = mitral_valve_epi
@@ -222,7 +222,7 @@ def la_generate_fiber(model, args, job):
         tag = copy_valve_ids(LIPV_ids_endo, LSPV_ids_endo, RIPV_ids_endo, RSPV_ids_endo, tag_dict, tag, "endo")
 
         id_to_clone = [RIPV_ids_endo, RSPV_ids_endo, LIPV_ids_endo, LSPV_ids_endo]
-        ab_grad = clone_ids(v_grad, ab_grad, id_to_clone)
+        ab_grad = copy_elements_by_id(v_grad, ab_grad, id_to_clone)
 
         # tagging epi-layer
 
@@ -272,9 +272,9 @@ def la_generate_fiber(model, args, job):
         et = phie_grad_norm
         print('############### et ###############')
 
-        en_endo = calculate_en(et, ab_grad)
+        en_endo = get_normalized_orthogonality(et, ab_grad)
 
-        en_epi = calculate_en(et, ab_grad_epi)
+        en_epi = get_normalized_orthogonality(et, ab_grad_epi)
 
         print('############### en ###############')
         # el
@@ -328,11 +328,7 @@ def la_generate_fiber(model, args, job):
         et = phie_grad_norm
         print('############### et ###############')
 
-        # k
-        k = ab_grad
-        print('############### k ###############')
-
-        en = calculate_en(et, k)
+        en = get_normalized_orthogonality(et, ab_grad)
         print('############### en ###############')
         # el
         el = np.cross(en, et)
@@ -464,13 +460,20 @@ def la_generate_fiber(model, args, job):
         print('Writing as LA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
 
-def calculate_en(et, k):
-    en = k - et * np.sum(k * et, axis=1).reshape(len(et), 1)
+def get_normalized_orthogonality(reference_vector, input_vectors):
+    """
+    Makes the input_vectors orthogonal to the reference vector and normalizes the result
+    :param reference_vector:
+    :param input_vectors:
+    :return:
+    """
+    en = input_vectors - reference_vector * np.sum(input_vectors * reference_vector, axis=1).reshape(
+        len(reference_vector), 1)
     en = normalize_vectors(en)
     return en
 
 
-def clone_ids(source, dest, id_to_clone):
+def copy_elements_by_id(source, dest, id_to_clone):
     for ids in id_to_clone:
         dest[ids] = source[ids]
     return dest

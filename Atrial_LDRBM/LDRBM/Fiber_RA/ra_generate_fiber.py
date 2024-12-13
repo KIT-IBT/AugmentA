@@ -37,7 +37,7 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
-from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import calculate_en
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import get_normalized_orthogonality
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
 from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
@@ -465,7 +465,7 @@ def ra_generate_fiber(model, args, job):
     # k = ab_grad
     print('############### k ###############')
 
-    en = calculate_en(et, k)
+    en = get_normalized_orthogonality(et, k)
     print('############### en ###############')
     # el
     el = np.cross(en, et)
