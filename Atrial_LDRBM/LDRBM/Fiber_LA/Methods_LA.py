@@ -28,6 +28,7 @@ import collections
 
 import numpy as np
 import vtk
+from numpy.ma.extras import unique
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cosine
 from vtk.numpy_interface import dataset_adapter as dsa
@@ -309,7 +310,7 @@ def get_element_ids_around_path_within_radius(mesh, points_data, radius):
         index = mesh_cell_id_list.GetId(i)
         ids.append(gl_ids[index])
 
-    return ids
+    return unique(ids)
 
 
 def assign_element_tag_around_path_within_radius(mesh, points_data, radius, tag, element_tag):
