@@ -187,7 +187,7 @@ def la_generate_fiber(model, args, job):
     # tagging endo-layer
     if args.mesh_type == 'bilayer':
         tag_endo[MV_ids] = tag_dict['mitral_valve_endo']
-        ab_grad[MV_ids] = r_grad[MV_ids]
+        ab_grad[MV_ids] = -r_grad[MV_ids]
 
         tag_endo[LAA_ids] = tag_dict['left_atrial_appendage_endo']
 
@@ -254,7 +254,7 @@ def la_generate_fiber(model, args, job):
     band_cell_ids = vtk_to_numpy(extracted_mesh.GetCellData().GetArray('Global_ids'))
 
     if args.mesh_type == "bilayer":
-        ab_grad_epi[band_cell_ids] = r_grad[band_cell_ids]
+        ab_grad_epi[band_cell_ids] = -r_grad[band_cell_ids]
 
         meshNew = dsa.WrapDataObject(model)
         meshNew.CellData.append(tag_endo, "elemTag")
