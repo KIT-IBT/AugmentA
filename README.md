@@ -29,6 +29,9 @@ source ~/myEnv/bin/activate
 pip install -r requirements.txt
 ```
 
+Download the submodule with the helper methods:
+```git submodule update --init --recursive```
+
 Install [PyMesh](https://pymesh.readthedocs.io/en/latest/installation.html)
 
 Go to the carputils folder and re-install carputils' requirements (assuming that carputils was installed in the home
