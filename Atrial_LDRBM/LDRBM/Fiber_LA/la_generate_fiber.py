@@ -187,7 +187,7 @@ def la_generate_fiber(model, args, job):
     # tagging endo-layer
     if args.mesh_type == 'bilayer':
         tag_endo[MV_ids] = tag_dict['mitral_valve_endo']
-        ab_grad[MV_ids] = -r_grad[MV_ids]
+        ab_grad[MV_ids] = r_grad[MV_ids] #maybe add minus sign to be more comparable
 
         tag_endo[LAA_ids] = tag_dict['left_atrial_appendage_endo']
 
