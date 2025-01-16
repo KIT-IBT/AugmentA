@@ -42,7 +42,7 @@ def separate_epi_endo(path, atrium):
         thresh = get_threshold_between(model, left_atrial_wall_epi, left_atrial_wall_epi,
                                        "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
     elif atrium == "RA":
-        thresh = get_threshold_between(right_atrial_wall_epi, right_atrial_wall_epi,
+        thresh = get_threshold_between(model, right_atrial_wall_epi, right_atrial_wall_epi,
                                        "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
     else:
         raise ValueError("Atrium has to be LA or RA")
