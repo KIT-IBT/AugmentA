@@ -113,12 +113,13 @@ def parser():
 def run():
     args = parser().parse_args()
 
-    # In case both atria are given process LA first and RA later
-    if args.atrium == 'LA_RA':
-        # args.atrium = 'LA'
+    # In case both atria and closed surface are given process LA first and RA later
+    if args.atrium == 'LA_RA' and args.closed_surface:
+        print("Current no support for biatrial volumetric bridge generation. Annotating LA and RA separately")
+        args.atrium = 'LA'
         AugmentA(args)
-        # args.atrium = 'RA'
-        # AugmentA(args)
+        args.atrium = 'RA'
+        AugmentA(args)
     else:
         AugmentA(args)
 
