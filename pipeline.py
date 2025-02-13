@@ -24,10 +24,12 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
 
 from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
 from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
 from vtk_opencarp_helper_methods.vtk_methods.mapper import mapp_ids_for_folder
 from vtk_opencarp_helper_methods.vtk_methods.normal_orientation import are_normals_outside
@@ -74,9 +76,16 @@ def AugmentA(args):
     extension = args.mesh.split('.')[-1]
     meshname = args.mesh[:-(len(extension) + 1)]
 
+    mesh = smart_reader(args.mesh)
+
+
+    if type(mesh) is vtkUnstructuredGrid:
+        mesh = apply_vtk_geom_filter(mesh)
+        vtk_polydata_writer(args.mesh, mesh)
+
     if args.normals_outside < 0:
         # value not set
-        args.normals_outside = int(are_normals_outside(smart_reader(args.mesh)))
+        args.normals_outside = int(are_normals_outside(mesh))
 
     if args.closed_surface:
         separate_epi_endo(args.mesh, args.atrium)
