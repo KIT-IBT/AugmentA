@@ -9,7 +9,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from Atrial_LDRBM.Generate_Boundaries.separate_epi_endo import *
+from Atrial_LDRBM.Generate_Boundaries import separate_epi_endo
 
 class TestSeparateEpiEndo(unittest.TestCase):
     # -------------------- Tests for load_element_tags --------------------
@@ -42,7 +42,7 @@ class TestSeparateEpiEndo(unittest.TestCase):
             tmp_filepath = tmp.name
 
         try:
-            with self.assertRaises(ValueError):
+            with self.assertRaises(RuntimeError):
                 separate_epi_endo.load_element_tags(tmp_filepath)
         finally:
             os.remove(tmp_filepath)
@@ -65,11 +65,12 @@ class TestSeparateEpiEndo(unittest.TestCase):
 
     def test_get_wall_tags_missing_key(self):
         tag_dict = {'left_atrial_wall_epi': '10'}  # Missing left_atrial_wall_endo
-        with self.assertRaises(KeyError):
+        with self.assertRaises(KeyError) as cm:
             separate_epi_endo.get_wall_tags(tag_dict, "LA")
+        self.assertIn("Missing expected tag for LA", str(cm.exception))
 
     # -------------------- Tests for threshold_model --------------------
-    @patch('separate_epi_endo.get_threshold_between')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.get_threshold_between')
     def test_threshold_model_success(self, mock_get_threshold_between):
         dummy_thresh = MagicMock()
         dummy_thresh.GetOutput.return_value = "dummy_output"
@@ -78,15 +79,15 @@ class TestSeparateEpiEndo(unittest.TestCase):
         result = separate_epi_endo.threshold_model("model", 1, 2)
         self.assertEqual(result, dummy_thresh)
 
-    @patch('separate_epi_endo.get_threshold_between')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.get_threshold_between')
     def test_threshold_model_failure(self, mock_get_threshold_between):
         mock_get_threshold_between.return_value = None
         with self.assertRaises(RuntimeError):
             separate_epi_endo.threshold_model("model", 1, 2)
 
     # -------------------- Tests for write_filtered_meshes --------------------
-    @patch('separate_epi_endo.vtk_polydata_writer')
-    @patch('separate_epi_endo.vtk_obj_writer')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.vtk_polydata_writer')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.vtk_obj_writer')
     def test_write_filtered_meshes(self, mock_obj_writer, mock_polydata_writer):
         dummy_mesh = "dummy_mesh"
         meshname = "testmesh"
@@ -103,12 +104,12 @@ class TestSeparateEpiEndo(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             separate_epi_endo.separate_epi_endo("non_existent.obj", "LA")
 
-    @patch('separate_epi_endo.write_filtered_meshes')
-    @patch('separate_epi_endo.apply_vtk_geom_filter')
-    @patch('separate_epi_endo.threshold_model')
-    @patch('separate_epi_endo.smart_reader')
-    @patch('separate_epi_endo.get_wall_tags')
-    @patch('separate_epi_endo.load_element_tags')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.write_filtered_meshes')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.apply_vtk_geom_filter')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.threshold_model')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.smart_reader')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.get_wall_tags')
+    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.load_element_tags')
     @patch('os.path.exists')
     def test_separate_epi_endo_success(self, mock_exists, mock_load_tags, mock_get_wall_tags,
                                          mock_smart_reader, mock_threshold_model,
