@@ -11,53 +11,37 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
-# Module-level imports from VTK helper modules
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.filters import (
-    apply_vtk_geom_filter, clean_polydata, generate_ids, get_center_of_mass,
-    get_feature_edges, get_elements_above_plane
-)
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx, vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import (
-    init_connectivity_filter, ExtractionModes, initialize_plane_with_points, initialize_plane
-)
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
-# For tag loading from the procedural module
-from Atrial_LDRBM.Generate_Boundaries.separate_epi_endo import load_element_tags
-# For TV splitting, import the procedural split_tv function
-from Atrial_LDRBM.Generate_Boundaries.extract_rings import split_tv
-# Import ring detector module functions and Ring class
-from ring_detector import (
-    Ring, detect_and_mark_rings, mark_LA_rings, mark_RA_rings,
-    cutting_plane_to_identify_UAC, cutting_plane_to_identify_RSPV,
-    cutting_plane_to_identify_tv_f_tv_s
-)
-# Import mesh handling functions
 from mesh_handler import load_mesh, generate_mesh
+from ring_detector import Ring, detect_and_mark_rings, mark_LA_rings, mark_RA_rings, cutting_plane_to_identify_UAC, cutting_plane_to_identify_RSPV, cutting_plane_to_identify_tv_f_tv_s
+from epi_endo_separator import separate_epi_endo
+from surface_id_generator import generate_surf_id
+from tag_loader import load_element_tags
+from file_manager import write_vtk, write_obj, write_csv, write_vtx_file
+
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
+from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 
 
 class AtrialBoundaryGenerator:
     """
-    This class implements:
-      1. Mesh generation via meshtool.
-      2. Ring extraction (standard and top epi/endo) from the mesh.
-      3. Epicardial/endocardial surface separation.
-      4. Surface ID generation.
-      5. Tag loading.
+    Orchestrates atrial boundary generation using a modular, object‑oriented approach.
+    Uses separate modules for:
+        Mesh handling
+        Ring detection (including TV splitting and UAC identification)
+        Epi/Endo separation
+        Surface ID generation
+        Tag loading
 
-    Attributes:
-        mesh_path (str): Path to the mesh file.
-        la_apex (int): Index for left atrial apex.
-        ra_apex (int): Index for right atrial apex.
-        la_base (int): Index for left atrial base.
-        ra_base (int): Index for right atrial base.
-        debug (bool): Enables verbose output.
-        ring_info (dict): Stores computed ring centroids and related data.
-        element_tags (dict): Stores element tags for epi/endo separation.
+    :param mesh_path: Path to the mesh file.
+    :param la_apex: Index for left atrial apex.
+    :param ra_apex: Index for right atrial apex.
+    :param la_base: Index for left atrial base.
+    :param ra_base: Index for right atrial base.
+    :param debug: Enables verbose output.
+    :return: An instance of AtrialBoundaryGenerator.
     """
 
     def __init__(self,
@@ -77,232 +61,254 @@ class AtrialBoundaryGenerator:
         self.ring_info: Dict[str, Any] = {}
         self.element_tags: Dict[str, str] = {}
 
-    # --------------------------
+
     # Helper Methods
-    # --------------------------
     def _get_base_mesh(self) -> str:
+        """
+        Returns the base mesh filename (without extension).
+        :return: Base mesh filename as a string.
+        """
         base, _ = os.path.splitext(self.mesh_path)
         return base
 
     def _prepare_output_directory(self, suffix: str = "_surf") -> str:
+        """
+        Prepares and cleans the output directory by creating it if needed and
+        removing any previously generated ID files.
+
+        :param suffix: Suffix to append to the base mesh filename.
+        :return: The output directory path.
+        """
         base = self._get_base_mesh()
         outdir = f"{base}{suffix}"
         if not os.path.exists(outdir):
             os.makedirs(outdir)
-        for f in glob(os.path.join(outdir, 'ids_*')):
-            os.remove(f)
+        # Remove previous ID files to avoid stale data.
+        for file_path in glob(os.path.join(outdir, 'ids_*')):
+            os.remove(file_path)
         return outdir
 
     def _format_id(self, idx: int) -> str:
+        """
+        Converts an index to a string.
+
+        :param idx: An integer index.
+        :return: The index as a string, or empty if None.
+        """
         return str(idx) if idx is not None else ""
 
-    # --------------------------
-    # 1. Mesh Generation
-    # --------------------------
+
+    # Mesh Generation
     def generate_mesh(self, la_mesh_scale: float = 1.0) -> None:
+        """
+        Generates a volumetric mesh using meshtool. The mesh is saved with the suffix "_vol".
+
+        :param la_mesh_scale: A scaling factor for the mesh (if needed).
+        :return: None.
+        """
         generate_mesh(self.mesh_path, la_mesh_scale)
         if self.debug:
             print("Mesh generated.")
 
-    # --------------------------
-    # 2. Standard Ring Extraction
-    # --------------------------
+
+    # Ring Extraction: Helper for Left Atrial Region
+    def _process_LA_region(self, mesh: vtk.vtkPolyData, outdir: str) -> Dict[str, Any]:
+        """
+        Processes the left atrial region:
+          - Retrieves the LA apex point.
+          - Applies connectivity filtering and thresholding.
+          - Generates IDs and detects rings.
+          - Marks rings using clustering.
+          - Writes out the processed LA region and its boundaries.
+
+        :param mesh: The input mesh as a VTK polydata object.
+        :param outdir: The directory where LA-related files will be saved.
+        :return: A dictionary of computed centroids for the LA region.
+        """
+        # Retrieve the LA apex point from the mesh.
+        LA_ap_point = mesh.GetPoint(int(self.la_apex))
+
+        # Apply connectivity filtering to segment the mesh.
+        mesh_conn = init_connectivity_filter(mesh, ExtractionModes.ALL_REGIONS, True).GetOutput()
+        arr = mesh_conn.GetPointData().GetArray("RegionId")
+        arr.SetName("RegionID")
+        id_vector = vtk_to_numpy(arr)
+        new_LAA_id = find_closest_point(mesh_conn, LA_ap_point)
+        LA_tag = id_vector[int(new_LAA_id)]
+
+        # Apply thresholding to isolate the LA region.
+        la_thresh = get_threshold_between(mesh_conn, LA_tag, LA_tag,
+                                          "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
+        la_poly = apply_vtk_geom_filter(la_thresh.GetOutputPort(), True)
+        # Generate IDs to ensure consistency.
+        from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids
+        LA_region = generate_ids(la_poly, "Ids", "Ids")
+
+        # Write out the raw LA region.
+        write_vtk(os.path.join(outdir, 'LA.vtk'), LA_region)
+
+        # Adjust the apex point to the processed region.
+        adjusted_LAA = find_closest_point(LA_region, LA_ap_point)
+        boundary_tag = np.zeros((LA_region.GetNumberOfPoints(),))
+
+        # Detect rings within the LA region.
+        centroids = {}
+        rings = detect_and_mark_rings(LA_region, LA_ap_point, outdir)
+
+        # Mark the rings using clustering and update boundary tags and centroids.
+        boundary_tag, centroids = mark_LA_rings(adjusted_LAA, rings, boundary_tag, centroids, outdir, LA_region)
+
+        # Wrap the LA region for adding extra point data and write boundaries.
+        ds = dsa.WrapDataObject(LA_region)
+        ds.PointData.append(boundary_tag, 'boundary_tag')
+        write_vtk(os.path.join(outdir, 'LA_boundaries_tagged.vtk'), ds.VTKObject)
+
+        return centroids
+
+
+    # Ring Extraction: Helper for Right Atrial Region
+    def _process_RA_region(self, mesh: vtk.vtkPolyData, outdir: str) -> Dict[str, Any]:
+        """
+        Processes the right atrial region:
+          - Retrieves the RA apex point.
+          - Applies connectivity filtering and thresholding.
+          - Generates IDs and detects rings.
+          - Marks rings using clustering.
+          - Performs TV splitting to segment the tricuspid valve.
+          - Writes out the processed RA region and its boundaries.
+
+        :param mesh: The input mesh as a VTK polydata object.
+        :param outdir: The directory where RA-related files will be saved.
+        :return: A dictionary of computed centroids for the RA region.
+        """
+        # Retrieve the RA apex point.
+        RA_ap_point = mesh.GetPoint(int(self.ra_apex))
+
+        # Apply connectivity filtering to isolate the RA region.
+        mesh_conn = init_connectivity_filter(mesh, ExtractionModes.ALL_REGIONS, True).GetOutput()
+        arr = mesh_conn.GetPointData().GetArray("RegionId")
+        arr.SetName("RegionID")
+        id_vector = vtk_to_numpy(arr)
+        new_RAA_id = find_closest_point(mesh_conn, RA_ap_point)
+        RA_tag = id_vector[int(new_RAA_id)]
+
+        # Thresholding for the RA region.
+        ra_thresh = get_threshold_between(mesh_conn, RA_tag, RA_tag,
+                                          "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
+        ra_poly = apply_vtk_geom_filter(ra_thresh.GetOutputPort(), True)
+        RA_region = generate_ids(ra_poly, "Ids", "Ids")
+
+        # Write out the raw RA region.
+        write_vtk(os.path.join(outdir, 'RA.vtk'), RA_region)
+
+        # Adjust the RA apex point.
+        adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
+        boundary_tag = np.zeros((RA_region.GetNumberOfPoints(),))
+
+        # Detect rings within the RA region.
+        centroids = {}
+        rings = detect_and_mark_rings(RA_region, RA_ap_point, outdir)
+        boundary_tag, centroids, rings = mark_RA_rings(adjusted_RAA, rings, boundary_tag, centroids, outdir)
+
+        # Perform TV splitting to separate tricuspid valve segments.
+        cutting_plane_to_identify_tv_f_tv_s(RA_region, rings, outdir, self.debug)
+
+        # Wrap the RA region to attach boundary tags and write the boundaries.
+        ds = dsa.WrapDataObject(RA_region)
+        ds.PointData.append(boundary_tag, 'boundary_tag')
+        write_vtk(os.path.join(outdir, 'RA_boundaries_tagged.vtk'), ds.VTKObject)
+
+        return centroids
+
+
+    # Main Ring Extraction Orchestration
     def extract_rings(self) -> None:
+        """
+        Orchestrates the ring extraction process.
+
+        This method loads the mesh, prepares the output directory, and then based on the provided apex values,
+        processes the LA region, RA region, or both. It then writes a CSV file containing the computed centroids.
+
+        :return: None
+        """
         mesh = load_mesh(self.mesh_path)
         outdir = self._prepare_output_directory("_surf")
         centroids = {}
 
+        # Check for biatrial, LA-only, or RA-only processing:
         if self.la_apex is not None and self.ra_apex is not None:
-            # Biatrial workflow:
-            LA_ap_point = mesh.GetPoint(int(self.la_apex))
-            RA_ap_point = mesh.GetPoint(int(self.ra_apex))
-            centroids["LAA"] = LA_ap_point
-            centroids["RAA"] = RA_ap_point
-            if self.la_base is not None and self.ra_base is not None:
-                centroids["LAA_base"] = mesh.GetPoint(int(self.la_base))
-                centroids["RAA_base"] = mesh.GetPoint(int(self.ra_base))
-
-            mesh_conn = init_connectivity_filter(mesh, ExtractionModes.ALL_REGIONS, True).GetOutput()
-            arr = mesh_conn.GetPointData().GetArray("RegionId")
-            arr.SetName("RegionID")
-            id_vec = vtk_to_numpy(arr)
-            new_LAA_id = find_closest_point(mesh_conn, LA_ap_point)
-            new_RAA_id = find_closest_point(mesh_conn, RA_ap_point)
-            LA_tag = id_vec[int(new_LAA_id)]
-            RA_tag = id_vec[int(new_RAA_id)]
-
-            # Process LA region:
-            la_thresh = get_threshold_between(mesh_conn, LA_tag, LA_tag,
-                                              "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
-            la_poly = apply_vtk_geom_filter(la_thresh.GetOutputPort(), True)
-            LA_region = generate_ids(la_poly, "Ids", "Ids")
-            vtk_polydata_writer(os.path.join(outdir, 'LA.vtk'), LA_region)
-            adjusted_LAA = find_closest_point(LA_region, LA_ap_point)
-            b_tag = np.zeros((LA_region.GetNumberOfPoints(),))
-            rings = detect_and_mark_rings(LA_region, LA_ap_point, outdir)
-            b_tag, centroids = mark_LA_rings(adjusted_LAA, rings, b_tag, centroids, outdir, LA_region)
-            ds = dsa.WrapDataObject(LA_region)
-            ds.PointData.append(b_tag, 'boundary_tag')
-            vtk_polydata_writer(os.path.join(outdir, 'LA_boundaries_tagged.vtk'), ds.VTKObject)
-
-            # Process RA region:
-            ra_thresh = get_threshold_between(mesh_conn, RA_tag, RA_tag,
-                                              "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
-            ra_poly = apply_vtk_geom_filter(ra_thresh.GetOutputPort(), True)
-            RA_region = generate_ids(ra_poly, "Ids", "Ids")
-            vtk_polydata_writer(os.path.join(outdir, 'RA.vtk'), RA_region)
-            adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
-            b_tag_ra = np.zeros((RA_region.GetNumberOfPoints(),))
-            rings_ra = detect_and_mark_rings(RA_region, RA_ap_point, outdir)
-            b_tag_ra, centroids, rings_ra = mark_RA_rings(adjusted_RAA, rings_ra, b_tag_ra, centroids, outdir)
-            # Invoke TV splitting for RA:
-            cutting_plane_to_identify_tv_f_tv_s(RA_region, rings_ra, outdir, self.debug)
-            ds_ra = dsa.WrapDataObject(RA_region)
-            ds_ra.PointData.append(b_tag_ra, 'boundary_tag')
-            vtk_polydata_writer(os.path.join(outdir, 'RA_boundaries_tagged.vtk'), ds_ra.VTKObject)
-
+            centroids.update(self._process_LA_region(mesh, outdir))
+            centroids.update(self._process_RA_region(mesh, outdir))
         elif self.ra_apex is None and self.la_apex is not None:
-            # LA-only processing:
-            LA_ap_point = mesh.GetPoint(int(self.la_apex))
-            centroids["LAA"] = LA_ap_point
-            if self.la_base is not None:
-                centroids["LAA_base"] = mesh.GetPoint(int(self.la_base))
-            mesh_conn = init_connectivity_filter(mesh, ExtractionModes.ALL_REGIONS, True).GetOutput()
-            arr = mesh_conn.GetPointData().GetArray("RegionId")
-            arr.SetName("RegionID")
-            id_vec = vtk_to_numpy(arr)
-            new_LAA_id = find_closest_point(mesh_conn, LA_ap_point)
-            LA_tag = id_vec[int(new_LAA_id)]
-            la_thresh = get_threshold_between(mesh_conn, LA_tag, LA_tag,
-                                              "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
-            la_poly = apply_vtk_geom_filter(la_thresh.GetOutputPort(), True)
-            LA_region = generate_ids(la_poly, "Ids", "Ids")
-            vtk_polydata_writer(os.path.join(outdir, 'LA.vtk'), LA_region)
-            adjusted_LAA = find_closest_point(LA_region, LA_ap_point)
-            b_tag = np.zeros((LA_region.GetNumberOfPoints(),))
-            rings = detect_and_mark_rings(LA_region, LA_ap_point, outdir)
-            b_tag, centroids = mark_LA_rings(adjusted_LAA, rings, b_tag, centroids, outdir, LA_region)
-            ds = dsa.WrapDataObject(LA_region)
-            ds.PointData.append(b_tag, 'boundary_tag')
-            vtk_polydata_writer(os.path.join(outdir, 'LA_boundaries_tagged.vtk'), ds.VTKObject)
+            centroids.update(self._process_LA_region(mesh, outdir))
         elif self.la_apex is None and self.ra_apex is not None:
-            # RA-only processing:
-            RA_ap_point = mesh.GetPoint(int(self.ra_apex))
-            centroids["RAA"] = RA_ap_point
-            if self.ra_base is not None:
-                centroids["RAA_base"] = mesh.GetPoint(int(self.ra_base))
-            mesh_conn = init_connectivity_filter(mesh, ExtractionModes.ALL_REGIONS, True).GetOutput()
-            arr = mesh_conn.GetPointData().GetArray("RegionId")
-            arr.SetName("RegionID")
-            id_vec = vtk_to_numpy(arr)
-            new_RAA_id = find_closest_point(mesh_conn, RA_ap_point)
-            RA_tag = id_vec[int(new_RAA_id)]
-            ra_thresh = get_threshold_between(mesh_conn, RA_tag, RA_tag,
-                                              "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
-            ra_poly = apply_vtk_geom_filter(ra_thresh.GetOutputPort(), True)
-            RA_region = generate_ids(ra_poly, "Ids", "Ids")
-            vtk_polydata_writer(os.path.join(outdir, 'RA.vtk'), RA_region)
-            adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
-            b_tag = np.zeros((RA_region.GetNumberOfPoints(),))
-            rings = detect_and_mark_rings(RA_region, RA_ap_point, outdir)
-            b_tag, centroids, rings = mark_RA_rings(adjusted_RAA, rings, b_tag, centroids, outdir)
-            # Invoke TV splitting for RA:
-            cutting_plane_to_identify_tv_f_tv_s(RA_region, rings, outdir, self.debug)
-            ds = dsa.WrapDataObject(RA_region)
-            ds.PointData.append(b_tag, 'boundary_tag')
-            vtk_polydata_writer(os.path.join(outdir, 'RA_boundaries_tagged.vtk'), ds.VTKObject)
+            centroids.update(self._process_RA_region(mesh, outdir))
         else:
             raise ValueError("At least one of LA or RA apex must be provided.")
 
-        df = pd.DataFrame(centroids)
-        csv_path = os.path.join(outdir, "rings_centroids.csv")
-        df.to_csv(csv_path, float_format="%.2f", index=False)
+        # Write the centroids to a CSV file using our centralized I/O function.
+        write_csv(os.path.join(outdir, "rings_centroids.csv"), pd.DataFrame(centroids))
         self.ring_info = centroids
         if self.debug:
             print("Ring extraction complete. Centroids saved.")
 
-    # --------------------------
+
     # Epi/Endo Separation
-    # --------------------------
     def separate_epi_endo(self, atrium: str) -> None:
-        if atrium not in ["LA", "RA"]:
-            raise ValueError("Atrium must be 'LA' or 'RA'.")
-        model = smart_reader(self.mesh_path)
-        if not self.element_tags:
-            self.element_tags = load_element_tags('path/to/element_tag.csv')
-        if atrium == "LA":
-            epi_tag = int(self.element_tags.get('left_atrial_wall_epi', 0))
-            endo_tag = int(self.element_tags.get('left_atrial_wall_endo', 0))
-        else:
-            epi_tag = int(self.element_tags.get('right_atrial_wall_epi', 0))
-            endo_tag = int(self.element_tags.get('right_atrial_wall_endo', 0))
-        combined_thresh = get_threshold_between(model, endo_tag, epi_tag,
-                                                "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
-        filtered_combined = apply_vtk_geom_filter(combined_thresh.GetOutput())
-        outdir = self._prepare_output_directory("_vol_surf")
-        vtk_polydata_writer(os.path.join(outdir, f"{atrium}.vtk"), filtered_combined)
-        vtk_obj_writer(os.path.join(outdir, f"{atrium}.obj"), filtered_combined)
-        epi_thresh = get_threshold_between(model, epi_tag, epi_tag,
-                                           "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
-        filtered_epi = apply_vtk_geom_filter(epi_thresh.GetOutput())
-        vtk_polydata_writer(os.path.join(outdir, f"{atrium}_epi.vtk"), filtered_epi)
-        vtk_obj_writer(os.path.join(outdir, f"{atrium}_epi.obj"), filtered_epi)
-        endo_thresh = get_threshold_between(model, endo_tag, endo_tag,
-                                            "vtkDataObject::FIELD_ASSOCIATION_CELLS", "tag")
-        filtered_endo = apply_vtk_geom_filter(endo_thresh.GetOutput())
-        vtk_polydata_writer(os.path.join(outdir, f"{atrium}_endo.vtk"), filtered_endo)
-        vtk_obj_writer(os.path.join(outdir, f"{atrium}_endo.obj"), filtered_endo)
+        """
+        Delegates epicardial and endocardial separation to the epi_endo_separator module.
+
+        :param atrium: A string ("LA" or "RA") indicating which atrium to process.
+        :return: None.
+        """
+        separate_epi_endo(self.mesh_path, atrium, self.element_tags)
         if self.debug:
             print(f"Epi/Endo separation completed for {atrium}.")
 
-    # --------------------------
+
     # Surface ID Generation
-    # --------------------------
     def generate_surf_id(self, atrium: str, resampled: bool = False) -> None:
-        base = self.mesh_path
-        vol = smart_reader(f"{base}_{atrium}_vol.vtk")
-        coords = vtk_to_numpy(vol.GetPoints().GetData())
-        tree = cKDTree(coords)
-        epi_obj = smart_reader(f"{base}_{atrium}_epi.obj")
-        epi_pts = vtk_to_numpy(epi_obj.GetPoints().GetData())
-        _, epi_indices = tree.query(epi_pts)
-        epi_ids = np.array(epi_indices)
-        outdir = f"{base}_{atrium}_vol_surf"
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-        shutil.copyfile(f"{base}_{atrium}_vol.vtk", os.path.join(outdir, f"{atrium}.vtk"))
-        res_str = "_res" if resampled else ""
-        shutil.copyfile(f"{base}_{atrium}_epi{res_str}_surf/rings_centroids.csv",
-                        os.path.join(outdir, "rings_centroids.csv"))
-        write_to_vtx(os.path.join(outdir, "EPI.vtx"), epi_indices)
-        endo_obj = smart_reader(f"{base}_{atrium}_endo.obj")
-        endo_pts = vtk_to_numpy(endo_obj.GetPoints().GetData())
-        _, endo_indices = tree.query(endo_pts)
-        endo_indices = np.setdiff1d(endo_indices, epi_ids)
-        write_to_vtx(os.path.join(outdir, "ENDO.vtx"), endo_indices)
+        """
+        Delegates surface ID generation to the surface_id_generator module.
+
+        :param atrium: A string ("LA" or "RA") indicating which atrium to process.
+        :param resampled: Boolean flag to indicate if resampling is used.
+        :return: None.
+        """
+        generate_surf_id(self.mesh_path, atrium, resampled)
         if self.debug:
             print(f"Surface ID generation completed for {atrium}.")
 
-    # --------------------------
+
     # Tag Loading
-    # --------------------------
     def load_element_tags(self, csv_filepath: str) -> None:
+        """
+        Loads element tags from a CSV file using the tag_loader module.
+
+        :param csv_filepath: The file path to the CSV containing tag mappings.
+        :return: None.
+        """
         self.element_tags = load_element_tags(csv_filepath)
         if self.debug:
             print("Element tags loaded.")
 
-    # --------------------------
+
     # Top Epi/Endo Extraction
-    # --------------------------
     def extract_rings_top_epi_endo(self) -> None:
+        """
+        Delegates top epi/endo ring extraction to the procedural function from extract_rings_TOP_epi_endo,
+        and then loads the computed centroids from the output CSV.
+
+        :return: None.
+        """
         LAA_id = self._format_id(self.la_apex)
         RAA_id = self._format_id(self.ra_apex)
         LAA_base_id = self._format_id(self.la_base)
         RAA_base_id = self._format_id(self.ra_base)
-        if self.debug:
-            print("Running top epi/endo ring extraction with parameters:")
-            print(f"  Mesh: {self.mesh_path}")
-            print(f"  LAA: {LAA_id}, RAA: {RAA_id}, LAA_base: {LAA_base_id}, RAA_base: {RAA_base_id}")
+        print("Running top epi/endo ring extraction with parameters:")
+        print(f"  Mesh: {self.mesh_path}")
+        print(f"  LAA: {LAA_id}, RAA: {RAA_id}, LAA_base: {LAA_base_id}, RAA_base: {RAA_base_id}")
+        # Delegate to the procedural function for top epi/endo extraction.
         from Atrial_LDRBM.Generate_Boundaries.extract_rings_TOP_epi_endo import label_atrial_orifices_TOP_epi_endo
         label_atrial_orifices_TOP_epi_endo(
             mesh=self.mesh_path,
@@ -315,28 +321,9 @@ class AtrialBoundaryGenerator:
         outdir = f"{base}_surf"
         csv_path = os.path.join(outdir, "rings_centroids.csv")
         if os.path.exists(csv_path):
-            if self.debug:
-                print(f"Loading top epi/endo ring centroids from {csv_path}")
+            print(f"Loading top epi/endo ring centroids from {csv_path}")
             self.ring_info = pd.read_csv(csv_path).to_dict(orient="list")
         else:
-            if self.debug:
-                print(f"Warning: Top epi/endo ring centroids file not found at {csv_path}")
+            print(f"Warning: Top epi/endo ring centroids file not found at {csv_path}")
 
 
-# --------------------------
-# Example usage:
-# --------------------------
-if __name__ == '__main__':
-    generator = AtrialBoundaryGenerator(mesh_path="path/to/mesh.vtk",
-                                        la_apex=123,
-                                        ra_apex=456,
-                                        la_base=789,
-                                        ra_base=1011,
-                                        debug=True)
-    generator.generate_mesh()
-    generator.extract_rings()
-    generator.extract_rings_top_epi_endo()
-    generator.separate_epi_endo("LA")
-    generator.generate_surf_id("LA", resampled=False)
-    generator.load_element_tags("path/to/element_tag.csv")
-    print("Ring information:", generator.ring_info)
