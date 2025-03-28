@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-top_epi_endo.py
-
-This module implements the top epi/endo extraction logic for atrial boundaries.
-It is a complete, self-contained replacement for the old procedural function.
-"""
 
 import os
 from glob import glob
@@ -23,6 +17,7 @@ from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivi
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from file_manager import write_vtk, write_vtx_file, write_csv
+from ring_detector import Ring, detect_and_mark_rings, mark_LA_rings, mark_RA_rings, cutting_plane_to_identify_UAC, cutting_plane_to_identify_tv_f_tv_s
 
 
 def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str = "",
@@ -130,7 +125,7 @@ def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str 
         RA_region = generate_ids(mesh_surf, "Ids", "Ids")
         RA_rings = detect_and_mark_rings(RA_region, RA_ap_point, outdir)
         b_tag = np.zeros((RA_region.GetNumberOfPoints(),))
-        adjusted_RAA = find_closest_point(RA_region, RA_apoint)
+        adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
         # Note: there was a typo below ("RA_apoint"); corrected to "RA_ap_point"
         adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
         b_tag, centroids, RA_rings = mark_RA_rings(adjusted_RAA, RA_rings, b_tag, centroids, outdir)
