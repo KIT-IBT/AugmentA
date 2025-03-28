@@ -10,7 +10,7 @@ from vtk_opencarp_helper_methods.vtk_methods.filters import (
     apply_vtk_geom_filter, clean_polydata, generate_ids, get_center_of_mass,
     get_feature_edges, get_elements_above_plane
 )
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
+from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import (
     init_connectivity_filter, ExtractionModes, initialize_plane_with_points, initialize_plane
@@ -19,11 +19,10 @@ from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, num
 from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
-# For TV splitting, import the procedural split_tv function.
+from file_manager import write_vtk, write_vtx_file
+
 from Atrial_LDRBM.Generate_Boundaries.extract_rings import split_tv
 
-
-# --- Moved Ring class here ---
 class Ring:
     def __init__(self, index, name, points_num, center_point, distance, polydata):
         self.id = index
@@ -33,8 +32,6 @@ class Ring:
         self.ap_dist = distance
         self.vtk_polydata = polydata
 
-
-# --- Ring Detector Functions ---
 def detect_and_mark_rings(surf: vtk.vtkPolyData, ap_point, outdir: str) -> list:
     """
     Detects rings via connectivity filtering and returns a list of Ring objects.
@@ -56,7 +53,7 @@ def detect_and_mark_rings(surf: vtk.vtkPolyData, ap_point, outdir: str) -> list:
         region = connect.GetOutput()
         region = apply_vtk_geom_filter(region)
         region = clean_polydata(region)
-        vtk_polydata_writer(os.path.join(outdir, f'ring_{i}.vtk'), region)
+        write_vtk(os.path.join(outdir, f'ring_{i}.vtk'), region)
         ring_surf = vtk.vtkPolyData()
         ring_surf.DeepCopy(region)
         center = get_center_of_mass(region, False)
@@ -66,7 +63,6 @@ def detect_and_mark_rings(surf: vtk.vtkPolyData, ap_point, outdir: str) -> list:
         connect.DeleteSpecifiedRegion(i)
         connect.Update()
     return rings
-
 
 def mark_LA_rings(LAA_id, rings: list, b_tag, centroids: dict, outdir: str, LA_region: vtk.vtkPolyData):
     """
@@ -108,20 +104,18 @@ def mark_LA_rings(LAA_id, rings: list, b_tag, centroids: dict, outdir: str, LA_r
         elif r.name == "RSPV":
             b_tag[id_vec] = 5
             RPV_ids.extend(list(id_vec))
-        write_to_vtx(os.path.join(outdir, f'ids_{r.name}.vtx'), id_vec, True)
+        write_vtx_file(os.path.join(outdir, f'ids_{r.name}.vtx'), id_vec)
         centroids[r.name] = r.center
 
-    write_to_vtx(os.path.join(outdir, 'ids_LAA.vtx'), LAA_id)
-    write_to_vtx(os.path.join(outdir, 'ids_LPV.vtx'), LPV_ids)
-    write_to_vtx(os.path.join(outdir, 'ids_RPV.vtx'), RPV_ids)
+    write_vtx_file(os.path.join(outdir, 'ids_LAA.vtx'), LAA_id)
+    write_vtx_file(os.path.join(outdir, 'ids_LPV.vtx'), LPV_ids)
+    write_vtx_file(os.path.join(outdir, 'ids_RPV.vtx'), RPV_ids)
     return b_tag, centroids
-
 
 def mark_RA_rings(RAA_id, rings: list, b_tag, centroids: dict, outdir: str) -> Tuple[Any, Dict[str, Any], list]:
     """
     Marks the right atrial rings using clustering (assigning "TV", "SVC", "IVC", "CS")
     and updates boundary tags and centroids.
-    Mirrors the procedural logic, with TV selection based on the two largest rings.
     """
     largest = sorted(rings, key=lambda r: r.np, reverse=True)[:2]
     if largest[0].ap_dist < largest[1].ap_dist:
@@ -160,17 +154,13 @@ def mark_RA_rings(RAA_id, rings: list, b_tag, centroids: dict, outdir: str) -> T
             b_tag[id_vec] = 8
         elif r.name == "CS":
             b_tag[id_vec] = 9
-        write_to_vtx(os.path.join(outdir, f'ids_{r.name}.vtx'), id_vec)
+        write_vtx_file(os.path.join(outdir, f'ids_{r.name}.vtx'), id_vec)
         centroids[r.name] = r.center
 
-    write_to_vtx(os.path.join(outdir, 'ids_RAA.vtx'), RAA_id)
+    write_vtx_file(os.path.join(outdir, 'ids_RAA.vtx'), RAA_id)
     return b_tag, centroids, rings
 
-
 def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA_region, outdir: str):
-    """
-    Implements UAC identification using a cutting plane.
-    """
     LPVs_c = np.array([rings[i].center for i in LPVs])
     lpv_mean = np.mean(LPVs_c, axis=0)
     RPVs_c = np.array([rings[i].center for i in RPVs])
@@ -190,8 +180,8 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA_region, outdir: str):
     MV_ids = set(vtk_to_numpy(MV_ring[0].vtk_polydata.GetPointData().GetArray("Ids")))
     MV_ant = set(ids).intersection(MV_ids)
     MV_post = MV_ids - MV_ant
-    write_to_vtx(os.path.join(outdir, 'ids_MV_ant.vtx'), MV_ant)
-    write_to_vtx(os.path.join(outdir, 'ids_MV_post.vtx'), MV_post)
+    write_vtx_file(os.path.join(outdir, 'ids_MV_ant.vtx'), MV_ant)
+    write_vtx_file(os.path.join(outdir, 'ids_MV_post.vtx'), MV_post)
 
     lpv_mv = find_closest_point(MV_ring[0].vtk_polydata, lpv_mean)
     rpv_mv = find_closest_point(MV_ring[0].vtk_polydata, rpv_mean)
@@ -210,14 +200,10 @@ def cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA_region, outdir: str):
     mv_lpv = set(ids[ii])
     for r in rings:
         mv_lpv = mv_lpv - set(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
-    write_to_vtx(os.path.join(outdir, 'ids_MV_LPV.vtx'), mv_lpv)
-    # Additional similar steps for other regions could be added here.
-
+    write_vtx_file(os.path.join(outdir, 'ids_MV_LPV.vtx'), mv_lpv)
+    # Additional steps can be added here if needed.
 
 def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
-    """
-    Implements identification of RSPV using a cutting plane.
-    """
     LPVs_c = np.array([rings[i].center for i in LPVs])
     lpv_mean = np.mean(LPVs_c, axis=0)
     RPVs_c = np.array([rings[i].center for i in RPVs])
@@ -239,12 +225,7 @@ def cutting_plane_to_identify_RSPV(LPVs, RPVs, rings):
     RSPV_id = int(vtk_to_numpy(extracted_mesh.GetPointData().GetArray('id'))[0])
     return RSPV_id
 
-
 def cutting_plane_to_identify_tv_f_tv_s(model: vtk.vtkPolyData, rings: list, outdir: str, debug: bool) -> None:
-    """
-    Implements the TV splitting logic as in the procedural code.
-    Fully replicates the "split_tv" functionality by calling the procedural split_tv.
-    """
     # Find TV, SVC, and IVC rings from RA
     tv_ring = None
     svc_ring = None
@@ -260,7 +241,6 @@ def cutting_plane_to_identify_tv_f_tv_s(model: vtk.vtkPolyData, rings: list, out
         if debug:
             print("TV splitting: Missing one of TV, SVC, or IVC rings.")
         return
-    # Call the procedural split_tv function to perform detailed splitting.
     split_tv(outdir, tv_ring.vtk_polydata, tv_ring.center, ivc_ring.center, svc_ring.center)
     if debug:
         print("TV splitting for RA completed.")
