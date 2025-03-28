@@ -11,7 +11,6 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
-
 from mesh_handler import load_mesh, generate_mesh
 from ring_detector import Ring, detect_and_mark_rings, mark_LA_rings, mark_RA_rings, cutting_plane_to_identify_UAC, cutting_plane_to_identify_RSPV, cutting_plane_to_identify_tv_f_tv_s
 from epi_endo_separator import separate_epi_endo
@@ -23,17 +22,21 @@ from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
+from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids, apply_vtk_geom_filter
+
+# Import the top epi/endo extraction function from our new module.
+from top_epi_endo import label_atrial_orifices_TOP_epi_endo
 
 
 class AtrialBoundaryGenerator:
     """
     Orchestrates atrial boundary generation using a modular, object‑oriented approach.
     Uses separate modules for:
-        Mesh handling
-        Ring detection (including TV splitting and UAC identification)
-        Epi/Endo separation
-        Surface ID generation
-        Tag loading
+      - Mesh handling
+      - Ring detection (including TV splitting and UAC identification)
+      - Epi/Endo separation
+      - Surface ID generation
+      - Tag loading
 
     :param mesh_path: Path to the mesh file.
     :param la_apex: Index for left atrial apex.
@@ -60,7 +63,6 @@ class AtrialBoundaryGenerator:
 
         self.ring_info: Dict[str, Any] = {}
         self.element_tags: Dict[str, str] = {}
-
 
     # Helper Methods
     def _get_base_mesh(self) -> str:
@@ -97,7 +99,6 @@ class AtrialBoundaryGenerator:
         """
         return str(idx) if idx is not None else ""
 
-
     # Mesh Generation
     def generate_mesh(self, la_mesh_scale: float = 1.0) -> None:
         """
@@ -109,7 +110,6 @@ class AtrialBoundaryGenerator:
         generate_mesh(self.mesh_path, la_mesh_scale)
         if self.debug:
             print("Mesh generated.")
-
 
     # Ring Extraction: Helper for Left Atrial Region
     def _process_LA_region(self, mesh: vtk.vtkPolyData, outdir: str) -> Dict[str, Any]:
@@ -141,7 +141,6 @@ class AtrialBoundaryGenerator:
                                           "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
         la_poly = apply_vtk_geom_filter(la_thresh.GetOutputPort(), True)
         # Generate IDs to ensure consistency.
-        from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids
         LA_region = generate_ids(la_poly, "Ids", "Ids")
 
         # Write out the raw LA region.
@@ -164,7 +163,6 @@ class AtrialBoundaryGenerator:
         write_vtk(os.path.join(outdir, 'LA_boundaries_tagged.vtk'), ds.VTKObject)
 
         return centroids
-
 
     # Ring Extraction: Helper for Right Atrial Region
     def _process_RA_region(self, mesh: vtk.vtkPolyData, outdir: str) -> Dict[str, Any]:
@@ -220,7 +218,6 @@ class AtrialBoundaryGenerator:
 
         return centroids
 
-
     # Main Ring Extraction Orchestration
     def extract_rings(self) -> None:
         """
@@ -252,11 +249,10 @@ class AtrialBoundaryGenerator:
         if self.debug:
             print("Ring extraction complete. Centroids saved.")
 
-
     # Epi/Endo Separation
     def separate_epi_endo(self, atrium: str) -> None:
         """
-        Delegates epicardial and endocardial separation to the epi_endo_separator module.
+        Delegates epicardial and endocardial separation to the epi_endo_separate module.
 
         :param atrium: A string ("LA" or "RA") indicating which atrium to process.
         :return: None.
@@ -264,7 +260,6 @@ class AtrialBoundaryGenerator:
         separate_epi_endo(self.mesh_path, atrium, self.element_tags)
         if self.debug:
             print(f"Epi/Endo separation completed for {atrium}.")
-
 
     # Surface ID Generation
     def generate_surf_id(self, atrium: str, resampled: bool = False) -> None:
@@ -279,7 +274,6 @@ class AtrialBoundaryGenerator:
         if self.debug:
             print(f"Surface ID generation completed for {atrium}.")
 
-
     # Tag Loading
     def load_element_tags(self, csv_filepath: str) -> None:
         """
@@ -292,11 +286,10 @@ class AtrialBoundaryGenerator:
         if self.debug:
             print("Element tags loaded.")
 
-
     # Top Epi/Endo Extraction
     def extract_rings_top_epi_endo(self) -> None:
         """
-        Delegates top epi/endo ring extraction to the procedural function from extract_rings_TOP_epi_endo,
+        Delegates top epi/endo ring extraction to the top_epi_endo module,
         and then loads the computed centroids from the output CSV.
 
         :return: None.
@@ -308,8 +301,6 @@ class AtrialBoundaryGenerator:
         print("Running top epi/endo ring extraction with parameters:")
         print(f"  Mesh: {self.mesh_path}")
         print(f"  LAA: {LAA_id}, RAA: {RAA_id}, LAA_base: {LAA_base_id}, RAA_base: {RAA_base_id}")
-        # Delegate to the procedural function for top epi/endo extraction.
-        from Atrial_LDRBM.Generate_Boundaries.extract_rings_TOP_epi_endo import label_atrial_orifices_TOP_epi_endo
         label_atrial_orifices_TOP_epi_endo(
             mesh=self.mesh_path,
             LAA_id=LAA_id,
@@ -325,5 +316,3 @@ class AtrialBoundaryGenerator:
             self.ring_info = pd.read_csv(csv_path).to_dict(orient="list")
         else:
             print(f"Warning: Top epi/endo ring centroids file not found at {csv_path}")
-
-
