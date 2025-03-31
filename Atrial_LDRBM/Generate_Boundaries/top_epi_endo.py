@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+top_epi_endo.py
+
+This module implements the top epi/endo extraction logic for atrial boundaries.
+It is a complete, self-contained replacement for the old procedural function.
+"""
 
 import os
 from glob import glob
@@ -11,13 +17,12 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, \
     initialize_plane_with_points
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from file_manager import write_vtk, write_vtx_file, write_csv
-from ring_detector import Ring, detect_and_mark_rings, mark_LA_rings, mark_RA_rings, cutting_plane_to_identify_UAC, cutting_plane_to_identify_tv_f_tv_s
+from ring_detector import Ring, RingDetector
 
 
 def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str = "",
@@ -25,20 +30,19 @@ def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str 
     """
     Extracts rings with top epi/endo logic for atrial boundaries.
 
-    This function:
-      - Reads the input mesh and applies a geometry filter.
-      - Removes any pre-existing ID files.
-      - Processes biatrial data if both LAA_id and RAA_id are provided.
-      - Applies connectivity filtering and thresholding for the LA and RA regions.
-      - Generates IDs and detects rings.
-      - Writes out the top epi/endo ring boundaries and centroids.
+    Steps:
+      - Read the mesh and apply a geometry filter.
+      - Remove any existing ID files from the output directory.
+      - If both apex indices are provided, process both LA and RA regions using RingDetector.
+      - Otherwise, process the single available region.
+      - Write the computed centroids to a CSV file.
 
-    :param mesh: Path to the mesh file.
-    :param LAA_id: LA apex point index as string.
-    :param RAA_id: RA apex point index as string.
-    :param LAA_base_id: LA base point index as string.
-    :param RAA_base_id: RA base point index as string.
-    :return: None.
+    Parameters:
+        mesh: Path to the mesh file.
+        LAA_id: LA apex point index as a string.
+        RAA_id: RA apex point index as a string.
+        LAA_base_id: LA base point index as a string.
+        RAA_base_id: RA base point index as a string.
     """
     print("Starting top epi/endo extraction for mesh:", mesh)
 
@@ -55,8 +59,8 @@ def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str 
     for file_path in glob(os.path.join(outdir, 'ids_*')):
         os.remove(file_path)
 
+    # Process biatrial case.
     if LAA_id != "" and RAA_id != "":
-        # Retrieve apex points.
         LA_ap_point = mesh_surf.GetPoint(int(LAA_id))
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
         centroids["LAA"] = LA_ap_point
@@ -81,9 +85,12 @@ def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str 
         write_vtk(os.path.join(outdir, 'LA.vtp'), LA_region)
         adjusted_LAA = find_closest_point(LA_region, LA_ap_point)
         b_tag = np.zeros((LA_region.GetNumberOfPoints(),))
-        LA_rings = detect_and_mark_rings(LA_region, LA_ap_point, outdir)
-        # Use adjusted apex for marking.
-        b_tag, centroids = mark_LA_rings(adjusted_LAA, LA_rings, b_tag, centroids, outdir, LA_region)
+
+        # Use RingDetector for LA.
+        from ring_detector import RingDetector
+        detector_LA = RingDetector(LA_region, LA_ap_point, outdir)
+        LA_rings = detector_LA.detect_rings()
+        b_tag, centroids = detector_LA.mark_la_rings(adjusted_LAA, LA_rings, b_tag, centroids, LA_region)
         ds = dsa.WrapDataObject(LA_region)
         ds.PointData.append(b_tag, 'boundary_tag')
         write_vtk(os.path.join(outdir, 'LA_boundaries_tagged.vtp'), ds.VTKObject)
@@ -98,9 +105,12 @@ def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str 
         write_vtk(os.path.join(outdir, 'RA.vtp'), RA_region)
         adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
         b_tag_ra = np.zeros((RA_region.GetNumberOfPoints(),))
-        RA_rings = detect_and_mark_rings(RA_region, RA_ap_point, outdir)
-        b_tag_ra, centroids, RA_rings = mark_RA_rings(adjusted_RAA, RA_rings, b_tag_ra, centroids, outdir)
-        cutting_plane_to_identify_tv_f_tv_s(RA_region, RA_rings, outdir, True)
+
+        # Use RingDetector for RA.
+        detector_RA = RingDetector(RA_region, RA_ap_point, outdir)
+        RA_rings = detector_RA.detect_rings()
+        b_tag_ra, centroids, RA_rings = detector_RA.mark_ra_rings(adjusted_RAA, RA_rings, b_tag_ra, centroids)
+        detector_RA.cutting_plane_to_identify_tv_f_tv_s(RA_region, RA_rings, True)
         ds_ra = dsa.WrapDataObject(RA_region)
         ds_ra.PointData.append(b_tag_ra, 'boundary_tag')
         write_vtk(os.path.join(outdir, 'RA_boundaries_tagged.vtp'), ds_ra.VTKObject)
@@ -111,10 +121,11 @@ def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str 
         if mesh_surf.GetPointData().GetArray("Ids") is not None:
             mesh_surf.GetPointData().RemoveArray("Ids")
         LA_region = generate_ids(mesh_surf, "Ids", "Ids")
-        LA_rings = detect_and_mark_rings(LA_region, LA_ap_point, outdir)
         b_tag = np.zeros((LA_region.GetNumberOfPoints(),))
         adjusted_LAA = find_closest_point(LA_region, LA_ap_point)
-        b_tag, centroids = mark_LA_rings(adjusted_LAA, LA_rings, b_tag, centroids, outdir, LA_region)
+        detector_LA = RingDetector(LA_region, LA_ap_point, outdir)
+        LA_rings = detector_LA.detect_rings()
+        b_tag, centroids = detector_LA.mark_la_rings(adjusted_LAA, LA_rings, b_tag, centroids, LA_region)
         ds = dsa.WrapDataObject(LA_region)
         ds.PointData.append(b_tag, 'boundary_tag')
         write_vtk(os.path.join(outdir, 'LA_boundaries_tagged.vtp'), ds.VTKObject)
@@ -123,13 +134,12 @@ def label_atrial_orifices_TOP_epi_endo(mesh: str, LAA_id: str = "", RAA_id: str 
         RA_ap_point = mesh_surf.GetPoint(int(RAA_id))
         centroids["RAA"] = RA_ap_point
         RA_region = generate_ids(mesh_surf, "Ids", "Ids")
-        RA_rings = detect_and_mark_rings(RA_region, RA_ap_point, outdir)
         b_tag = np.zeros((RA_region.GetNumberOfPoints(),))
         adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
-        # Note: there was a typo below ("RA_apoint"); corrected to "RA_ap_point"
-        adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
-        b_tag, centroids, RA_rings = mark_RA_rings(adjusted_RAA, RA_rings, b_tag, centroids, outdir)
-        cutting_plane_to_identify_tv_f_tv_s(RA_region, RA_rings, outdir, True)
+        detector_RA = RingDetector(RA_region, RA_ap_point, outdir)
+        RA_rings = detector_RA.detect_rings()
+        b_tag, centroids, RA_rings = detector_RA.mark_ra_rings(adjusted_RAA, RA_rings, b_tag, centroids)
+        detector_RA.cutting_plane_to_identify_tv_f_tv_s(RA_region, RA_rings, True)
         ds = dsa.WrapDataObject(RA_region)
         ds.PointData.append(b_tag, 'boundary_tag')
         write_vtk(os.path.join(outdir, 'RA_boundaries_tagged.vtp'), ds.VTKObject)
