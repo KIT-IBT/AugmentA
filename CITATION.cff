@@ -41,6 +41,8 @@ preferred-citation:
       given-names: Amir
     - family-names: Loewe
       given-names: Axel
-  doi: 10.1101/2022.02.13.22270835
-  journal: "medRxiv preprint"
-  year: 2022
+  doi: 10.1016/j.compmedimag.2023.102265
+  journal: "Computerized Medical Imaging and Graphics"
+  year: 2023
+  volume: 108
+  start: 102265
