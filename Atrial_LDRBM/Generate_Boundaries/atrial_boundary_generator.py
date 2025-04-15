@@ -11,22 +11,20 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
-from mesh_handler import generate_mesh  # Legacy mesh generation remains here.
 from epi_endo_separator import separate_epi_endo
 from surface_id_generator import generate_surf_id
 from tag_loader import load_element_tags
 from file_manager import write_vtk, write_obj, write_csv, write_vtx_file
+from surface_id_generator import generate_surf_id as gen_surf_id_func
+from mesh import MeshReader
+from ring_detector import RingDetector
+from top_epi_endo import label_atrial_orifices_TOP_epi_endo
 
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids, apply_vtk_geom_filter
-
-# Import the new MeshReader class for reading meshes.
-from mesh import MeshReader
-# Import the new RingDetector class.
-from ring_detector import RingDetector
 
 
 class AtrialBoundaryGenerator:
@@ -74,65 +72,204 @@ class AtrialBoundaryGenerator:
         """
         base = self._get_base_mesh()
         outdir = f"{base}{suffix}"
+
         if not os.path.exists(outdir):
             os.makedirs(outdir)
+
         for file_path in glob(os.path.join(outdir, 'ids_*')):
             os.remove(file_path)
+
         return outdir
 
     def _format_id(self, idx: int) -> str:
         """Converts an index to a string (or returns empty if None)."""
         return str(idx) if idx is not None else ""
 
-    def generate_mesh(self, la_mesh_scale: float = 1.0) -> None:
+    def _run_meshtool_volume_generation(self, input_obj_path: str, output_base_path: str) -> None:
         """
-        Generates a volumetric mesh using meshtool.
+        Internal method to execute the meshtool command for volume generation.
+
+        Args:
+            input_obj_path (str): Path to the input surface mesh in OBJ format.
+            output_base_path (str): Base path for the output volumetric mesh (e.g., /path/to/mesh_RA_vol).
+                                     Meshtool will append the format extension (.vtk).
         """
-        from mesh_handler import generate_mesh as gm  # Using legacy function here.
-        gm(self.mesh_path, la_mesh_scale)
+        command = ["meshtool",
+                   "generate",
+                   "mesh",
+                   "-surf=" + input_obj_path,
+                   "-ofmt=vtk",
+                   "-outmsh=" + output_base_path
+                   ]
+
         if self.debug:
-            print("Mesh generated.")
+            print(f"Running meshtool command: {' '.join(command)}")
 
-    def _process_LA_region(self, mesh: vtk.vtkPolyData, outdir: str) -> Dict[str, Any]:
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True)
+
+            if self.debug:
+                print(f"Meshtool completed. Output expected at ~{output_base_path}.vtk")
+
+        except FileNotFoundError:
+            print("ERROR: 'meshtool' command not found. Ensure it is installed and in the system PATH.")
+            raise
+
+        except subprocess.CalledProcessError as e:
+            # Error if meshtool returns a non-zero exit code
+            print(f"ERROR: meshtool execution failed with code {e.returncode}")
+            print(f"Meshtool stdout:\n{e.stdout}")
+            print(f"Meshtool stderr:\n{e.stderr}")
+            raise RuntimeError("meshtool volume generation failed") from e
+
+    def generate_mesh(self, input_surface_path: str) -> None:
         """
-        Processes the left atrial region:
-          - Retrieves the LA apex point.
-          - Applies connectivity filtering and thresholding.
-          - Generates IDs and detects rings using RingDetector.
-          - Updates boundary tags and centroids.
+        Generates a volumetric mesh from the given input surface path using meshtool.
+        Ensures the input to meshtool is in OBJ format, converting if necessary.
+
+        Args:
+            input_surface_path (str): Path to the input surface mesh (any format readable by MeshReader).
         """
-        LA_ap_point = mesh.GetPoint(int(self.la_apex))
+        base_path, input_ext = os.path.splitext(input_surface_path)
 
-        # Connectivity filtering to isolate the LA region.
-        mesh_conn = init_connectivity_filter(mesh, ExtractionModes.ALL_REGIONS, True).GetOutput()
-        arr = mesh_conn.GetPointData().GetArray("RegionId")
-        arr.SetName("RegionID")
-        id_vector = vtk_to_numpy(arr)
-        new_LAA_id = find_closest_point(mesh_conn, LA_ap_point)
-        LA_tag = id_vector[int(new_LAA_id)]
+        # Define the standard output naming convention relative to the input base path
+        output_base_path = f"{base_path}_vol"
 
-        la_thresh = get_threshold_between(mesh_conn, LA_tag, LA_tag,
-                                          "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
-        la_poly = apply_vtk_geom_filter(la_thresh.GetOutputPort(), True)
-        LA_region = generate_ids(la_poly, "Ids", "Ids")
-        write_vtk(os.path.join(outdir, 'LA.vtk'), LA_region)
+        # Define the required OBJ input path for meshtool
+        input_obj_path = f"{base_path}.obj"
 
-        # Adjust the apex using the processed region.
-        adjusted_LAA = find_closest_point(LA_region, LA_ap_point)
-        b_tag = np.zeros((LA_region.GetNumberOfPoints(),))
+        # Ensure OBJ input exists for meshtool
+        obj_input_ready = False
 
-        # Use RingDetector class for ring detection and marking.
-        detector = RingDetector(LA_region, LA_ap_point, outdir)
-        rings = detector.detect_rings()
-        b_tag, centroids = detector.mark_la_rings(adjusted_LAA, rings, b_tag, {}, LA_region)
+        if os.path.exists(input_obj_path):
+            # If the target OBJ file already exists, it's usable
+            obj_input_ready = True
 
-        ds = dsa.WrapDataObject(LA_region)
-        ds.PointData.append(b_tag, 'boundary_tag')
-        write_vtk(os.path.join(outdir, 'LA_boundaries_tagged.vtk'), ds.VTKObject)
+            if self.debug:
+                print(f"Using existing OBJ file: {input_obj_path}")
 
-        return centroids
+        elif os.path.exists(input_surface_path):
+            try:
+                reader = MeshReader(input_surface_path)
+                polydata = reader.get_polydata()
 
-    def _process_RA_region(self, mesh: vtk.vtkPolyData, outdir: str) -> Dict[str, Any]:
+                if not polydata or polydata.GetNumberOfPoints() == 0:
+                    raise ValueError("MeshReader returned empty polydata.")
+
+                write_obj(input_obj_path, polydata)
+
+                if self.debug:
+                    print(f"Successfully converted to {input_obj_path}")
+
+                obj_input_ready = True
+
+            except Exception as e:
+                print(f"ERROR: Failed to convert {input_surface_path} to OBJ for meshtool. {e}")
+                raise RuntimeError(f"Failed OBJ conversion required for meshtool") from e
+        else:
+            # Neither the input path nor the derived obj path exists
+            raise FileNotFoundError(f"Input surface file not found: {input_surface_path}")
+
+        # Run meshtool if OBJ input is ready
+        if obj_input_ready:
+            self._run_meshtool_volume_generation(input_obj_path, output_base_path)
+        else:
+            print("ERROR: OBJ input for meshtool could not be prepared.")
+            raise RuntimeError("Failed to prepare OBJ input for meshtool")
+
+    def _process_LA_region(self, input_mesh_polydata: vtk.vtkPolyData, outdir: str, is_biatrial: bool) -> dict:
+        """
+        Processes the LA region (extracts if biatrial) and performs ring analysis.
+        """
+        if self.la_apex is None:
+            # Cannot process without LA apex
+            return {}
+
+        la_region_polydata = None
+        la_ap_point_coord = None
+
+        if is_biatrial:
+            if self.debug:
+                print("Extracting LA region...")
+
+            try:
+                # Get initial apex coordinate from the input mesh
+                la_ap_point_coord = input_mesh_polydata.GetPoint(self.la_apex)
+
+                # Perform connectivity filtering and thresholding to isolate LA
+                mesh_conn = init_connectivity_filter(input_mesh_polydata, ExtractionModes.ALL_REGIONS, True).GetOutput()
+
+                if not mesh_conn.GetPointData() or not mesh_conn.GetPointData().GetArray("RegionId"):
+                    raise RuntimeError("Connectivity filter failed.")
+
+                arr = mesh_conn.GetPointData().GetArray("RegionId")
+                arr.SetName("RegionID")
+                id_vector = vtk_to_numpy(arr)
+
+                temp_LAA_id: int = find_closest_point(mesh_conn, la_ap_point_coord)
+                if temp_LAA_id < 0:
+                    raise ValueError("Could not re-locate LA apex after connectivity.")
+
+                LA_tag_val: int = id_vector[temp_LAA_id]
+
+                la_thresh = get_threshold_between(mesh_conn, LA_tag_val, LA_tag_val,"vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
+                la_poly_ug = la_thresh.GetOutput()
+                la_poly = apply_vtk_geom_filter(la_poly_ug)
+
+                if la_poly and la_poly.GetNumberOfPoints() > 0:
+                    # Generate unique IDs for the isolated LA region
+                    la_region_polydata = generate_ids(la_poly, "Ids", "Ids")
+                else:
+                    print("Warning: LA region extraction resulted in empty mesh.")
+                    return {}
+            except Exception as e:
+                print(f"ERROR during LA region extraction: {e}")
+                return {}
+
+        else:
+            # Assume the input polydata is already the LA region
+            la_region_polydata = input_mesh_polydata
+            try:
+                # Still need the apex coordinate
+                la_ap_point_coord = la_region_polydata.GetPoint(self.la_apex)
+            except IndexError:
+                print(f"ERROR: LA apex ID {self.la_apex} out of bounds for the provided LA mesh.")
+                return {}
+
+        # Perform Ring Detection on la_region_polydata
+        if la_region_polydata and la_ap_point_coord:
+            write_vtk(os.path.join(outdir, 'LA.vtk'), la_region_polydata)
+
+            # Adjust apex ID for the isolated LA region polydata
+            adjusted_LAA = find_closest_point(la_region_polydata, la_ap_point_coord)
+            if adjusted_LAA < 0:
+                print("Warning: Could not find closest point for LA apex in isolated region. Using original ID.")
+                adjusted_LAA = self.la_apex  # Use original as fallback
+
+            try:
+                b_tag_la = np.zeros((la_region_polydata.GetNumberOfPoints(),))
+                detector_LA = RingDetector(la_region_polydata, la_ap_point_coord, outdir)
+
+                rings_la = detector_LA.detect_rings(debug=self.debug)
+
+                # Pass adjusted_LAA, empty initial centroids {}, and the LA region itself for UAC paths
+                b_tag_la, la_centroids = detector_LA.mark_la_rings(adjusted_LAA, rings_la, b_tag_la, {}, la_region_polydata, debug=self.debug)
+
+                # Save tagged LA mesh
+                ds_la = dsa.WrapDataObject(la_region_polydata)
+                ds_la.PointData.append(b_tag_la, 'boundary_tag')
+                write_vtk(os.path.join(outdir, 'LA_boundaries_tagged.vtk'), ds_la.VTKObject)
+
+                # Return the generated centroids
+                return la_centroids
+            except Exception as e:
+                print(f"ERROR during LA ring detection/marking: {e}")
+                return {}
+        else:
+            # Return empty if region extraction failed
+            return {}
+
+    def _process_RA_region(self, input_mesh_polydata: vtk.vtkPolyData, outdir: str, is_biatrial: bool) -> dict:
         """
         Processes the right atrial region:
           - Retrieves the RA apex point.
@@ -140,111 +277,284 @@ class AtrialBoundaryGenerator:
           - Generates IDs and detects rings using RingDetector.
           - Updates boundary tags and centroids.
         """
-        RA_ap_point = mesh.GetPoint(int(self.ra_apex))
+        if self.ra_apex is None:
+            return {}
 
-        mesh_conn = init_connectivity_filter(mesh, ExtractionModes.ALL_REGIONS, True).GetOutput()
-        arr = mesh_conn.GetPointData().GetArray("RegionId")
-        arr.SetName("RegionID")
-        id_vector = vtk_to_numpy(arr)
-        new_RAA_id = find_closest_point(mesh_conn, RA_ap_point)
-        RA_tag = id_vector[int(new_RAA_id)]
+        ra_region_polydata = None
+        ra_ap_point_coord = None
 
-        ra_thresh = get_threshold_between(mesh_conn, RA_tag, RA_tag,
-                                          "vtkDataObject::FIELD_ASSOCIATION_POINTS", "RegionID")
-        ra_poly = apply_vtk_geom_filter(ra_thresh.GetOutputPort(), True)
-        RA_region = generate_ids(ra_poly, "Ids", "Ids")
-        write_vtk(os.path.join(outdir, 'RA.vtk'), RA_region)
+        if is_biatrial:
+            if self.debug:
+                print("Extracting RA region...")
 
-        adjusted_RAA = find_closest_point(RA_region, RA_ap_point)
-        b_tag = np.zeros((RA_region.GetNumberOfPoints(),))
+            try:
+                ra_ap_point_coord = input_mesh_polydata.GetPoint(self.ra_apex)
 
-        detector = RingDetector(RA_region, RA_ap_point, outdir)
-        rings = detector.detect_rings()
-        b_tag, centroids, rings = detector.mark_ra_rings(adjusted_RAA, rings, b_tag, {})
+                # Perform connectivity filtering and thresholding to isolate RA
+                mesh_conn = init_connectivity_filter(input_mesh_polydata, ExtractionModes.ALL_REGIONS, True).GetOutput()
+                if not mesh_conn.GetPointData() or not mesh_conn.GetPointData().GetArray("RegionId"):
+                    raise RuntimeError("Connectivity filter failed.")
 
-        detector.cutting_plane_to_identify_tv_f_tv_s(RA_region, rings, True)
+                arr = mesh_conn.GetPointData().GetArray("RegionId")
+                arr.SetName("RegionID")
 
-        ds = dsa.WrapDataObject(RA_region)
-        ds.PointData.append(b_tag, 'boundary_tag')
-        write_vtk(os.path.join(outdir, 'RA_boundaries_tagged.vtk'), ds.VTKObject)
+                id_vector = vtk_to_numpy(arr)
 
-        return centroids
+                temp_RAA_id = find_closest_point(mesh_conn, ra_ap_point_coord)
+                if temp_RAA_id < 0:
+                    raise ValueError("Could not re-locate RA apex after connectivity.")
 
-    def extract_rings(self) -> None:
+                RA_tag_val = id_vector[temp_RAA_id]
+
+                ra_thresh = get_threshold_between(mesh_conn,
+                                                  RA_tag_val,
+                                                  RA_tag_val,
+                                                  "vtkDataObject::FIELD_ASSOCIATION_POINTS",
+                                                  "RegionID")
+
+                ra_poly_ug = ra_thresh.GetOutput()
+                ra_poly = apply_vtk_geom_filter(ra_poly_ug)
+
+                if ra_poly and ra_poly.GetNumberOfPoints() > 0:
+                    ra_region_polydata = generate_ids(ra_poly, "Ids", "Ids")
+                else:
+                    print("Warning: RA region extraction resulted in empty mesh.")
+                    return {}
+
+            except Exception as e:
+                print(f"ERROR during RA region extraction: {e}")
+                return {}
+
+        else:
+            ra_region_polydata = input_mesh_polydata
+
+            try:
+                ra_ap_point_coord = ra_region_polydata.GetPoint(self.ra_apex)
+            except IndexError:
+                print(f"ERROR: RA apex ID {self.ra_apex} out of bounds for the provided RA mesh.")
+                return {}
+
+        # Perform Ring Detection on ra_region_polydata
+        if ra_region_polydata and ra_ap_point_coord:
+            write_vtk(os.path.join(outdir, 'RA.vtk'), ra_region_polydata)
+
+            adjusted_RAA = find_closest_point(ra_region_polydata, ra_ap_point_coord)
+
+            if adjusted_RAA < 0:
+                print("Warning: Could not find closest point for RA apex in isolated region. Using original ID.")
+                adjusted_RAA = self.ra_apex  # Fallback
+
+            try:
+                b_tag_ra = np.zeros((ra_region_polydata.GetNumberOfPoints(),))
+                detector_RA = RingDetector(ra_region_polydata, ra_ap_point_coord, outdir)
+                rings_ra = detector_RA.detect_rings(debug=self.debug)
+
+                # Pass adjusted_RAA, empty initial centroids {}
+                b_tag_ra, ra_centroids, rings_ra_obj = detector_RA.mark_ra_rings(adjusted_RAA,
+                                                                                 rings_ra,
+                                                                                 b_tag_ra,
+                                                                                 {},
+                                                                                 debug=self.debug)
+
+                # Perform standard TOP_ENDO identification using the detector method
+                detector_RA.cutting_plane_to_identify_tv_f_tv_s(ra_region_polydata,
+                                                                rings_ra_obj,
+                                                                debug=self.debug)
+
+                ds_ra = dsa.WrapDataObject(ra_region_polydata)
+                ds_ra.PointData.append(b_tag_ra, 'boundary_tag')
+                write_vtk(os.path.join(outdir, 'RA_boundaries_tagged.vtk'), ds_ra.VTKObject)
+
+                return ra_centroids
+            except Exception as e:
+                print(f"ERROR during RA ring detection/marking: {e}")
+                return {}
+        else:
+            return {}
+
+    def extract_rings(self, surface_mesh_path: str) -> None:
         """
         Orchestrates the ring extraction process by reading the mesh (via MeshReader),
         processing the LA and/or RA regions, and writing centroids to CSV.
         """
-        # Use MeshReader to read the mesh.
-        mesh_obj = MeshReader(self.mesh_path)
-        mesh = mesh_obj.get_polydata()
+        if self.debug:
+            print(f"Initiating standard ring extraction on: {surface_mesh_path}")
+
+        # Prepare output directory
         outdir = self._prepare_output_directory("_surf")
+
+        # Read the specified surface mesh
+        try:
+            mesh_obj = MeshReader(surface_mesh_path)
+            input_mesh_polydata = mesh_obj.get_polydata()
+
+            if not input_mesh_polydata or input_mesh_polydata.GetNumberOfPoints() == 0:
+                raise ValueError("Input surface mesh is empty or invalid.")
+
+            if not input_mesh_polydata.GetPointData() or not input_mesh_polydata.GetPointData().GetArray("Ids"):
+                input_mesh_polydata = generate_ids(input_mesh_polydata, "Ids", "Ids")
+
+                if not input_mesh_polydata.GetPointData() or not input_mesh_polydata.GetPointData().GetArray("Ids"):
+                    raise RuntimeError("Failed to get/generate 'Ids' array on input surface mesh.")
+
+        except Exception as e:
+            print(f"ERROR reading surface mesh {surface_mesh_path}: {e}")
+            raise
+
         centroids = {}
 
         if self.la_apex is not None and self.ra_apex is not None:
-            centroids.update(self._process_LA_region(mesh, outdir))
-            centroids.update(self._process_RA_region(mesh, outdir))
-        elif self.ra_apex is None and self.la_apex is not None:
-            centroids.update(self._process_LA_region(mesh, outdir))
-        elif self.la_apex is None and self.ra_apex is not None:
-            centroids.update(self._process_RA_region(mesh, outdir))
-        else:
-            raise ValueError("At least one of LA or RA apex must be provided.")
+            # Biatrial case: process both from the input mesh
+            la_centroids = self._process_LA_region(input_mesh_polydata, outdir, is_biatrial=True)
+            centroids.update(la_centroids)
 
-        write_csv(os.path.join(outdir, "rings_centroids.csv"), pd.DataFrame(centroids))
+            ra_centroids = self._process_RA_region(input_mesh_polydata, outdir, is_biatrial=True)
+            centroids.update(ra_centroids)
+        elif self.la_apex is not None:
+            # LA only case: process input mesh as LA
+            la_centroids = self._process_LA_region(input_mesh_polydata, outdir, is_biatrial=False)
+            centroids.update(la_centroids)
+        elif self.ra_apex is not None:
+            # RA only case: process input mesh as RA
+            ra_centroids = self._process_RA_region(input_mesh_polydata, outdir, is_biatrial=False)
+            centroids.update(ra_centroids)
+        else:
+            raise ValueError("No apex ID provided for extract_rings.")
+
+        if centroids:
+            df = pd.DataFrame.from_dict(centroids, orient='index', columns=['X', 'Y', 'Z'])
+            df.index.name = 'RingName'
+            csv_path = os.path.join(outdir, "rings_centroids.csv")
+            write_csv(csv_path, df)
+            if self.debug:
+                print(f"Combined centroids saved to {csv_path}")
+        else:
+            if self.debug:
+                print("No centroids generated during ring extraction.")
+
         self.ring_info = centroids
+
         if self.debug:
             print("Ring extraction complete. Centroids saved.")
 
-    def separate_epi_endo(self, atrium: str) -> None:
+    def separate_epi_endo(self, tagged_volume_mesh_path: str, atrium: str) -> None:
         """
-        Delegates epicardial/endocardial separation to the epi_endo_separator module.
-        """
-        separate_epi_endo(self.mesh_path, atrium, self.element_tags)
-        if self.debug:
-            print(f"Epi/Endo separation completed for {atrium}.")
+        Delegates epi/endo separation using the epi_endo_separator module.
+        Requires element tags loaded via load_element_tags() beforehand.
 
-    def generate_surf_id(self, atrium: str, resampled: bool = False) -> None:
+        Args:
+            tagged_volume_mesh_path (str): Path to the tagged volume mesh.
+            atrium (str): 'LA' or 'RA'.
+        """
+        if not self.element_tags:
+            raise RuntimeError("Element tags missing in AtrialBoundaryGenerator. Call load_element_tags() before separate_epi_endo().")
+
+        try:
+            separate_epi_endo(mesh_path=tagged_volume_mesh_path,
+                              atrium=atrium,
+                              element_tags=self.element_tags)
+
+        except Exception as e:
+            print(f"ERROR during epi/endo separation call for {atrium} on {tagged_volume_mesh_path}: {e}")
+            raise
+
+    def generate_surf_id(self, volumetric_mesh_path: str, atrium: str, resampled: bool = False) -> None:
         """
         Delegates surface ID generation to the surface_id_generator module.
         """
-        generate_surf_id(self.mesh_path, atrium, resampled)
         if self.debug:
-            print(f"Surface ID generation completed for {atrium}.")
+            print(f"Initiating surface ID generation for {atrium} using volume mesh: {volumetric_mesh_path}")
+
+        try:
+            gen_surf_id_func(vol_mesh_path=volumetric_mesh_path,
+                             atrium=atrium,
+                             resampled=resampled,
+                             debug=self.debug)
+            if self.debug:
+                print(f"Surface ID generation call completed for {atrium}.")
+
+        except Exception as e:
+            print(f"ERROR during surface ID generation for {atrium}: {e}")
 
     def load_element_tags(self, csv_filepath: str) -> None:
         """
         Loads element tags using tag_loader.
         """
         self.element_tags = load_element_tags(csv_filepath)
+
         if self.debug:
             print("Element tags loaded.")
 
-    def extract_rings_top_epi_endo(self) -> None:
+    def extract_rings_top_epi_endo(self, surface_mesh_path: str) -> None:
         """
-        Delegates top epi/endo ring extraction to the top_epi_endo module,
-        then loads computed centroids from CSV.
+        Orchestrates the specialized TOP_EPI/ENDO ring extraction workflow
+        by calling the function from the top_epi_endo module. Loads the
+        centroids generated by that function.
+
+        Args:
+            surface_mesh_path (str): Path to the input surface mesh (e.g., epi).
         """
-        LAA_id = self._format_id(self.la_apex)
-        RAA_id = self._format_id(self.ra_apex)
-        LAA_base_id = self._format_id(self.la_base)
-        RAA_base_id = self._format_id(self.ra_base)
-        print("Running top epi/endo ring extraction with parameters:")
-        print(f"  Mesh: {self.mesh_path}")
-        print(f"  LAA: {LAA_id}, RAA: {RAA_id}, LAA_base: {LAA_base_id}, RAA_base: {RAA_base_id}")
+        # Import the function responsible for the specialized workflow
         from top_epi_endo import label_atrial_orifices_TOP_epi_endo
-        label_atrial_orifices_TOP_epi_endo(
-            mesh=self.mesh_path,
-            LAA_id=LAA_id,
-            RAA_id=RAA_id,
-            LAA_base_id=LAA_base_id,
-            RAA_base_id=RAA_base_id
-        )
-        base = self._get_base_mesh()
-        outdir = f"{base}_surf"
-        csv_path = os.path.join(outdir, "rings_centroids.csv")
-        if os.path.exists(csv_path):
-            print(f"Loading top epi/endo ring centroids from {csv_path}")
-            self.ring_info = pd.read_csv(csv_path).to_dict(orient="list")
-        else:
-            print(f"Warning: Top epi/endo ring centroids file not found at {csv_path}")
+        # Import pandas for loading centroids
+        import pandas as pd
+        import os
+
+        if self.debug:
+            print(f"Initiating TOP_EPI/ENDO ring extraction on: {surface_mesh_path}")
+
+        # Format apex/base IDs stored in self
+        LAA_id_str = self._format_id(self.la_apex)
+        RAA_id_str = self._format_id(self.ra_apex)
+        LAA_base_id_str = self._format_id(self.la_base)
+        RAA_base_id_str = self._format_id(self.ra_base)
+
+        try:
+            # Call the specialized function, passing the explicit surface_mesh_path
+            label_atrial_orifices_TOP_epi_endo(
+                mesh=surface_mesh_path,  # Use the passed argument path
+                LAA_id=LAA_id_str,
+                RAA_id=RAA_id_str,
+                LAA_base_id=LAA_base_id_str,
+                RAA_base_id=RAA_base_id_str
+            )
+            if self.debug:
+                print("TOP_EPI/ENDO ring extraction call completed.")
+
+            # --- Load Centroids ---
+            # Determine output directory based on the exact convention used in top_epi_endo.py
+            mesh_root, _ = os.path.splitext(surface_mesh_path)  # Gets path without extension
+
+            # Replicate top_epi_endo.py logic to find the base name
+            base_name_parts = mesh_root.split('_')
+            # Check if last part indicates atrium or surface type
+            if len(base_name_parts) > 1 and base_name_parts[-1] in ['RA', 'LA', 'epi', 'endo']:
+                mesh_base = '_'.join(base_name_parts[:-1])  # Remove suffix (e.g., /path/to/mesh)
+            else:
+                mesh_base = mesh_root
+
+            # Construct the output directory path
+            outdir = f"{mesh_base}_surf"
+            csv_path = os.path.join(outdir, "rings_centroids.csv")
+
+            # Load the CSV if it exists
+            if os.path.exists(csv_path):
+                df_centroids = pd.read_csv(csv_path)
+                # Store centroids - adjust format conversion as needed
+                # Assuming columns 'RingName', 'X', 'Y', 'Z' based on top_epi_endo write
+                if 'RingName' in df_centroids.columns and all(c in df_centroids.columns for c in ['X', 'Y', 'Z']):
+                    self.ring_info = df_centroids.set_index('RingName')[['X', 'Y', 'Z']].T.to_dict('list')
+                else:
+                    print(f"Warning: Could not parse centroids CSV format as expected from {csv_path}")
+                    self.ring_info = {}  # Fallback
+
+                if self.debug:
+                    print(f"Loaded TOP_EPI/ENDO centroids from {csv_path}")
+            else:
+                print(f"Warning: TOP_EPI/ENDO centroids file not found at {csv_path}")
+                self.ring_info = {}  # Reset if file not found
+
+        except Exception as e:
+            print(f"ERROR during TOP_EPI/ENDO ring extraction workflow for {surface_mesh_path}: {e}")
+            # Consider re-raising
+            raise
