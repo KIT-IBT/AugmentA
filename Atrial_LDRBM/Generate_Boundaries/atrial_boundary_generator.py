@@ -11,14 +11,14 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
-from epi_endo_separator import separate_epi_endo
-from surface_id_generator import generate_surf_id
-from tag_loader import load_element_tags
-from file_manager import write_vtk, write_obj, write_csv, write_vtx_file
-from surface_id_generator import generate_surf_id as gen_surf_id_func
-from mesh import MeshReader
-from ring_detector import RingDetector
-from top_epi_endo import label_atrial_orifices_TOP_epi_endo
+from Atrial_LDRBM.Generate_Boundaries.epi_endo_separator import separate_epi_endo
+from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import generate_surf_id
+from Atrial_LDRBM.Generate_Boundaries.tag_loader import load_element_tags
+from Atrial_LDRBM.Generate_Boundaries.file_manager import write_vtk, write_obj, write_csv, write_vtx_file
+from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import generate_surf_id as gen_surf_id_func
+from Atrial_LDRBM.Generate_Boundaries.mesh import MeshReader
+from Atrial_LDRBM.Generate_Boundaries.ring_detector import RingDetector
+from Atrial_LDRBM.Generate_Boundaries.top_epi_endo import label_atrial_orifices_TOP_epi_endo
 
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
@@ -552,9 +552,8 @@ class AtrialBoundaryGenerator:
                     print(f"Loaded TOP_EPI/ENDO centroids from {csv_path}")
             else:
                 print(f"Warning: TOP_EPI/ENDO centroids file not found at {csv_path}")
-                self.ring_info = {}  # Reset if file not found
+                self.ring_info = {}
 
         except Exception as e:
             print(f"ERROR during TOP_EPI/ENDO ring extraction workflow for {surface_mesh_path}: {e}")
-            # Consider re-raising
             raise
