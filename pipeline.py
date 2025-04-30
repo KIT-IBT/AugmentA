@@ -1,72 +1,62 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Revised AugmentA Pipeline using Refactored AtrialBoundaryGenerator.
+Created on Mon Apr 19 14:55:02 2021
 
-This version aims to replicate the original procedural workflow EXACTLY,
-without added control flags. Steps like LDRBM and Surface ID generation
-will run unconditionally if possible within the determined workflow.
-Ring workflow choice is inferred from args.closed_surface.
+@author: Luca Azzolin
 
-Requires corrected 'epi_endo_separator.py' and MODIFIED standalone
-orifice opening scripts (must RETURN path and apex_id).
+Copyright 2021 Luca Azzolin
 
-FIX 1: Corrected access to args.LAA/args.RAA when calling standalone
-       orifice opening scripts using getattr.
-FIX 2: Added conversion from PLY to VTK after resampling to avoid
-       'ReadAllScalarsOn' error during ring detection.
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+
 """
 
-import argparse
 import os
 import sys
-import shutil
 import warnings
 from string import Template
-from typing import Union, Tuple, Any
-
 import numpy as np
 import pandas as pd
 import pyvista as pv
 from scipy.spatial import cKDTree
 
-from Atrial_LDRBM.Generate_Boundaries.atrial_boundary_generator import AtrialBoundaryGenerator
+from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
+from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
+from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.mapper import mapp_ids_for_folder
+from vtk_opencarp_helper_methods.vtk_methods.normal_orientation import are_normals_outside
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+
+EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
+EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
 from standalones.open_orifices_with_curvature import open_orifices_with_curvature
 from standalones.open_orifices_manually import open_orifices_manually
-STANDALONE_ORIFICE_OPENING_AVAILABLE = True
 
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
-from vtk_opencarp_helper_methods.vtk_methods.normal_orientation import are_normals_outside
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
+from standalones.prealign_meshes import prealign_meshes
+from standalones.getmarks import get_landmarks
+from standalones.create_SSM_instance import create_SSM_instance
+from standalones.resample_surf_mesh import resample_surf_mesh
 
-try:
-    from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
-    from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
-    LDRBM_AVAILABLE = True
-except ImportError:
-    warnings.warn("Could not import LDRBM modules (Fiber_LA/Fiber_RA). Fiber generation step may fail.")
-    la_main = None
-    ra_main = None
-    LDRBM_AVAILABLE = False # Track availability
+from Atrial_LDRBM.Generate_Boundaries.atrial_boundary_generator import AtrialBoundaryGenerator
 
-try:
-    from standalones.prealign_meshes import prealign_meshes
-    from standalones.getmarks import get_landmarks
-    from standalones.create_SSM_instance import create_SSM_instance
-    from standalones.resample_surf_mesh import resample_surf_mesh
-    SSM_TOOLS_AVAILABLE = True
-except ImportError:
-    warnings.warn("Could not import standalone SSM fitting scripts. --SSM_fitting option may not work fully.")
-    prealign_meshes = None
-    get_landmarks = None
-    create_SSM_instance = None
-    resample_surf_mesh = None
-    SSM_TOOLS_AVAILABLE = False # Track availability
 
-# --- Setup ---
 pv.set_plot_theme('dark')
 try:
     n_cpu = os.cpu_count()
@@ -79,11 +69,49 @@ try:
         n_cpu = 1
 except NotImplementedError:
     n_cpu = 1
-
 print(f"Using {n_cpu} CPUs for parallel tasks (where applicable).")
 
-# NOTE: Argument parsing happens SOLELY in main.py
-# The AugmentA function receives the already parsed 'args' object.
+# -----------------------------------------------------------
+# helper: read apex IDs if the *_mesh_data.csv file exists
+# -----------------------------------------------------------
+def _load_apex_ids(csv_base: str) -> tuple[int | None, int | None]:
+    """
+    Load LAA and RAA apex IDs from a CSV named '{csv_base}_mesh_data.csv'.
+
+    Returns:
+        A tuple (laa_id, raa_id). Each is an int if present and valid,
+        otherwise None. Returns (None, None) if the file is missing
+        or any error occurs.
+    """
+    csv_path = f"{csv_base}_mesh_data.csv"
+
+    # If the file doesn't exist, nothing to load
+    if not os.path.exists(csv_path):
+        return None, None
+
+    try:
+        df = pd.read_csv(csv_path)
+
+        # Parse left atrial appendage ID
+        laa_id = None
+        if "LAA_id" in df.columns:
+            raw_la = df["LAA_id"][0]
+            if pd.notna(raw_la):
+                laa_id = int(raw_la)
+
+        # Parse right atrial appendage ID
+        raa_id = None
+        if "RAA_id" in df.columns:
+            raw_ra = df["RAA_id"][0]
+            if pd.notna(raw_ra):
+                raa_id = int(raw_ra)
+
+        return laa_id, raa_id
+
+    except Exception:
+        return None, None
+
+
 
 def get_atria_list(atrium_arg: str) -> list:
     """Converts 'LA', 'RA', 'LA_RA' argument to a list ['LA'], ['RA'], or ['LA', 'RA']."""
@@ -95,618 +123,635 @@ def get_atria_list(atrium_arg: str) -> list:
         raise ValueError(f"Invalid --atrium argument provided: {atrium_arg}")
 
 def AugmentA(args):
-    """Main AugmentA workflow function using the refactored OOP approach."""
+    args.SSM_file = os.path.abspath(args.SSM_file)
+    args.SSM_basename = os.path.abspath(args.SSM_basename)
+    args.mesh = os.path.abspath(args.mesh)
 
-    print("--- Starting AugmentA Pipeline (OOP, Replicating Procedural Flow) ---")
-    print(f"Run Args: {vars(args)}") # Print received args
+    mesh_dir = os.path.dirname(args.mesh)
+    mesh_filename = os.path.basename(args.mesh)
+    meshname, mesh_ext = os.path.splitext(mesh_filename)
+    meshname = os.path.join(mesh_dir, meshname) # Full base path without extension
 
-    # --- Input Validation & Setup ---
-    # Basic checks based on originally defined arguments
-    if not hasattr(args, 'mesh') or not args.mesh or not os.path.exists(args.mesh):
-        print(f"Error: Input mesh file not found or not specified: {getattr(args, 'mesh', 'Not Specified')}")
-        sys.exit(1)
-    # Use getattr for optional args to avoid AttributeError if not defined in main.py parser
-    if getattr(args, 'closed_surface', False) and (not hasattr(args, 'tag_csv') or not getattr(args, 'tag_csv') or not os.path.exists(getattr(args, 'tag_csv', ''))):
-        print(f"Error: Tag CSV file not found (--closed_surface requires --tag_csv): {getattr(args, 'tag_csv', 'Not Specified')}")
-        sys.exit(1)
+    print(f"Processing mesh: {args.mesh}")
+    print(f"Base meshname: {meshname}")
 
-    # Determine atria to process using helper
-    try:
-        atria_to_process = get_atria_list(args.atrium)
-    except ValueError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
+    if getattr(args, 'normals_outside', -1) < 0:
+        print("Auto-detecting normals...")
+        try:
+            args.normals_outside = int(are_normals_outside(smart_reader(args.mesh)))
+            print(f"Normals outside detected: {args.normals_outside}")
+        except Exception as e:
+            print(f"Warning: Failed to auto-detect normals ({e}). Defaulting to 0.")
+            args.normals_outside = 0
 
-    # Initial Apex ID Check - rely only on args passed from main.py's parser
-    # These checks ensure that if we don't run orifice opening or manual finding, the IDs are provided
-    # Use getattr to safely access LAA/RAA, defaulting to None if not present
-    if not getattr(args, 'open_orifices', False) and not getattr(args, 'find_appendage', False):
-        if 'LA' in atria_to_process and getattr(args, 'LAA', None) is None:
-             print("Error: --LAA must be provided if processing LA without --open_orifices or --find_appendage.")
-             sys.exit(1)
-        if 'RA' in atria_to_process and getattr(args, 'RAA', None) is None:
-             print("Error: --RAA must be provided if processing RA without --open_orifices or --find_appendage.")
-             sys.exit(1)
+    generator = AtrialBoundaryGenerator(mesh_path=args.mesh,
+                                        la_apex=getattr(args, 'LAA', None),
+                                        ra_apex=getattr(args, 'RAA', None),
+                                        la_base=getattr(args, 'LAA_base', None),
+                                        ra_base=getattr(args, 'RAA_base', None),
+                                        debug=(getattr(args, 'debug', 0) > 0))
 
+    processed_mesh = meshname # Tracks the base name, starts as initial base
+    meshname_old = str(meshname) # Store original base name
+    apex_id = None # Store apex ID determined during preprocessing if applicable
+    LAA = generator.la_apex if generator.la_apex is not None else ""
+    RAA = generator.ra_apex if generator.ra_apex is not None else ""
 
-    # --- Path and Variable Setup ---
-    mesh_abs_path = os.path.abspath(args.mesh)
-    mesh_dir = os.path.dirname(mesh_abs_path)
-    mesh_filename = os.path.basename(mesh_abs_path)
-    mesh_base_name_orig, mesh_ext = os.path.splitext(mesh_filename)
-    mesh_base_path_orig = os.path.join(mesh_dir, mesh_base_name_orig)
-
-    processed_mesh_base = mesh_base_path_orig
-    surface_mesh_path_for_rings = mesh_abs_path
-    volumetric_mesh_path = None # Will be set if input is closed or volume is generated
-
-    # Use original args directly for apex IDs, may be updated
-    # Use getattr for safe access, defaulting to None
-    current_LAA = getattr(args, 'LAA', None)
-    current_RAA = getattr(args, 'RAA', None)
-    current_LAA_base = getattr(args, 'LAA_base', None)
-    current_RAA_base = getattr(args, 'RAA_base', None)
-
-    # Determine if volume generation might be needed later
-    needs_volume_mesh_generation = False # Flag to check later
-
-    # --- Instantiate Generator ---
-    print("\nInstantiating AtrialBoundaryGenerator...")
-    generator = AtrialBoundaryGenerator(
-        mesh_path=mesh_abs_path,
-        la_apex=current_LAA,
-        ra_apex=current_RAA,
-        la_base=current_LAA_base,
-        ra_base=current_RAA_base,
-        debug=(getattr(args, 'debug', 0) > 0) # Use getattr for safety
-    )
-    print("Generator instantiated.")
-
-    # --- Step 1: Input Preprocessing ---
-    print("\n--- Step 1: Input Preprocessing ---")
     if getattr(args, 'closed_surface', False):
-        # --- Workflow: Closed Surface -> Separate Epi/Endo ---
-        print("Workflow Action: Running Epi/Endo Separation.")
-        volumetric_mesh_path = mesh_abs_path # Input IS the volume mesh
-        # Derive base name expected after separation (strip _vol)
-        if mesh_base_name_orig.endswith('_vol'):
-            processed_mesh_base = os.path.join(mesh_dir, mesh_base_name_orig[:-4])
-        else:
-             processed_mesh_base = mesh_base_path_orig
-             print(f"Warning: --closed_surface specified, but input file '{mesh_filename}' "
-                   f"does not end with '_vol'. Using '{processed_mesh_base}' as base for outputs.")
+        meshname = meshname_old
+        processed_mesh = meshname_old + f"_{args.atrium}_epi"
+        meshname_epi_base = processed_mesh
 
-        tag_csv_path = getattr(args, 'tag_csv', 'Atrial_LDRBM/element_tag.csv') # Use default if not present
-        if not os.path.exists(tag_csv_path):
-             print(f"Error: Tag CSV file not found: {tag_csv_path}")
-             sys.exit(1)
         try:
-            print("  Loading Element Tags...")
-            generator.load_element_tags(tag_csv_path)
-            print(f"  Tags loaded from {tag_csv_path}")
-
-            for atrium_tag in atria_to_process:
-                print(f"  Separating {atrium_tag}...")
-                generator.separate_epi_endo(tagged_volume_mesh_path=mesh_abs_path, atrium=atrium_tag)
-                print(f"  {atrium_tag} separation complete.")
-            print("Epi/Endo separation finished.")
-
-            # Determine the surface for subsequent ring detection (use epi)
-            atrium_for_surf = 'LA' if 'LA' in atria_to_process else 'RA'
-            potential_surf_path = f"{processed_mesh_base}_{atrium_for_surf}_epi.vtk"
-            if not os.path.exists(potential_surf_path):
-                 potential_surf_path = f"{processed_mesh_base}_{atrium_for_surf}_epi.obj"
-            if not os.path.exists(potential_surf_path):
-                 print(f"Error: Separated epicardial surface not found after separation step: {potential_surf_path}")
-                 sys.exit(1)
-            surface_mesh_path_for_rings = potential_surf_path
-            print(f"  Surface for subsequent ring detection set to: {surface_mesh_path_for_rings}")
-
+            generator.load_element_tags(csv_filepath=getattr(args, 'tag_csv', 'Atrial_LDRBM/element_tag.csv'))
+            generator.separate_epi_endo(tagged_volume_mesh_path=args.mesh, atrium=args.atrium)
         except Exception as e:
-            print(f"Error during closed surface preprocessing: {e}")
+            print(f"ERROR during OOP Epi/Endo Separation: {e}")
             sys.exit(1)
-
-    elif getattr(args, 'open_orifices', False):
-        # --- Workflow: Open Orifices ---
-        print("Workflow Action: Running Standalone Orifice Opening script...")
-        if not STANDALONE_ORIFICE_OPENING_AVAILABLE:
-            print("Error: Cannot run orifice opening - required scripts not imported or failed.")
-            sys.exit(1)
-        try:
-            orifice_func = open_orifices_with_curvature if getattr(args, 'use_curvature_to_open', True) else open_orifices_manually
-            print(f"  Calling: {orifice_func.__name__}")
-            atrium_for_opening = atria_to_process[0]
-            print(f"  Performing orifice opening for: {atrium_for_opening}")
-
-            # Use getattr to safely access LAA/RAA from args
-            laa_arg = getattr(args, 'LAA', None)
-            raa_arg = getattr(args, 'RAA', None)
-
-            # **MODIFIED CALL** - Expecting return values (cut_mesh_path, apex_id)
-            # Ensure standalone script is modified to return these
-            cut_mesh_path, apex_id = orifice_func(
-                meshpath=mesh_abs_path,
-                atrium=atrium_for_opening,
-                MRI=getattr(args, 'MRI', 0),
-                scale=getattr(args, 'scale', 1.0),
-                size=getattr(args, 'size', 30),
-                min_cutting_radius=getattr(args, 'min_cutting_radius', 7.5),
-                max_cutting_radius=getattr(args, 'max_cutting_radius', 17.5),
-                # Pass LAA/RAA as strings if not None, else empty string
-                LAA=str(laa_arg) if laa_arg is not None else "",
-                RAA=str(raa_arg) if raa_arg is not None else "",
-                debug=getattr(args, 'debug', 0)
-            )
-
-            if not cut_mesh_path or not os.path.exists(cut_mesh_path):
-                 raise FileNotFoundError(f"Orifice opening script did not return a valid output file path: {cut_mesh_path}")
-            if apex_id is None or apex_id < 0:
-                 raise ValueError("Orifice opening script did not return a valid apex ID.")
-
-            print(f"  Orifice opening complete. Output mesh: {cut_mesh_path}")
-            print(f"  Determined Apex ID for {atrium_for_opening}: {apex_id}")
-
-            surface_mesh_path_for_rings = cut_mesh_path
-            processed_mesh_base = os.path.splitext(cut_mesh_path)[0]
-
-            if atrium_for_opening == 'LA': current_LAA = int(apex_id)
-            if atrium_for_opening == 'RA': current_RAA = int(apex_id)
-            generator.la_apex = current_LAA
-            generator.ra_apex = current_RAA
-            print(f"  Generator apex IDs updated: LAA={generator.la_apex}, RAA={generator.ra_apex}")
-            needs_volume_mesh_generation = True
-
-        except Exception as e:
-            print(f"Error during orifice opening call: {e}")
-            sys.exit(1)
-
-    elif getattr(args, 'find_appendage', False) and not getattr(args, 'resample_input', False):
-        # --- Workflow: Find Appendage Manually ---
-        print("Workflow Action: Manual Apex Selection...")
-        try:
-            print("  Loading mesh for apex selection...")
-            polydata = apply_vtk_geom_filter(smart_reader(mesh_abs_path))
-            if polydata is None or polydata.GetNumberOfPoints() == 0:
-                raise ValueError("Input mesh for apex selection is empty or invalid.")
-
-            mesh_pv = pv.PolyData(polydata)
-            print(f"  Loaded {mesh_pv.n_points} points.")
-            tree = cKDTree(mesh_pv.points.astype(np.double))
-
-            if 'LA' in atria_to_process:
-                print("  Please select the LEFT Atrial Appendage (LAA) apex in the popup window...")
-                picked_la = pick_point(mesh_pv, "LEFT Atrial Appendage (LAA) apex")
-                if picked_la is None: raise RuntimeError("LAA apex selection cancelled or failed.")
-                _, laa_idx = tree.query(picked_la)
-                current_LAA = int(laa_idx)
-                print(f"  LAA Apex ID selected: {current_LAA}")
-
-            if 'RA' in atria_to_process:
-                print("  Please select the RIGHT Atrial Appendage (RAA) apex in the popup window...")
-                picked_ra = pick_point(mesh_pv, "RIGHT Atrial Appendage (RAA) apex")
-                if picked_ra is None: raise RuntimeError("RAA apex selection cancelled or failed.")
-                _, raa_idx = tree.query(picked_ra)
-                current_RAA = int(raa_idx)
-                print(f"  RAA Apex ID selected: {current_RAA}")
-
-            generator.la_apex = current_LAA
-            generator.ra_apex = current_RAA
-            print(f"  Generator apex IDs updated: LAA={generator.la_apex}, RAA={generator.ra_apex}")
-
-            # Save to CSV like original script
-            apex_id_data = {}
-            laa_id_to_save = getattr(generator, 'la_apex', None)
-            raa_id_to_save = getattr(generator, 'ra_apex', None)
-            # Determine column names based on args.atrium for compatibility
-            if args.atrium == "LA" and laa_id_to_save is not None:
-                apex_id_data['LAA_id'] = [laa_id_to_save] # Use specific key
-            elif args.atrium == "RA" and raa_id_to_save is not None:
-                apex_id_data['RAA_id'] = [raa_id_to_save] # Use specific key
-            elif args.atrium == "LA_RA":
-                 if laa_id_to_save is not None: apex_id_data['LAA_id'] = [laa_id_to_save]
-                 if raa_id_to_save is not None: apex_id_data['RAA_id'] = [raa_id_to_save]
-
-            if apex_id_data:
-                 apex_csv_path = f'{processed_mesh_base}_mesh_data.csv'
-                 df_apex = pd.DataFrame(apex_id_data)
-                 df_apex.to_csv(apex_csv_path, index=False, float_format="%.2f")
-                 print(f"  Apex IDs saved to {apex_csv_path}")
-
-        except Exception as e:
-            print(f"Error during manual apex selection: {e}")
-            sys.exit(1)
-        surface_mesh_path_for_rings = mesh_abs_path
-        processed_mesh_base = mesh_base_path_orig
-        needs_volume_mesh_generation = True
 
     else:
-         # --- Workflow: Standard Open Surface ---
-        print("Workflow Action: Using provided --mesh directly (standard open surface).")
-        # Ensure apex IDs were provided via args or updated previously
-        if 'LA' in atria_to_process and current_LAA is None:
-             print("Error: --LAA must be provided if using standard open surface workflow for LA.")
-             sys.exit(1)
-        if 'RA' in atria_to_process and current_RAA is None:
-             print("Error: --RAA must be provided if using standard open surface workflow for RA.")
-             sys.exit(1)
-        # Ensure generator has the correct IDs
-        generator.la_apex = current_LAA
-        generator.ra_apex = current_RAA
-        surface_mesh_path_for_rings = mesh_abs_path
-        processed_mesh_base = mesh_base_path_orig
-        needs_volume_mesh_generation = True
+        if getattr(args, 'open_orifices', False):
+            if open_orifices_manually is None or open_orifices_with_curvature is None:
+                 print("Error: Orifice opening scripts not available.")
+                 sys.exit(1)
 
-
-    # --- Step 2: SSM Fitting (Optional, Procedural Standalones) ---
-    print("\n--- Step 2: SSM Fitting (Optional) ---")
-    if getattr(args, 'SSM_fitting', False):
-        if not SSM_TOOLS_AVAILABLE:
-             print("SSM Tools not available, skipping SSM fitting.")
-        elif getattr(args, 'closed_surface', False):
-             print("Warning: SSM fitting is typically performed on open surfaces. Skipping for --closed_surface.")
-        else:
-            print("Workflow Action: Running procedural SSM fitting steps...")
-            # This block remains largely procedural, calling standalone scripts
             try:
-                # Use getattr for safe access to SSM args
-                ssm_file_arg = getattr(args, 'SSM_file', 'data/SSM/SSM.h5')
-                ssm_basename_arg = getattr(args, 'SSM_basename', 'data/SSM/mean')
-                ssm_abs_basename = os.path.abspath(ssm_basename_arg)
-                ssm_abs_file = os.path.abspath(ssm_file_arg)
-                ssm_surf_dir = ssm_abs_basename + '_surf'
-                os.makedirs(ssm_surf_dir, exist_ok=True)
+                orifice_func = open_orifices_with_curvature if getattr(args, 'use_curvature_to_open', True) else open_orifices_manually
+                print(f"Calling standalone: {orifice_func.__name__}")
 
-                # --- Generate landmarks for base SSM shape ---
-                ssm_landmarks_path = os.path.join(ssm_surf_dir, 'landmarks.json')
-                if not os.path.isfile(ssm_landmarks_path):
-                    print(f"  Generating landmarks for SSM base shape: {ssm_abs_basename}")
-                    ssm_laa_id = 6329; ssm_raa_id = 21685 # Hardcoded, verify!
-                    ssm_base_mesh_path = ssm_abs_basename + ".vtk"
-                    if not os.path.exists(ssm_base_mesh_path): ssm_base_mesh_path = ssm_abs_basename + ".obj"
-                    if not os.path.exists(ssm_base_mesh_path): raise FileNotFoundError(f"SSM base mesh not found: {ssm_abs_basename}.vtk/obj")
-
-                    print(f"  Using SSM Base Mesh: {ssm_base_mesh_path}, LAA={ssm_laa_id}, RAA={ssm_raa_id}")
-                    ssm_ring_generator = AtrialBoundaryGenerator(mesh_path=ssm_base_mesh_path, la_apex=ssm_laa_id, ra_apex=ssm_raa_id, debug=(args.debug > 0))
-                    ssm_ring_generator.extract_rings(surface_mesh_path=ssm_base_mesh_path) # Standard rings for landmarks
-                    print(f"  Standard ring extraction complete for SSM base.")
-                    get_landmarks(ssm_abs_basename, 0, 1)
-                    print(f"  Landmarks generated for SSM base.")
-                else:
-                    print(f"  Using existing landmarks for SSM base shape: {ssm_landmarks_path}")
-
-                # --- Prepare Target Mesh ---
-                target_mesh_base_for_ssm = processed_mesh_base
-                target_surf_dir = target_mesh_base_for_ssm + '_surf'
-                os.makedirs(target_surf_dir, exist_ok=True)
-
-                if not os.path.exists(os.path.join(target_surf_dir, 'landmarks.json')):
-                     print(f"  Running ring detection for TARGET mesh to generate landmarks: {target_mesh_base_for_ssm}")
-                     if not os.path.exists(surface_mesh_path_for_rings): raise FileNotFoundError(f"Target surface mesh for SSM landmark generation not found: {surface_mesh_path_for_rings}")
-                     generator.la_apex = current_LAA; generator.ra_apex = current_RAA # Ensure current IDs
-                     generator.extract_rings(surface_mesh_path=surface_mesh_path_for_rings) # Standard rings
-                     print(f"  Target ring extraction complete.")
-
-                # --- Prealign target mesh ---
-                print(f"  Prealigning target mesh: {target_mesh_base_for_ssm}...")
-                prealign_meshes(target_mesh_base_for_ssm, ssm_abs_basename, args.atrium, 0)
-
-                # --- Get landmarks for (prealigned) target mesh ---
-                print(f"  Generating landmarks for (prealigned) target mesh: {target_mesh_base_for_ssm}...")
-                get_landmarks(target_mesh_base_for_ssm, 1, 1)
-
-                # --- Create registration file ---
-                print(f"  Setting up registration ({target_surf_dir} vs {ssm_surf_dir})...")
-                reg_template_path = 'template/Registration_ICP_GP_template.txt'
-                if not os.path.exists(reg_template_path): raise FileNotFoundError(f"Reg template not found: {reg_template_path}")
-                with open(reg_template_path, 'r') as f: lines = ''.join(f.readlines())
-                temp_obj = Template(lines)
-                SSM_fit_file = temp_obj.substitute( SSM_file=ssm_abs_file, SSM_dir=os.path.abspath(ssm_surf_dir), target_dir=os.path.abspath(target_surf_dir))
-                reg_output_path = os.path.join(target_surf_dir, 'Registration_ICP_GP.txt')
-                with open(reg_output_path, 'w') as f: f.write(SSM_fit_file)
-                print(f"  Registration file written: {reg_output_path}. Run registration externally.")
-
-                # --- Check for coefficients file ---
-                coeffs_path = os.path.join(target_surf_dir, 'coefficients.txt')
-                if not os.path.isfile(coeffs_path): raise ValueError(f"SSM Coefficients file not found: {coeffs_path}. Run registration first.")
-                print(f"  Found coefficients file: {coeffs_path}")
-
-                # --- Create SSM instance ---
-                ssm_instance_base = os.path.join(target_surf_dir, f"{args.atrium}_fit") # Naming based on original script
-                ssm_instance_obj = ssm_instance_base + ".obj"
-                print(f"  Creating SSM instance: {ssm_instance_obj}...")
-                create_SSM_instance(ssm_abs_file, coeffs_path, ssm_instance_obj) # Assumes .h5 is handled internally
-
-                processed_mesh_base = ssm_instance_base # Update base name
-                surface_mesh_path_for_rings = ssm_instance_obj # Use this .obj for subsequent ring detection
-                print(f"  SSM instance created. Updated processed mesh base: {processed_mesh_base}")
-
-                # --- Optional Resampling after fitting ---
-                if getattr(args, 'resample_input', False):
-                    print(f"  Resampling SSM instance...")
-                    resample_surf_mesh(
-                        processed_mesh_base, # Base name like .../LA_fit
-                        target_mesh_resolution=args.target_mesh_resolution,
-                        find_apex_with_curv=1, # Let resampling find apex
-                        scale=args.scale,
-                        apex_id=-1, # Let resampling find
-                        atrium=args.atrium # Pass correct atrium
+                if args.atrium == "LA_RA":
+                    print("  Performing orifice opening for: LA")
+                    la_cut_path, la_determined_apex_id = orifice_func(
+                        meshpath=args.mesh,
+                        atrium="LA",
+                        MRI=getattr(args, 'MRI', 0),
+                        scale=getattr(args, 'scale', 1.0),
+                        size=getattr(args, 'size', 30),
+                        min_cutting_radius=getattr(args, 'min_cutting_radius', 7.5),
+                        max_cutting_radius=getattr(args, 'max_cutting_radius', 17.5),
+                        LAA=str(getattr(args, 'LAA', '')),
+                        RAA=str(getattr(args, 'RAA', '')),
+                        debug=getattr(args, 'debug', 0)
                     )
-                    processed_mesh_base = processed_mesh_base + '_res' # Update base name
-                    resampled_ply_path = processed_mesh_base + ".ply" # Resample outputs ply
-                    if not os.path.exists(resampled_ply_path): raise FileNotFoundError(f"Resampling output not found: {resampled_ply_path}")
 
-                    # --- FIX: Convert PLY to VTK before ring detection ---
-                    resampled_vtk_path = processed_mesh_base + ".vtk"
-                    print(f"  Converting resampled PLY '{resampled_ply_path}' to VTK '{resampled_vtk_path}'...")
-                    try:
-                        mesh_ply = pv.read(resampled_ply_path)
-                        mesh_ply.save(resampled_vtk_path, binary=True) # Save as VTK
-                        surface_mesh_path_for_rings = resampled_vtk_path # Use VTK for rings
-                        print(f"  Conversion complete. Using VTK for ring detection.")
-                    except Exception as conv_err:
-                         print(f"  Error converting PLY to VTK: {conv_err}. Ring detection might fail.")
-                         surface_mesh_path_for_rings = resampled_ply_path # Fallback to PLY
-                    # --- END FIX ---
+                    if not la_cut_path or not os.path.exists(la_cut_path) or la_determined_apex_id is None or la_determined_apex_id < 0:
+                        raise RuntimeError("Orifice opening script failed for LA.")
 
-                    print(f"  Resampling complete. Updated processed mesh base: {processed_mesh_base}")
+                    LAA = int(la_determined_apex_id)
+                    generator.la_apex = LAA
+                    print(f"LA cut mesh: {la_cut_path}, LA Apex ID: {LAA}")
 
-                    # Read apex IDs potentially generated by resampling
-                    resampled_apex_csv = f"{processed_mesh_base}_mesh_data.csv"
-                    if os.path.exists(resampled_apex_csv):
-                        print(f"  Reading apex IDs from resampled data CSV: {resampled_apex_csv}")
-                        df_res_apex = pd.read_csv(resampled_apex_csv)
-                        if 'LAA_id' in df_res_apex.columns and pd.notna(df_res_apex['LAA_id'][0]): current_LAA = int(df_res_apex['LAA_id'][0]); print(f"    Updated LAA: {current_LAA}")
-                        if 'RAA_id' in df_res_apex.columns and pd.notna(df_res_apex['RAA_id'][0]): current_RAA = int(df_res_apex['RAA_id'][0]); print(f"    Updated RAA: {current_RAA}")
-                        generator.la_apex = current_LAA; generator.ra_apex = current_RAA
-                    else:
-                         print("  Warning: No apex ID CSV found after resampling.")
+                    ra_cut_path, ra_determined_apex_id = orifice_func(
+                        meshpath=args.mesh,
+                        atrium="RA",
+                        MRI=getattr(args, 'MRI', 0),
+                        scale=getattr(args, 'scale', 1.0),
+                        size=getattr(args, 'size', 30),
+                        min_cutting_radius=getattr(args, 'min_cutting_radius', 7.5),
+                        max_cutting_radius=getattr(args, 'max_cutting_radius', 17.5),
+                        LAA=str(LAA), RAA=str(getattr(args, 'RAA', '')),
+                        debug=getattr(args, 'debug', 0))
+
+                    RAA = int(ra_determined_apex_id)
+                    generator.ra_apex = RAA
+                    print(f"RA cut mesh: {ra_cut_path}, RA Apex ID: {RAA}")
+
+                    cut_mesh_path = ra_cut_path
+                    apex_id = RAA
+
+                else:
+                    cut_mesh_path, determined_apex_id = orifice_func(
+                        meshpath=args.mesh,
+                        atrium=args.atrium,
+                        MRI=getattr(args, 'MRI', 0),
+                        scale=getattr(args, 'scale', 1.0),
+                        size=getattr(args, 'size', 30),
+                        min_cutting_radius=getattr(args, 'min_cutting_radius', 7.5),
+                        max_cutting_radius=getattr(args, 'max_cutting_radius', 17.5),
+                        LAA=str(getattr(args, 'LAA', '')),
+                        RAA=str(getattr(args, 'RAA', '')),
+                        debug=getattr(args, 'debug', 0)
+                    )
+                    apex_id = int(determined_apex_id)
+                    if args.atrium == "LA":
+                        generator.la_apex = apex_id
+                        LAA = apex_id
+
+                    elif args.atrium == "RA":
+                        generator.ra_apex = apex_id
+                        RAA = apex_id
+
+                meshname = os.path.splitext(cut_mesh_path)[0]
+                processed_mesh = meshname
 
             except Exception as e:
-                print(f"Error during SSM fitting workflow: {e}")
+                print(f"ERROR during orifice opening call: {e}")
                 sys.exit(1)
-        # END SSM Fitting block
-    else:
-        print("Workflow Action: No SSM Fitting.")
-        # --- Optional Resampling if NOT doing SSM fitting ---
-        if getattr(args, 'resample_input', False) and not getattr(args, 'closed_surface', False):
-             if not SSM_TOOLS_AVAILABLE or resample_surf_mesh is None:
-                 print("Resample script not available, skipping resampling.")
-             else:
-                print("Workflow Action: Resampling input mesh...")
+
+        else:
+            if not getattr(args, 'resample_input', False) and getattr(args, 'find_appendage', False):
+                # Handles cases where the input mesh is open, not being resampled here, but the apex needs manual identification.
+                print("Workflow: Find Appendage Manually...")
                 try:
-                    resample_input_base = processed_mesh_base
-                    resample_input_path = surface_mesh_path_for_rings
-                    temp_obj_path = None
-                    if not resample_input_path.lower().endswith(".obj"):
-                         temp_obj_path = resample_input_base + "_temp_for_resample.obj"
-                         print(f"  Converting {resample_input_path} to {temp_obj_path} for resampling...")
-                         temp_mesh_pv = pv.read(resample_input_path)
-                         pv.save_meshio(temp_obj_path, temp_mesh_pv, "obj")
-                         resample_input_base = os.path.splitext(temp_obj_path)[0]
+                    mesh_data = dict()
+                    polydata = apply_vtk_geom_filter(smart_reader(args.mesh))
 
+                    if polydata is None or polydata.GetNumberOfPoints() == 0:
+                        raise ValueError("Mesh empty")
+
+                    mesh_from_vtk = pv.PolyData(polydata)
+                    tree = cKDTree(mesh_from_vtk.points.astype(np.double))
+
+                    LAA = ""
+                    RAA = ""
+
+                    if args.atrium == "LA":
+                        apex_coord = pick_point(mesh_from_vtk, "LA appendage apex")
+
+                        if apex_coord is None:
+                            raise RuntimeError("Apex selection cancelled.")
+
+                        _, apex_idx = tree.query(apex_coord)
+                        generator.la_apex = int(apex_idx)
+                        LAA = generator.la_apex
+                        mesh_data[f"{args.atrium}A_id"] = [LAA]
+
+                    elif args.atrium == "RA":
+                        apex_coord = pick_point(mesh_from_vtk, "RA appendage apex")
+
+                        if apex_coord is None:
+                            raise RuntimeError("Apex selection cancelled.")
+
+                        _, apex_idx = tree.query(apex_coord)
+                        generator.ra_apex = int(apex_idx); RAA = generator.ra_apex
+                        mesh_data[f"{args.atrium}A_id"] = [RAA]
+                    elif args.atrium == "LA_RA":
+                        apex_coord_la = pick_point(mesh_from_vtk, "LA appendage apex")
+
+                        if apex_coord_la is None:
+                            raise RuntimeError("Apex selection cancelled.")
+
+                        _, apex_idx_la = tree.query(apex_coord_la)
+                        generator.la_apex = int(apex_idx_la); LAA = generator.la_apex
+                        mesh_data["LAA_id"] = [LAA]
+                        apex_coord_ra = pick_point_with_preselection(mesh_from_vtk, "RA appendage apex", apex_coord_la)
+
+                        if apex_coord_ra is None:
+                            raise RuntimeError("Apex selection cancelled.")
+                        _, apex_idx_ra = tree.query(apex_coord_ra)
+
+                        generator.ra_apex = int(apex_idx_ra)
+                        RAA = generator.ra_apex
+                        mesh_data["RAA_id"] = [RAA]
+
+                    fname = f'{meshname}_mesh_data.csv'
+                    df = pd.DataFrame(mesh_data)
+                    df.to_csv(fname, float_format="%.2f", index=False)
+                    processed_mesh = meshname
+
+                except Exception as e:
+                    print(f"ERROR during manual apex selection: {e}")
+                    sys.exit(1)
+            else:
+                print("Workflow: Using p rovided Apex IDs (or defaults).")
+                processed_mesh = meshname
+
+                LAA = generator.la_apex if generator.la_apex is not None else ""
+                RAA = generator.ra_apex if generator.ra_apex is not None else ""
+
+
+    # --- SSM Fitting Logic ---
+    if getattr(args, 'SSM_fitting', False) and not getattr(args, 'closed_surface', False):
+        print("\n--- Running SSM Fitting Workflow ---")
+
+        try:
+            ssm_abs_basename = os.path.abspath(args.SSM_basename)
+            ssm_abs_file = os.path.abspath(args.SSM_file)
+            ssm_surf_dir = ssm_abs_basename + '_surf'
+            os.makedirs(ssm_surf_dir, exist_ok=True)
+
+            # Generate SSM landmarks if not present
+            ssm_landmarks_path = os.path.join(ssm_surf_dir, 'landmarks.json')
+            if not os.path.isfile(ssm_landmarks_path):
+                print(f"  Generating landmarks for SSM base shape: {ssm_abs_basename}")
+                ssm_laa_id = 6329
+                ssm_raa_id = 21685
+
+                ssm_base_mesh_path = ssm_abs_basename + ".vtk"
+                if not os.path.exists(ssm_base_mesh_path):
+                    ssm_base_mesh_path = ssm_abs_basename + ".obj"
+
+                if not os.path.exists(ssm_base_mesh_path):
+                    raise FileNotFoundError(f"SSM base mesh not found: {ssm_abs_basename}.vtk/obj")
+
+                print(f"Running ring detection on SSM base mesh...")
+                ssm_ring_generator = AtrialBoundaryGenerator(mesh_path=ssm_base_mesh_path, la_apex=ssm_laa_id, ra_apex=ssm_raa_id, debug=(args.debug > 0))
+
+                ssm_ring_generator.extract_rings(surface_mesh_path=ssm_base_mesh_path)
+                print(f"Ring detection complete for SSM base.")
+
+                get_landmarks(ssm_abs_basename, 0, 1)
+                print(f"Landmarks generated for SSM base.")
+            else:
+                print(f"Using existing landmarks for SSM base shape: {ssm_landmarks_path}")
+
+
+            target_mesh_base_for_ssm = processed_mesh
+            target_surf_dir = target_mesh_base_for_ssm + '_surf'
+            os.makedirs(target_surf_dir, exist_ok=True)
+            target_landmarks_path = os.path.join(target_surf_dir, 'landmarks.json')
+
+            # Generate landmarks for target mesh if needed
+            if not os.path.isfile(target_landmarks_path):
+                 print(f"Generating landmarks for target mesh: {target_mesh_base_for_ssm}")
+
+                 target_surface_path = processed_mesh + ".vtk" # Assume vtk first
+
+                 if not os.path.exists(target_surface_path):
+                     target_surface_path = processed_mesh + ".obj"
+
+                 if not os.path.exists(target_surface_path):
+                     target_surface_path = processed_mesh + ".ply"
+
+                 if not os.path.exists(target_surface_path):
+                     raise FileNotFoundError(f"Cannot find target surface mesh: {target_mesh_base_for_ssm}.vtk/obj/ply")
+
+                 print(f"Running ring detection on target mesh: {target_surface_path}")
+
+                 # Use the main generator instance (update apex IDs from local vars)
+                 generator.la_apex = LAA if LAA else None
+                 generator.ra_apex = RAA if RAA else None
+
+                 generator.extract_rings(surface_mesh_path=target_surface_path)
+                 print(f"Ring detection complete for target.")
+
+                 get_landmarks(target_mesh_base_for_ssm, 1, 1)
+                 print(f"Landmarks generated for target.")
+            else:
+                 print(f"Using existing landmarks for target mesh: {target_landmarks_path}")
+
+            print(f"Prealigning target: {target_mesh_base_for_ssm}...")
+            prealign_meshes(target_mesh_base_for_ssm, ssm_abs_basename, args.atrium, 0)
+
+            print(f"Setting up registration file...")
+            reg_template_path = 'template/Registration_ICP_GP_template.txt'
+            if not os.path.exists(reg_template_path):
+                raise FileNotFoundError(f"Reg template not found: {reg_template_path}")
+
+            with open(reg_template_path, 'r') as f:
+                lines = ''.join(f.readlines())
+
+            temp_obj = Template(lines)
+            SSM_fit_file = temp_obj.substitute(SSM_file=ssm_abs_file,
+                                               SSM_dir=os.path.abspath(ssm_surf_dir),
+                                               target_dir=os.path.abspath(target_surf_dir))
+
+            reg_output_path = os.path.join(target_surf_dir, 'Registration_ICP_GP.txt')
+
+            with open(reg_output_path, 'w') as f:
+                f.write(SSM_fit_file)
+
+            print(f"Registration file written: {reg_output_path}. Run registration externally.")
+
+            # Create SSM instance
+            coeffs_path = os.path.join(target_surf_dir, 'coefficients.txt')
+
+            if not os.path.isfile(coeffs_path):
+                raise ValueError(f"SSM Coefficients file not found: {coeffs_path}. Run registration first.")
+
+            ssm_instance_base = os.path.join(target_surf_dir, f"{args.atrium}_fit")
+            ssm_instance_obj = ssm_instance_base + ".obj"
+            print(f"Creating SSM instance: {ssm_instance_obj}...")
+            create_SSM_instance(ssm_abs_file, coeffs_path, ssm_instance_obj)
+
+            # Update processed_mesh base name (Kept from original)
+            processed_mesh = ssm_instance_base
+            print(f"SSM instance created. Updated processed mesh base: {processed_mesh}")
+
+            # Optional Resampling after fitting (Kept from original)
+            if getattr(args, 'resample_input', False):
+                print(f"Resampling SSM instance...")
+                apex_id_for_resample = apex_id if apex_id is not None else -1 # Use ID if available from orifice opening
+                print(f"Using apex_id={apex_id_for_resample} for resampling.")
+
+                resample_surf_mesh(
+                    processed_mesh,
+                    target_mesh_resolution=args.target_mesh_resolution,
+                    find_apex_with_curv=1,
+                    scale=args.scale,
+                    apex_id=apex_id_for_resample, # Pass determined/fallback apex_id
+                    atrium=args.atrium
+                )
+                processed_mesh = processed_mesh + '_res' # Update base name
+
+                laa_csv, raa_csv = _load_apex_ids(processed_mesh)
+                if laa_csv is not None:
+                    generator.la_apex = laa_csv
+                if raa_csv is not None:
+                    generator.ra_apex = raa_csv
+
+                print(f"Resampling complete. Updated processed mesh base: {processed_mesh}")
+
+
+            # --- Ring detection ON FITTED/RESAMPLED MESH ---
+            print(f"  Running OOP Ring Detection on final SSM mesh: {processed_mesh}")
+
+            # Read final apex IDs from CSV generated by fitting/resampling
+            final_apex_csv_path = f"{processed_mesh}_mesh_data.csv" # Assumes resample_surf_mesh creates this
+            final_laa_id = None
+            final_raa_id = None
+            if os.path.exists(final_apex_csv_path):
+                try:
+                    df_final_apex = pd.read_csv(final_apex_csv_path)
+
+                    # Use LAA_id/RAA_id keys consistently
+                    if 'LAA_id' in df_final_apex.columns and pd.notna(df_final_apex['LAA_id'][0]):
+                        final_laa_id = int(df_final_apex['LAA_id'][0])
+
+                    if 'RAA_id' in df_final_apex.columns and pd.notna(df_final_apex['RAA_id'][0]):
+                        final_raa_id = int(df_final_apex['RAA_id'][0])
+
+                    print(f"Read final apex IDs: LAA={final_laa_id}, RAA={final_raa_id}")
+
+                except Exception as read_err:
+                    print(f"Warning: Could not read final apex IDs from {final_apex_csv_path}: {read_err}")
+            else:
+                print(f"Warning: Final apex ID CSV not found: {final_apex_csv_path}. Using IDs from before resampling if available.")
+
+                # Fallback to IDs held by generator before this step
+                final_laa_id = generator.la_apex
+                final_raa_id = generator.ra_apex
+
+            # Update generator state just before the call
+            generator.la_apex = final_laa_id
+            generator.ra_apex = final_raa_id
+
+            # Determine final surface path (OBJ preferred by original label_atrial_orifices)
+            final_surface_path_obj = processed_mesh + ".obj"
+            final_surface_path_ply = processed_mesh + ".ply"
+            final_surface_path_vtk = processed_mesh + ".vtk"
+
+            if not os.path.exists(final_surface_path_obj):
+                 if os.path.exists(final_surface_path_ply):
+                     print(f"Converting {final_surface_path_ply} to OBJ for ring detection...")
+                     pv.save_meshio(final_surface_path_obj, pv.read(final_surface_path_ply), "obj")
+                 elif os.path.exists(final_surface_path_vtk):
+                     print(f"Converting {final_surface_path_vtk} to OBJ for ring detection...")
+                     pv.save_meshio(final_surface_path_obj, pv.read(final_surface_path_vtk), "obj")
+                 else:
+                     raise FileNotFoundError(f"Cannot find final fitted/resampled mesh: {processed_mesh}.obj/vtk/ply")
+
+            generator.extract_rings(surface_mesh_path=final_surface_path_obj)
+
+            print(f"OOP Ring detection complete for fitted mesh.")
+
+        except Exception as e:
+            print(f"ERROR during SSM fitting workflow: {e}")
+            sys.exit(1)
+    # --- END SSM Fitting ---
+
+    elif not getattr(args, 'SSM_fitting', False):
+        # --- Workflow: Not SSM Fitting ---
+        print("\n--- Running Non-SSM Workflow ---")
+
+        if getattr(args, 'resample_input', False) and getattr(args, 'find_appendage', False):
+            print("Workflow Action: Resampling mesh...")
+            if resample_surf_mesh is None:
+                 print("Resample script not available, skipping.")
+
+            else:
+                try:
+                    resample_input_base = meshname # Use original base name
+                    resample_input_path_vtk = f'{resample_input_base}.vtk'
+                    resample_input_path_obj = f'{resample_input_base}.obj'
+
+                    if not os.path.exists(resample_input_path_obj):
+                        if not os.path.exists(resample_input_path_vtk):
+                             raise FileNotFoundError(f"Cannot find {resample_input_path_vtk} or {resample_input_path_obj} for resampling.")
+
+                        meshin = pv.read(resample_input_path_vtk)
+                        pv.save_meshio(resample_input_path_obj, meshin, "obj")
+                        # todo: just overwrite regardless
+
+                    # Determine apex ID for resampling (use the one found manually earlier)
                     apex_id_for_resample = -1
-                    atrium_arg_for_resample = args.atrium if args.atrium != 'LA_RA' else 'LA'
-                    if atrium_arg_for_resample == 'LA' and current_LAA is not None: apex_id_for_resample = current_LAA
-                    elif atrium_arg_for_resample == 'RA' and current_RAA is not None: apex_id_for_resample = current_RAA
 
-                    print(f"  Calling resample_surf_mesh on base: {resample_input_base}, Apex ID: {apex_id_for_resample}")
+                    print(f"Calling resample_surf_mesh on base: {resample_input_base}, Apex ID: {apex_id_for_resample}")
                     resample_surf_mesh(
                         resample_input_base,
                         target_mesh_resolution=args.target_mesh_resolution,
-                        find_apex_with_curv=0, # Use provided apex ID
+                        find_apex_with_curv=0,
                         scale=args.scale,
                         apex_id=apex_id_for_resample,
-                        atrium=atrium_arg_for_resample
+                        atrium=args.atrium
                     )
-                    processed_mesh_base = resample_input_base + '_res'
-                    resampled_ply_path = processed_mesh_base + ".ply"
-                    if not os.path.exists(resampled_ply_path): raise FileNotFoundError(f"Resampling output not found: {resampled_ply_path}")
+                    processed_mesh = f'{resample_input_base}_res'
 
-                    # --- FIX: Convert PLY to VTK before ring detection ---
-                    resampled_vtk_path = processed_mesh_base + ".vtk"
-                    print(f"  Converting resampled PLY '{resampled_ply_path}' to VTK '{resampled_vtk_path}'...")
-                    try:
-                        mesh_ply = pv.read(resampled_ply_path)
-                        mesh_ply.save(resampled_vtk_path, binary=True) # Save as VTK
-                        surface_mesh_path_for_rings = resampled_vtk_path # Use VTK for rings
-                        print(f"  Conversion complete. Using VTK for ring detection.")
-                    except Exception as conv_err:
-                         print(f"  Error converting PLY to VTK: {conv_err}. Ring detection might fail.")
-                         surface_mesh_path_for_rings = resampled_ply_path # Fallback
-                    # --- END FIX ---
+                    laa_csv, raa_csv = _load_apex_ids(processed_mesh)
+                    if laa_csv is not None:
+                        generator.la_apex = laa_csv
+                    if raa_csv is not None:
+                        generator.ra_apex = raa_csv
 
-                    print(f"  Resampling complete. Updated processed mesh base: {processed_mesh_base}")
+                    print(f"Resampling complete. Updated processed mesh base: {processed_mesh}")
 
-                    if temp_obj_path is not None and os.path.exists(temp_obj_path) and "_temp_for_resample" in temp_obj_path:
-                         print(f"  Removing temporary file: {temp_obj_path}")
-                         os.remove(temp_obj_path)
+                    # Convert PLY output to OBJ (matching original behavior which used OBJ later)
+                    resampled_ply_path = processed_mesh + ".ply"
+                    resampled_obj_path = processed_mesh + ".obj"
 
-                    # Read apex IDs potentially generated by resampling
-                    resampled_apex_csv = f"{processed_mesh_base}_mesh_data.csv"
-                    if os.path.exists(resampled_apex_csv):
-                        print(f"  Reading apex IDs from resampled data CSV: {resampled_apex_csv}")
-                        df_res_apex = pd.read_csv(resampled_apex_csv)
-                        if 'LAA_id' in df_res_apex.columns and pd.notna(df_res_apex['LAA_id'][0]): current_LAA = int(df_res_apex['LAA_id'][0]); print(f"    Updated LAA: {current_LAA}")
-                        if 'RAA_id' in df_res_apex.columns and pd.notna(df_res_apex['RAA_id'][0]): current_RAA = int(df_res_apex['RAA_id'][0]); print(f"    Updated RAA: {current_RAA}")
-                        generator.la_apex = current_LAA; generator.ra_apex = current_RAA
-                    else:
-                         print("  Warning: No apex ID CSV found after resampling.")
+                    if os.path.exists(resampled_ply_path) and not os.path.exists(resampled_obj_path):
+                        meshin = pv.read(resampled_ply_path)
+                        pv.save_meshio(resampled_obj_path, meshin, "obj")
+
+                    elif not os.path.exists(resampled_ply_path):
+                        print(f"Warning: Resampled PLY file not found: {resampled_ply_path}")
 
                 except Exception as e:
                     print(f"Error during resampling: {e}")
                     sys.exit(1)
-        # END Resampling block
-
-
-    # --- Step 3: Ring Detection (OOP) ---
-    print("\n--- Step 3: Ring Detection (OOP) ---")
-    if not os.path.exists(surface_mesh_path_for_rings):
-        print(f"Error: Cannot find surface mesh for ring detection: {surface_mesh_path_for_rings}")
-        sys.exit(1)
-
-    # Final check on apex IDs in the generator instance
-    if 'LA' in atria_to_process and generator.la_apex is None:
-         print("Error: LAA apex ID is missing in generator before ring detection step.")
-         sys.exit(1)
-    if 'RA' in atria_to_process and generator.ra_apex is None:
-         print("Error: RAA apex ID is missing in generator before ring detection step.")
-         sys.exit(1)
-    print(f"Final Apex IDs for Ring Detection: LAA={generator.la_apex}, RAA={generator.ra_apex}")
-
-    print(f"Running ring detection on: {surface_mesh_path_for_rings}")
-    # Output: Creates {processed_mesh_base}_surf/ directory
-    try:
-        # Determine ring workflow based on original implicit logic:
-        # Use top_epi_endo if closed_surface was true, otherwise standard.
-        if getattr(args, 'closed_surface', False):
-            print("  Using 'top_epi_endo' ring workflow (since --closed_surface was specified).")
-            # Derive expected endo path based on the *processed_mesh_base* after separation
-            atrium_for_endo = 'LA' if 'LA' in atria_to_process else 'RA' # Pick one
-            expected_endo_path = f"{processed_mesh_base}_{atrium_for_endo}_endo.obj"
-            print(f"  Expecting endo mesh at: {expected_endo_path}")
-            if not os.path.exists(expected_endo_path):
-                 if args.atrium == 'LA_RA':
-                      atrium_for_endo = 'RA' if atrium_for_endo == 'LA' else 'LA'
-                      expected_endo_path = f"{processed_mesh_base}_{atrium_for_endo}_endo.obj"
-                      print(f"  Checking alternate endo path: {expected_endo_path}")
-                 if not os.path.exists(expected_endo_path):
-                      print(f"  Warning: Required endo mesh '{expected_endo_path}' not found for top_epi_endo workflow.")
-            generator.extract_rings_top_epi_endo(surface_mesh_path=surface_mesh_path_for_rings)
         else:
-            print("  Using 'standard' ring workflow.")
-            generator.extract_rings(surface_mesh_path=surface_mesh_path_for_rings)
+            print("Skipping resampling for non-SSM case based on args.")
 
-        print(f"Ring detection complete.")
-        expected_ring_outdir = f"{processed_mesh_base}_surf"
-        if not os.path.isdir(expected_ring_outdir):
-            print(f"Warning: Expected ring output directory not found: {expected_ring_outdir}")
 
-    except Exception as e:
-        print(f"Error during ring detection step: {e}")
-        sys.exit(1)
+        # --- Ring Detection (Replaces old label_atrial_orifices) ---
+        print(f"Running OOP Ring Detection on: {processed_mesh}")
 
-    # --- Step 4: Generate Volume Mesh (OOP) ---
-    # Generate volume if needed implicitly (e.g., for surf_ids or vol LDRBM) and not already available
-    print("\n--- Step 4: Generate Volume Mesh (Implicitly if needed) ---")
-    volume_mesh_generated = False
-    volume_mesh_base_path_for_surfids = None # Base path of volume mesh
+        # Read final apex IDs from the CSV file created earlier
+        final_apex_csv_path = f"{processed_mesh}_mesh_data.csv"
+        final_laa_id = generator.la_apex
+        final_raa_id = generator.ra_apex
 
-    # Determine if volume mesh generation is needed
-    # Needed if: Not closed surface AND (LDRBM will run on volume OR surf_ids will be generated)
-    # Simplified: Generate if we started from an open surface.
-    if volumetric_mesh_path is None and not getattr(args, 'closed_surface', False):
-        needs_volume_mesh_generation = True
+        print(f"Attempting to read apex IDs from: {final_apex_csv_path}")
 
-    if needs_volume_mesh_generation:
-        if shutil.which("meshtool") is None:
-            print("Error: Cannot generate volume mesh - 'meshtool' not found in PATH.")
-            sys.exit(1)
-        print("Workflow Action: Generating Volume Mesh (Implicit)...")
-        surface_for_volume_gen_path = surface_mesh_path_for_rings # Use the mesh that went into ring detection
-        if not surface_for_volume_gen_path.lower().endswith(".obj"):
-             obj_path_for_vol = processed_mesh_base + ".obj" # Use current base name
-             if not os.path.exists(obj_path_for_vol):
-                  print(f"  Converting {surface_for_volume_gen_path} to {obj_path_for_vol} for meshtool...")
-                  try:
-                      temp_mesh_pv = pv.read(surface_for_volume_gen_path)
-                      pv.save_meshio(obj_path_for_vol, temp_mesh_pv, "obj")
-                  except Exception as conv_err:
-                      print(f"Error converting surface to OBJ for meshtool: {conv_err}")
-                      sys.exit(1)
-             surface_for_volume_gen_path = obj_path_for_vol
-
-        if surface_for_volume_gen_path and os.path.exists(surface_for_volume_gen_path):
-            print(f"  Generating volume mesh from: {surface_for_volume_gen_path}")
+        if os.path.exists(final_apex_csv_path):
             try:
-                generator.generate_mesh(input_surface_path=surface_for_volume_gen_path)
-                volumetric_mesh_path = processed_mesh_base + "_vol.vtk" # Expected output
-                if not os.path.exists(volumetric_mesh_path):
-                     raise RuntimeError(f"Meshtool did not produce expected output: {volumetric_mesh_path}")
-                print(f"  Volume mesh generated: {volumetric_mesh_path}")
-                volume_mesh_generated = True
-            except Exception as e:
-                print(f"Error during implicit volume mesh generation: {e}")
-                sys.exit(1)
+                df_final_apex = pd.read_csv(final_apex_csv_path)
+                if args.atrium == "LA":
+                    key = f"{args.atrium}A_id"
+                    if key in df_final_apex.columns and pd.notna(df_final_apex[key][0]): final_laa_id = int(df_final_apex[key][0])
+                elif args.atrium == "RA":
+                    key = f"{args.atrium}A_id"
+                    if key in df_final_apex.columns and pd.notna(df_final_apex[key][0]): final_raa_id = int(df_final_apex[key][0])
+                elif args.atrium == "LA_RA":
+                    if "LAA_id" in df_final_apex.columns and pd.notna(df_final_apex["LAA_id"][0]):
+                        final_laa_id = int(df_final_apex["LAA_id"][0])
+
+                    if "RAA_id" in df_final_apex.columns and pd.notna(df_final_apex["RAA_id"][0]):
+                        final_raa_id = int(df_final_apex["RAA_id"][0])
+
+                print(f"Read apex IDs from CSV: LAA={final_laa_id}, RAA={final_raa_id}")
+
+            except Exception as read_err:
+                print(f"Warning: Could not read apex IDs from {final_apex_csv_path}: {read_err}")
         else:
-            print(f"Error: Could not determine or find input surface for implicit volume generation: {surface_for_volume_gen_path}")
-            sys.exit(1)
-    elif volumetric_mesh_path is not None:
-         print("Volume mesh already available, skipping generation.")
-    else:
-         print("Volume mesh generation not required for this workflow.")
+             # If CSV doesn't exist, rely on generator state
+             print(f"  Apex ID CSV not found ({final_apex_csv_path}). Using IDs from generator state: LAA={final_laa_id}, RAA={final_raa_id}")
 
-    # Set base path for volume mesh used by surf_ids
-    if volumetric_mesh_path:
-        volume_mesh_base_path_for_surfids = os.path.splitext(volumetric_mesh_path)[0]
+        # Update generator state just before calling extract_rings
+        generator.la_apex = final_laa_id
+        generator.ra_apex = final_raa_id
 
+        # Determine final surface path
+        final_surface_path = processed_mesh + ".obj"
 
-    # --- Step 5: Generate Surface IDs (OOP) ---
-    # Run unconditionally if volume mesh exists
-    print("\n--- Step 5: Generate Surface IDs ---")
-    if volumetric_mesh_path and os.path.exists(volumetric_mesh_path):
-        print("Workflow Action: Generate Surface IDs -> Calling generator.generate_surf_id...")
-        print(f"  Using Volume Mesh: {volumetric_mesh_path}")
-        # Depends on outputs from separate_epi_endo ({processed_mesh_base}_{atrium}_[epi|endo].obj)
-        # Depends on outputs from extract_rings ({processed_mesh_base}_surf/ids_*.vtx)
+        if not os.path.exists(final_surface_path):
+             # Convert VTK/PLY if OBJ not found
+             vtk_path = processed_mesh + ".vtk"
+             ply_path = processed_mesh + ".ply"
+
+             if os.path.exists(vtk_path):
+                 print(f"  Converting {vtk_path} to OBJ for ring detection...")
+                 pv.save_meshio(final_surface_path, pv.read(vtk_path), "obj")
+
+             elif os.path.exists(ply_path):
+                 # Keep PLY->VTK->OBJ conversion for robustness
+                 temp_vtk_path = processed_mesh + "_temp.vtk"
+
+                 print(f"  Converting {ply_path} to VTK ({temp_vtk_path})...")
+
+                 ply_mesh = pv.read(ply_path)
+                 ply_mesh.save(temp_vtk_path, binary=True)
+
+                 print(f"  Converting {temp_vtk_path} to OBJ ({final_surface_path})...")
+                 pv.save_meshio(final_surface_path, pv.read(temp_vtk_path), "obj")
+
+                 if os.path.exists(temp_vtk_path):
+                     os.remove(temp_vtk_path) # Clean up temp VTK
+             else:
+                 raise FileNotFoundError(f"Cannot find final surface mesh: {processed_mesh}.obj/vtk/ply")
+
         try:
-            for atrium_tag in atria_to_process:
-                print(f"  Generating surface IDs for {atrium_tag}...")
-                generator.generate_surf_id(
-                    volumetric_mesh_path=volumetric_mesh_path,
-                    atrium=atrium_tag,
-                    resampled=(getattr(args, 'resample_input', False)) # Use resample_input flag
-                )
-                print(f"  {atrium_tag} surface ID generation complete.")
-            print("Surface ID generation finished.")
-            # Output dir: {volume_mesh_base}_vol_surf/
+            if getattr(args, 'closed_surface', False) and args.atrium == "RA":
+                 print("Using 'top_epi_endo' ring workflow (Closed Surface RA, Non-SSM path)...")
 
+                 expected_endo_path = f"{meshname_old}_RA_endo.obj" # Specific to RA
+                 print(f"Expecting endo mesh at: {expected_endo_path}")
+
+                 if not os.path.exists(expected_endo_path):
+                      print(f"  Warning: Required endo mesh '{expected_endo_path}' not found.")
+
+                 generator.extract_rings_top_epi_endo(surface_mesh_path=final_surface_path)
+            else:
+                # Standard case for open surfaces OR LA closed surface
+                generator.extract_rings(surface_mesh_path = final_surface_path)
+
+            print(f"  OOP Ring detection complete for non-SSM mesh.")
         except Exception as e:
-            print(f"Error during surface ID generation: {e}")
+            print(f"ERROR during OOP ring detection for non-SSM mesh: {e}")
             sys.exit(1)
-    else:
-        print("Skipped Surface ID Generation (No volume mesh available).")
 
-    # --- Step 6: Run LDRBM Fiber Generation ---
-    # Run unconditionally if module available
-    print("\n--- Step 6: Run LDRBM Fiber Generation ---")
-    if not LDRBM_AVAILABLE:
-         print("Skipped LDRBM Fiber Generation (Modules not available).")
     else:
-        print("Workflow Action: LDRBM Fiber Generation -> Calling la_main/ra_main...")
-        # Determine final mesh path BASE and TYPE for LDRBM
-        mesh_for_ldrbm_base = None
-        mesh_type_for_ldrbm = "surf"
-        final_mesh_path_used_by_ldrbm = None
+        mesh_type_for_ldrbm = "surf" # Default
+        mesh_for_ldrbm_base = processed_mesh # Use the base name determined by previous steps
 
-        if volumetric_mesh_path is not None:
-            mesh_for_ldrbm_base = os.path.splitext(volumetric_mesh_path)[0]
+        # Handle the closed_surface case where volume mesh is generated and used
+        if getattr(args, 'closed_surface', False):
             mesh_type_for_ldrbm = "vol"
-            final_mesh_path_used_by_ldrbm = volumetric_mesh_path
-        elif surface_mesh_path_for_rings is not None:
-            mesh_for_ldrbm_base = processed_mesh_base
-            mesh_type_for_ldrbm = "surf"
-            final_mesh_path_used_by_ldrbm = surface_mesh_path_for_rings
-        else:
-            print("Error: Could not determine final mesh path for LDRBM.")
-            sys.exit(1)
+            print(f"  LDRBM on Volume Mesh (Closed Surface Workflow)...")
+            # --- Generate Volume Mesh (OOP Replacement) ---
+            print(f"    Generating volume mesh for {args.atrium}...")
+            # Input surface is the separated epi mesh base name from earlier
+            # Original logic used meshname_old + f'_{args.atrium}' as base for generate_mesh
+            input_surf_base_for_vol = meshname_old + f'_{args.atrium}'
+            input_surf_path_for_vol = input_surf_base_for_vol + ".obj" # Assume obj needed
 
+            # CHANGE 6: Guard conversion with existence check
+            if not os.path.exists(input_surf_path_for_vol):
+                 input_surf_path_vtk = input_surf_base_for_vol + "_epi.vtk" # Epi surface vtk
+                 if not os.path.exists(input_surf_path_vtk):
+                     raise FileNotFoundError(f"Cannot find separated epi surface {input_surf_base_for_vol}_epi.obj/vtk for volume generation.")
+                 print(f"      Converting {input_surf_path_vtk} to {input_surf_path_for_vol}...")
+                 meshin = pv.read(input_surf_path_vtk)
+                 pv.save_meshio(input_surf_path_for_vol, meshin, "obj")
+
+
+            generator.generate_mesh(input_surface_path=input_surf_path_for_vol)
+
+            volumetric_mesh_path = input_surf_base_for_vol + "_vol.vtk"
+            if not os.path.exists(volumetric_mesh_path):
+                 raise RuntimeError(f"Volume mesh generation failed: {volumetric_mesh_path} not found.")
+            print(f"    Volume mesh generated: {volumetric_mesh_path}")
+
+            # --- Generate Surface IDs (OOP Replacement) ---
+            print(f"    Generating surface IDs for {args.atrium}...")
+            # REPLACEMENT for old generate_surf_id(meshname_old, args.atrium, ...)
+            # Original passed meshname_old as the base name argument
+            generator.generate_surf_id(
+                volumetric_mesh_path=volumetric_mesh_path, # Path to the volume mesh just created
+                atrium=args.atrium,
+                # CHANGE 2-3: Pass resample flag. Internal logic of generate_surf_id needs to handle old_folder construction.
+                resampled=getattr(args, 'resample_input', False)
+            )
+            print(f"    Surface ID generation complete.")
+
+            # Update base name for LDRBM call to the volume mesh base (as per original)
+            mesh_for_ldrbm_base = meshname_old + f"_{args.atrium}_vol"
+
+
+            if args.atrium == "LA":
+                 print(f"    Mapping IDs from surface to volume...")
+                 resampled_suffix = "_res" if getattr(args, 'resample_input', False) else ""
+                 # CHANGE 2-3: old_folder construction matches original logic's use of 'meshname' variable state
+                 old_folder = meshname + resampled_suffix + "_surf" # meshname is meshname_old + '_LA_epi' here
+                 new_folder = mesh_for_ldrbm_base + "_surf"
+                 origin_mesh_path = meshname + ".vtk" # Path to *_epi.vtk
+                 volumetric_mesh_read_path = os.path.join(new_folder, f"{args.atrium}.vtk")
+
+                 if os.path.exists(old_folder) and os.path.exists(origin_mesh_path) and os.path.exists(volumetric_mesh_read_path):
+                     try:
+                         origin_mesh_vtk = smart_reader(origin_mesh_path)
+                         volumetric_mesh_vtk = smart_reader(volumetric_mesh_read_path)
+                         mapp_ids_for_folder(old_folder, new_folder, origin_mesh_vtk, volumetric_mesh_vtk)
+                         print(f"    ID Mapping complete.")
+                     except Exception as map_err:
+                         print(f"    Warning: Failed to map IDs: {map_err}")
+                 else:
+                     print(f"    Warning: Skipping ID mapping due to missing files/folders.")
+                     print(f"      Need: {old_folder}, {origin_mesh_path}, {volumetric_mesh_read_path}")
+
+        # --- LDRBM Call Setup (Common) ---
         print(f"  Input mesh base for LDRBM: {mesh_for_ldrbm_base}")
         print(f"  Mesh type for LDRBM: {mesh_type_for_ldrbm}")
-        print(f"  Actual LDRBM input file path: {final_mesh_path_used_by_ldrbm}")
 
-        # Auto-detect normals if needed
-        current_normals_outside = getattr(args, 'normals_outside', -1)
-        if current_normals_outside == -1:
-             print(f"  Auto-detecting normals on: {final_mesh_path_used_by_ldrbm}")
-             if not os.path.exists(final_mesh_path_used_by_ldrbm):
-                  print(f"Error: Mesh file for normal detection not found: {final_mesh_path_used_by_ldrbm}")
-                  sys.exit(1)
-             try:
-                 current_normals_outside = int(are_normals_outside(smart_reader(final_mesh_path_used_by_ldrbm)))
-                 print(f"  Auto-detected normals_outside: {current_normals_outside}")
-             except Exception as e:
-                 print(f"  Warning: Failed to auto-detect normals ({e}). Defaulting to 0.")
-                 current_normals_outside = 0
+        # Auto-detect normals (using appropriate mesh path)
+        ldrbm_input_path = f"{mesh_for_ldrbm_base}.vtk" # Assume VTK is primary format
+        if not os.path.exists(ldrbm_input_path): ldrbm_input_path = f"{mesh_for_ldrbm_base}.vtu"
+        if not os.path.exists(ldrbm_input_path): ldrbm_input_path = f"{mesh_for_ldrbm_base}.obj"
+        if not os.path.exists(ldrbm_input_path): ldrbm_input_path = f"{mesh_for_ldrbm_base}.ply"
+
+        current_normals_outside = getattr(args, 'normals_outside', -1) # Use value potentially set earlier
+        if current_normals_outside == -1: # Only detect if not already set
+             print(f"  Auto-detecting normals on: {ldrbm_input_path}")
+             if not os.path.exists(ldrbm_input_path):
+                  print(f"Warning: Mesh file for normal detection not found: {ldrbm_input_path}. Defaulting normals_outside=0.")
+                  current_normals_outside = 0
+             else:
+                 try:
+                     current_normals_outside = int(are_normals_outside(smart_reader(ldrbm_input_path)))
+                     print(f"  Auto-detected normals_outside: {current_normals_outside}")
+                 except Exception as e:
+                     print(f"  Warning: Failed to auto-detect normals ({e}). Defaulting to 0.")
+                     current_normals_outside = 0
 
         # Construct LDRBM arguments
         ldrbm_common_args = ["--mesh", mesh_for_ldrbm_base,
@@ -718,32 +763,110 @@ def AugmentA(args):
         if mesh_type_for_ldrbm == "vol":
             ldrbm_common_args.extend(["--mesh_type", "vol"])
 
+        # --- Execute LDRBM ---
         try:
-            if 'LA' in atria_to_process:
+            original_atrium_arg = args.atrium # Store original arg for LA_RA case
+            if args.atrium == 'LA_RA':
+                # LA First
+                print("  Running LA LDRBM (LA_RA case)...")
+                args.atrium = "LA" # LDRBM scripts might use this
+                if la_main: la_main.run(ldrbm_common_args[:])
+                else: print("   Error: la_main not imported.")
+                print("  LA LDRBM finished.")
+                # Then RA
+                print("  Running RA LDRBM (LA_RA case)...")
+                args.atrium = "RA"
+                if ra_main: ra_main.run(ldrbm_common_args[:])
+                else: print("   Error: ra_main not imported.")
+                print("  RA LDRBM finished.")
+                args.atrium = original_atrium_arg # Restore
+
+                # Meshtool conversions (kept identical to original)
+                print("  Running meshtool conversions for LA_RA case...")
+                scale_val = 1000 * getattr(args, 'scale', 1.0)
+                ra_fiber_base = f'{mesh_for_ldrbm_base}_fibers/result_RA/RA_bilayer_with_fiber'
+                ra_um_base = f'{ra_fiber_base}_um'
+                input_fiber_file = f"{ra_fiber_base}.carp_txt"
+                if os.path.exists(input_fiber_file):
+                     cmd1 = f"meshtool convert -imsh={ra_fiber_base} -ifmt=carp_txt -omsh={ra_um_base} -ofmt=carp_txt -scale={scale_val}"
+                     cmd2 = f"meshtool convert -imsh={ra_um_base} -ifmt=carp_txt -omsh={ra_um_base} -ofmt=vtk"
+                     print(f"    Executing: {cmd1}"); os.system(cmd1)
+                     print(f"    Executing: {cmd2}"); os.system(cmd2)
+                else: print(f"    Warning: Input for RA meshtool conversion not found: {input_fiber_file}")
+
+            elif args.atrium == "LA":
                 print("  Running LA LDRBM...")
                 if la_main: la_main.run(ldrbm_common_args[:])
                 else: print("   Error: la_main not imported.")
                 print("  LA LDRBM finished.")
-            if 'RA' in atria_to_process:
+                # Meshtool conversions for LA surface case (kept identical)
+                if mesh_type_for_ldrbm != "vol":
+                     print("  Running meshtool conversions for LA surface case...")
+                     scale_val = 1000 * getattr(args, 'scale', 1.0)
+                     la_fiber_base = f'{mesh_for_ldrbm_base}_fibers/result_LA/LA_bilayer_with_fiber'
+                     la_um_base = f'{la_fiber_base}_um'
+                     input_fiber_file = f"{la_fiber_base}.carp_txt"
+                     if os.path.exists(input_fiber_file):
+                         cmd1 = f"meshtool convert -imsh={la_fiber_base} -ifmt=carp_txt -omsh={la_um_base} -ofmt=carp_txt -scale={scale_val}"
+                         cmd2 = f"meshtool convert -imsh={la_um_base} -ifmt=carp_txt -omsh={la_um_base} -ofmt=vtk"
+                         print(f"    Executing: {cmd1}"); os.system(cmd1)
+                         print(f"    Executing: {cmd2}"); os.system(cmd2)
+                     else: print(f"    Warning: Input for LA meshtool conversion not found: {input_fiber_file}")
+
+            elif args.atrium == "RA":
                 print("  Running RA LDRBM...")
                 if ra_main: ra_main.run(ldrbm_common_args[:])
                 else: print("   Error: ra_main not imported.")
                 print("  RA LDRBM finished.")
-
-            # Optional conversion calls from original script
-            # Add back if needed, ensuring paths match LDRBM output structure
-            # Example for LA_RA case:
-            # if args.atrium == 'LA_RA':
-            #     print("  Running meshtool conversions for LA_RA case...")
-            #     # ... os.system("meshtool convert ... ") calls ...
-
+                # No specific RA conversions in original non-closed surface case
 
         except Exception as e:
             print(f"Error during LDRBM execution: {e}")
             sys.exit(1)
 
 
+    # --- Final Debug Plotting (Identical to Original) ---
+    if getattr(args, 'debug', 0):
+        print("\n--- Generating Debug Plot ---")
+        try:
+            final_mesh_for_plot = None
+            # CHANGE 6: Use corrected plot_base logic
+            if getattr(args, "closed_surface", False):
+                plot_base = mesh_for_ldrbm_base  # This is the *_vol base name
+            else:
+                plot_base = processed_mesh # This is the final surface base name
+
+            # Construct path based on plot_base and original logic
+            if getattr(args, 'closed_surface', False):
+                 plot_path = f'{plot_base}_fibers/result_{args.atrium}/{args.atrium}_vol_with_fiber.{args.ofmt}'
+            else: # Open surface
+                plot_atrium = 'RA' if args.atrium == 'LA_RA' else args.atrium
+                plot_path = f'{plot_base}_fibers/result_{plot_atrium}/{plot_atrium}_bilayer_with_fiber.{args.ofmt}'
+
+            if os.path.exists(plot_path):
+                final_mesh_for_plot = plot_path
+                print(f"  Reading final mesh for plotting: {final_mesh_for_plot}")
+                bil = pv.read(final_mesh_for_plot)
+                geom = pv.Line()
+                # Tag manipulation (identical to original)
+                mask = bil['elemTag'] > 99; bil['elemTag'][mask] = 0
+                mask = bil['elemTag'] > 80; bil['elemTag'][mask] = 20
+                mask = bil['elemTag'] > 10; bil['elemTag'][mask] = bil['elemTag'][mask] - 10
+                mask = bil['elemTag'] > 50; bil['elemTag'][mask] = bil['elemTag'][mask] - 50
+
+                p = pv.Plotter(notebook=False)
+                if not getattr(args, 'closed_surface', False):
+                    # Add fibers glyph only for surface meshes
+                    fibers = bil.glyph(orient="fiber", factor=0.5, geom=geom, scale="elemTag")
+                    p.add_mesh(fibers, show_scalar_bar=False, cmap='tab20', line_width=10, render_lines_as_tubes=True)
+                p.add_mesh(bil, scalars="elemTag", show_scalar_bar=False, cmap='tab20')
+                print("  Displaying plot window...")
+                p.show()
+                p.close()
+            else:
+                print(f"  Warning: Could not find final LDRBM output mesh for debug plotting: {plot_path}")
+        except Exception as plot_err:
+            print(f"  Warning: Failed to generate debug plot: {plot_err}")
+
+
     print("\n--- AugmentA Pipeline Finished ---")
-
-# Debug plotting section omitted.
-
