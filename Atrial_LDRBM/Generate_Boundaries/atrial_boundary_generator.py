@@ -25,7 +25,7 @@ from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivi
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids, apply_vtk_geom_filter
-
+# from top_epi_endo import label_atrial_orifices_TOP_epi_endo
 
 class AtrialBoundaryGenerator:
     """
@@ -189,9 +189,6 @@ class AtrialBoundaryGenerator:
         la_ap_point_coord = None
 
         if is_biatrial:
-            if self.debug:
-                print("Extracting LA region...")
-
             try:
                 # Get initial apex coordinate from the input mesh
                 la_ap_point_coord = input_mesh_polydata.GetPoint(self.la_apex)
@@ -247,7 +244,7 @@ class AtrialBoundaryGenerator:
                 adjusted_LAA = self.la_apex  # Use original as fallback
 
             try:
-                b_tag_la = np.zeros((la_region_polydata.GetNumberOfPoints(),))
+                b_tag_la = np.zeros((la_region_polydata.GetNumberOfPoints()))
                 detector_LA = RingDetector(la_region_polydata, la_ap_point_coord, outdir)
 
                 rings_la = detector_LA.detect_rings(debug=self.debug)
@@ -280,13 +277,7 @@ class AtrialBoundaryGenerator:
         if self.ra_apex is None:
             return {}
 
-        ra_region_polydata = None
-        ra_ap_point_coord = None
-
         if is_biatrial:
-            if self.debug:
-                print("Extracting RA region...")
-
             try:
                 ra_ap_point_coord = input_mesh_polydata.GetPoint(self.ra_apex)
 
@@ -477,13 +468,7 @@ class AtrialBoundaryGenerator:
             print(f"ERROR during surface ID generation for {atrium}: {e}")
 
     def load_element_tags(self, csv_filepath: str) -> None:
-        """
-        Loads element tags using tag_loader.
-        """
         self.element_tags = load_element_tags(csv_filepath)
-
-        if self.debug:
-            print("Element tags loaded.")
 
     def extract_rings_top_epi_endo(self, surface_mesh_path: str) -> None:
         """
@@ -494,38 +479,21 @@ class AtrialBoundaryGenerator:
         Args:
             surface_mesh_path (str): Path to the input surface mesh (e.g., epi).
         """
-        # Import the function responsible for the specialized workflow
-        from top_epi_endo import label_atrial_orifices_TOP_epi_endo
-        # Import pandas for loading centroids
-        import pandas as pd
-        import os
 
         if self.debug:
             print(f"Initiating TOP_EPI/ENDO ring extraction on: {surface_mesh_path}")
 
-        # Format apex/base IDs stored in self
         LAA_id_str = self._format_id(self.la_apex)
         RAA_id_str = self._format_id(self.ra_apex)
         LAA_base_id_str = self._format_id(self.la_base)
         RAA_base_id_str = self._format_id(self.ra_base)
 
         try:
-            # Call the specialized function, passing the explicit surface_mesh_path
-            label_atrial_orifices_TOP_epi_endo(
-                mesh=surface_mesh_path,  # Use the passed argument path
-                LAA_id=LAA_id_str,
-                RAA_id=RAA_id_str,
-                LAA_base_id=LAA_base_id_str,
-                RAA_base_id=RAA_base_id_str
-            )
-            if self.debug:
-                print("TOP_EPI/ENDO ring extraction call completed.")
+            label_atrial_orifices_TOP_epi_endo(mesh=surface_mesh_path,LAA_id=LAA_id_str,RAA_id=RAA_id_str,LAA_base_id=LAA_base_id_str,RAA_base_id=RAA_base_id_str)
 
-            # --- Load Centroids ---
             # Determine output directory based on the exact convention used in top_epi_endo.py
             mesh_root, _ = os.path.splitext(surface_mesh_path)  # Gets path without extension
 
-            # Replicate top_epi_endo.py logic to find the base name
             base_name_parts = mesh_root.split('_')
             # Check if last part indicates atrium or surface type
             if len(base_name_parts) > 1 and base_name_parts[-1] in ['RA', 'LA', 'epi', 'endo']:
@@ -533,15 +501,11 @@ class AtrialBoundaryGenerator:
             else:
                 mesh_base = mesh_root
 
-            # Construct the output directory path
             outdir = f"{mesh_base}_surf"
             csv_path = os.path.join(outdir, "rings_centroids.csv")
 
-            # Load the CSV if it exists
             if os.path.exists(csv_path):
                 df_centroids = pd.read_csv(csv_path)
-                # Store centroids - adjust format conversion as needed
-                # Assuming columns 'RingName', 'X', 'Y', 'Z' based on top_epi_endo write
                 if 'RingName' in df_centroids.columns and all(c in df_centroids.columns for c in ['X', 'Y', 'Z']):
                     self.ring_info = df_centroids.set_index('RingName')[['X', 'Y', 'Z']].T.to_dict('list')
                 else:
