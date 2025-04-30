@@ -14,22 +14,15 @@ import pyvista as pv
 import vtk
 import sys
 
-# Assuming these helpers are available in the environment
-try:
-    from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
-    from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-    from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-    from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
-    from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
-    from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-    from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region
-except ImportError as e:
-    print(f"Error importing helper methods in open_orifices_manually: {e}")
-    # Define dummy functions or raise error if essential
-    raise
+from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
+from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
+from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
+from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
+from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region
 
-# Removed import of old extract_rings
-# from Atrial_LDRBM.Generate_Boundaries import extract_rings
+
 
 pv.set_plot_theme('dark')
 
@@ -139,8 +132,6 @@ def open_orifices_manually(meshpath: str,
     print("Processing orifices...")
     for r_idx, r_name in enumerate(orifices):
         print(f"  Processing orifice {r_idx + 1}/{len(orifices)}: {r_name}")
-        # Read the *current* state of the mesh for picking
-        # Need to use PyVista PolyData for picking
         try:
             mesh_pv_for_picking = pv.PolyData(current_mesh_vtk)
             if mesh_pv_for_picking.n_points == 0:
@@ -194,19 +185,11 @@ def open_orifices_manually(meshpath: str,
         raise RuntimeError("Could not find closest point for selected apex.")
     print(f"Apex ID determined: {apex_id}")
 
-    # --- REMOVED CALL TO OLD extract_rings ---
-    # command = ["--mesh", cutted_path, "--LAA", str(LAA), "--RAA", str(RAA)]
-    # print(f"extract rings with: {command}")
-    # extract_rings.run(command)
-    # --- END REMOVAL ---
 
     print(f"--- Manual Orifice Opening Finished ---")
-    # MODIFIED: Return the path and the apex ID
     return cutted_path, apex_id
 
 
-# Keep the run() function for potential standalone execution if needed
-# but it won't be called by the main pipeline anymore.
 def run_standalone():
     args = parser().parse_args()
     try:
@@ -215,10 +198,10 @@ def run_standalone():
             args.atrium,
             args.MRI,
             args.scale,
-            30,  # size is not used in manual, pass default
+            30,
             args.min_cutting_radius,
             args.max_cutting_radius,
-            "",  # LAA/RAA are determined here, not needed as input
+            "",
             "",
             args.debug
         )
