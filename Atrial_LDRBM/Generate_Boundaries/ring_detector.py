@@ -3,7 +3,7 @@ import numpy as np
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, DBSCAN
 
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
@@ -52,7 +52,7 @@ class RingDetector:
     """
 
     def __init__(self, surface: vtk.vtkPolyData, apex: tuple, outdir: str):
-        # Validate the input surface; if it lacks the required 'Ids' array, try to generate it.
+        # Validate the input surface. If it lacks the required 'Ids' array, try to generate it.
         if not self._validate_vtk_data(surface, check_ids=True):
             print("Warning: Input surface missing 'Ids'. Generating IDs...")
             surface = generate_ids(surface, "Ids", "CellIds")
@@ -81,25 +81,26 @@ class RingDetector:
         """
         if not vtk_object:
             return False
+
         if check_points and vtk_object.GetNumberOfPoints() == 0:
             return False
+
         if check_cells:
             if hasattr(vtk_object, 'GetNumberOfPolys') and vtk_object.GetNumberOfPolys() == 0:
                 return False
+
             if hasattr(vtk_object, 'GetNumberOfCells') and vtk_object.GetNumberOfCells() == 0:
                 return False
+
         if check_ids and (not vtk_object.GetPointData() or not vtk_object.GetPointData().GetArray("Ids")):
             return False
+
         return True
 
     # Ring Detection Workflow
     def detect_rings(self, debug: bool = False) -> list[Ring]:
         """
-        Detects rings from the input surface by extracting the boundary edges and
-        then finding connected components.
-
-        Returns:
-            A list of Ring objects representing the detected rings.
+        Detects rings from the input surface by extracting the boundary edges andthen finding connected components.
         """
         # Extract the boundary edges of the surface
         boundary_edges = get_feature_edges(self.surface,
@@ -111,7 +112,7 @@ class RingDetector:
         # Validate the boundary edges output to ensure there are lines/cells.
         if not self._validate_vtk_data(boundary_edges, check_cells=True):
             if debug:
-                print("  Warning: No boundary edge segments found on the surface.")
+                print("Warning: No boundary edge segments found on the surface.")
             return []
 
         # Ensure that the boundary edges have the original point IDs
@@ -143,22 +144,18 @@ class RingDetector:
                 detected_rings.append(ring_obj)
 
         if debug:
-            print(f"  Detected {len(detected_rings)} rings.")
+            print(f"Detected {len(detected_rings)} rings.")
         return detected_rings
 
     def _process_detected_ring_region(self, connect_filter, region_index, debug=False) -> Ring | None:
         """
-        Processes a single connected component from the connectivity filter,
-        cleaning and converting it to a Ring object.
-
-        Returns:
-            A Ring object if valid, otherwise None.
+        Processes a single connected component from the connectivity filter, cleaning and converting it to a Ring object.
         """
         connect_filter.AddSpecifiedRegion(region_index)
         connect_filter.Update()
-        region_ug = connect_filter.GetOutput()  # The output is an UnstructuredGrid
+        region_ug = connect_filter.GetOutput()
 
-        # Important: Convert the unstructured grid to PolyData and clean it.
+        # Clean unused points
         region_pd = apply_vtk_geom_filter(region_ug)
         region_pd = clean_polydata(region_pd)
 
@@ -175,7 +172,6 @@ class RingDetector:
             debug_path = os.path.join(self.outdir, f'debug_ring_{region_index}.vtk')
             write_vtk(debug_path, region_pd)
 
-        # Create a deep copy so that modifications don't affect the original data
         ring_poly_copy = vtk.vtkPolyData()
         ring_poly_copy.DeepCopy(region_pd)
 
@@ -188,24 +184,20 @@ class RingDetector:
         ring_obj = Ring(region_index, "", num_pts, center, distance, ring_poly_copy)
 
         connect_filter.DeleteSpecifiedRegion(region_index)
+        connect_filter.Update()
         return ring_obj
 
     # -------------------- Ring Classification and Marking --------------------
     def _cluster_rings(self, rings: list[Ring], n_clusters: int = 2, debug: bool = False) -> tuple[list, list, np.ndarray | None]:
         """
         Clusters non-MV rings using KMeans to separate anatomical groups.
-
-        Returns a tuple of:
-            - Group 1 indices (e.g., LPV)
-            - Group 2 indices (e.g., RPV)
-            - The predicted labels array from KMeans.
         """
+        # Calculating pv indices
         non_mv_indices = [idx for idx, r in enumerate(rings) if r.name != "MV"]
 
         if not non_mv_indices:
             if debug:
                 print("_cluster_rings: No rings available for clustering (all may be MV).")
-
             return [], [], None
 
         non_mv_centers = [rings[idx].center for idx in non_mv_indices]
@@ -299,7 +291,7 @@ class RingDetector:
         if not rings:
             return b_tag, centroids
 
-        # Identify the MV ring by choosing the ring with the most points.
+        # Identify the MV ring by choosing the ring with the most points
         mv_ring_index = np.argmax([r.np for r in rings])
         rings[mv_ring_index].name = "MV"
         if debug:
@@ -307,12 +299,11 @@ class RingDetector:
 
         # Cluster non-MV rings into left and right groups.
         LPV_indices, RPV_indices, _ = self._cluster_rings(rings, n_clusters=2, debug=debug)
+
         RSPV_idx = None
         if LPV_indices and RPV_indices:
             RSPV_idx = self._cutting_plane_to_identify_RSPV(LPV_indices, RPV_indices, rings, debug=debug)
 
-        if debug:
-            print("  Naming left PV subgroups...")
         self._name_pv_subgroup(LPV_indices, "L", rings, apex_dist_is_superior=True, debug=debug)
         self._name_pv_subgroup(RPV_indices, "R", rings, apex_dist_is_superior=False, ref_superior_idx=RSPV_idx, debug=debug)
 
@@ -374,11 +365,18 @@ class RingDetector:
         tv_ring = None
         if len(rings) >= 2:
             largest_two = sorted(rings, key=lambda r: r.np, reverse=True)[:2]
-            tv_ring = largest_two[0] if largest_two[0].ap_dist < largest_two[1].ap_dist else largest_two[1]
+
+            if largest_two[0].ap_dist < largest_two[1].ap_dist:
+                tv_ring = largest_two[0]
+            else:
+                tv_ring =largest_two[1]
+
         elif len(rings) == 1:
             tv_ring = rings[0]
+
         if not tv_ring:
             return b_tag, centroids, rings
+
         tv_ring.name = "TV"
         if debug:
             print(f"  Identified TV: Ring {tv_ring.id} (Size: {tv_ring.np}, Dist: {tv_ring.ap_dist:.2f})")
@@ -392,16 +390,21 @@ class RingDetector:
                 rings[svc_idx].name = "SVC"
                 if debug:
                     print(f"  Identified SVC: Ring {svc_idx} (Size: {rings[svc_idx].np})")
+
             if IVC_CS_indices:
                 ivc_idx = max({idx: rings[idx].np for idx in IVC_CS_indices}, key=lambda k: rings[k].np)
                 rings[ivc_idx].name = "IVC"
+
                 if debug:
                     print(f"  Identified IVC: Ring {ivc_idx} (Size: {rings[ivc_idx].np})")
                 cs_indices = [idx for idx in IVC_CS_indices if idx != ivc_idx]
+
                 if cs_indices:
                     rings[cs_indices[0]].name = "CS"
+
                     if debug:
                         print(f"  Identified CS: Ring {cs_indices[0]} (Size: {rings[cs_indices[0]].np})")
+
                         if len(cs_indices) > 1:
                             print(f"    Warning: Multiple CS candidates {cs_indices}, assigned first.")
 
@@ -410,19 +413,23 @@ class RingDetector:
         for ring_obj in rings:
             if not ring_obj.name or ring_obj.name not in tag_map:
                 continue
+
             if not self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True, check_ids=True):
                 if debug:
                     print(f"  Skipping RA ring {ring_obj.id} ('{ring_obj.name}') due to invalid data.")
                 continue
 
             point_ids = vtk_to_numpy(ring_obj.vtk_polydata.GetPointData().GetArray("Ids"))
+
             if point_ids.size == 0:
                 continue
+
             try:
                 b_tag[point_ids] = tag_map[ring_obj.name]
             except IndexError:
                 print(f"  Error: Point IDs for ring {ring_obj.name} out of bounds. Skipping tagging.")
                 continue
+
             write_vtx_file(os.path.join(self.outdir, f'ids_{ring_obj.name}.vtx'), point_ids)
             final_centroids[ring_obj.name] = ring_obj.center
 
@@ -534,6 +541,7 @@ class RingDetector:
             path_poly = dijkstra.GetOutput()
             if self._validate_vtk_data(path_poly, check_points=True):
                 path_coords = vtk_to_numpy(path_poly.GetPoints().GetData())
+
                 try:
                     _, path_indices = tree.query(path_coords)
                     path_ids_raw = set(ids_on_boundary[path_indices])
@@ -541,21 +549,23 @@ class RingDetector:
                     if path_ids_filtered:
                         write_vtx_file(os.path.join(self.outdir, out_name), path_ids_filtered)
                         if debug:
-                            print(f"    Wrote {out_name} with {len(path_ids_filtered)} points.")
+                            print(f"Wrote {out_name} with {len(path_ids_filtered)} points.")
                     else:
                         if debug:
-                            print(f"    Warning: {out_name} path resulted in zero points after filtering.")
+                            print(f"Warning: {out_name} path resulted in zero points after filtering.")
+
                 except Exception as e:
                     if debug:
-                        print(f"    Error during KDTree query for {out_name}: {e}")
+                        print(f"Error during KDTree query for {out_name}: {e}")
             else:
                 if debug:
-                    print(f"    Warning: Failed to compute {out_name} path or path is empty.")
+                    print(f"Warning: Failed to compute {out_name} path or path is empty.")
 
         # Calculate and write three UAC geodesic paths.
         _compute_and_write_geodesic_path(lpv_bb_idx, lpv_mv_idx, 'ids_MV_LPV.vtx')
         _compute_and_write_geodesic_path(rpv_bb_idx, rpv_mv_idx, 'ids_MV_RPV.vtx')
         _compute_and_write_geodesic_path(lpv_bb_idx, rpv_bb_idx, 'ids_RPV_LPV.vtx')
+
         if debug:
             print("  UAC path calculation finished.")
 
@@ -588,11 +598,11 @@ class RingDetector:
         original_ids = set()
         for i in RPVs_indices:
             ring_obj = rings[i]
+
             if self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True):
                 temp_poly = vtk.vtkPolyData()
                 temp_poly.DeepCopy(ring_obj.vtk_polydata)
-                tag_data = numpy_to_vtk(np.full((ring_obj.np,), ring_obj.id, dtype=int), deep=True,
-                                        array_type=vtk.VTK_INT)
+                tag_data = numpy_to_vtk(np.full((ring_obj.np,), ring_obj.id, dtype=int), deep=True, array_type=vtk.VTK_INT)
                 tag_data.SetName("temp_ring_id")
                 temp_poly.GetPointData().AddArray(tag_data)
                 append_filter.AddInputData(temp_poly)
@@ -601,18 +611,20 @@ class RingDetector:
             else:
                 if debug:
                     print(f"Warning: Skipping RPV ring {ring_obj.id} due to invalid data.")
+
         if not valid_rpvs_appended:
             return None
+
         append_filter.Update()
+
         extracted_mesh = get_elements_above_plane(append_filter.GetOutput(), plane)
-        if self._validate_vtk_data(extracted_mesh, check_points=True) and extracted_mesh.GetPointData().GetArray(
-                "temp_ring_id"):
+        if self._validate_vtk_data(extracted_mesh, check_points=True) and extracted_mesh.GetPointData().GetArray("temp_ring_id"):
             extracted_ids = vtk_to_numpy(extracted_mesh.GetPointData().GetArray("temp_ring_id"))
             if extracted_ids.size > 0:
                 potential_rspv = int(extracted_ids[0])
                 if potential_rspv in original_ids:
                     if debug:
-                        print(f"  RSPV identified: Ring {potential_rspv}")
+                        print(f"RSPV identified: Ring {potential_rspv}")
                     return potential_rspv
                 else:
                     if debug:
@@ -660,7 +672,7 @@ class RingDetector:
             if tv_f_ids.size > 0:
                 write_vtx_file(os.path.join(self.outdir, 'ids_TV_F.vtx'), tv_f_ids)
                 if debug:
-                    print(f"  Wrote ids_TV_F.vtx ({len(tv_f_ids)} points)")
+                    print(f"Wrote ids_TV_F.vtx ({len(tv_f_ids)} points)")
         else:
             if debug:
                 print("Warning: TV_F splitting failed or produced empty results.")
@@ -675,7 +687,7 @@ class RingDetector:
             if tv_s_ids.size > 0:
                 write_vtx_file(os.path.join(self.outdir, 'ids_TV_S.vtx'), tv_s_ids)
                 if debug:
-                    print(f"  Wrote ids_TV_S.vtx ({len(tv_s_ids)} points)")
+                    print(f"Wrote ids_TV_S.vtx ({len(tv_s_ids)} points)")
         else:
             if debug:
                 print("Warning: TV_S splitting failed or produced empty results.")
@@ -690,20 +702,22 @@ class RingDetector:
         """
         if not self._validate_vtk_data(boundary_edges_polydata, check_points=True, check_ids=True):
             if debug:
-                print("  _find_top_boundary_loop: Invalid input data.")
+                print("_find_top_boundary_loop: Invalid input data.")
             return None
+
         if ivc_ring_ids.size == 0 or svc_ring_ids.size == 0:
             if debug:
-                print("  _find_top_boundary_loop: Empty IVC or SVC IDs provided.")
+                print("_find_top_boundary_loop: Empty IVC or SVC IDs provided.")
             return None
 
         connect_filter = init_connectivity_filter(boundary_edges_polydata, ExtractionModes.SPECIFIED_REGIONS)
         num_regions = connect_filter.GetNumberOfExtractedRegions()
+
         top_cut_loop = None
         ivc_ids_set = set(ivc_ring_ids)
         svc_ids_set = set(svc_ring_ids)
         if debug:
-            print(f"  _find_top_boundary_loop: Evaluating {num_regions} regions.")
+            print(f"_find_top_boundary_loop: Evaluating {num_regions} regions.")
 
         # Iterate through each connected region to find one that contains points from both rings.
         for region_index in range(num_regions):
@@ -716,14 +730,14 @@ class RingDetector:
                 loop_ids = set(vtk_to_numpy(loop_pd.GetPointData().GetArray("Ids")))
                 if loop_ids.intersection(ivc_ids_set) and loop_ids.intersection(svc_ids_set):
                     if debug:
-                        print(f"    Found connecting loop in region {region_index}.")
+                        print(f"Found connecting loop in region {region_index}.")
                     top_cut_loop = vtk.vtkPolyData()
                     top_cut_loop.DeepCopy(loop_pd)
                     connect_filter.DeleteSpecifiedRegion(region_index)
                     break
             connect_filter.DeleteSpecifiedRegion(region_index)
         if top_cut_loop is None and debug:
-            print("  Warning: No connecting boundary loop found.")
+            print("Warning: No connecting boundary loop found.")
         return top_cut_loop
 
     def _get_region_excluding_ids(self, mesh: vtk.vtkPolyData, ids_to_exclude: list[int],
@@ -742,7 +756,7 @@ class RingDetector:
         exclude_region_id = -1
         ids_to_exclude_set = set(ids_to_exclude)
         if debug:
-            print(f"  _get_region_excluding_ids: Evaluating {num_regions} regions for exclusion.")
+            print(f"_get_region_excluding_ids: Evaluating {num_regions} regions for exclusion.")
 
         # Find which region contains any of the IDs to be excluded.
         for region_index in range(num_regions):
@@ -756,7 +770,7 @@ class RingDetector:
                 if not region_ids.isdisjoint(ids_to_exclude_set):
                     exclude_region_id = region_index
                     if debug:
-                        print(f"    Excluding region {region_index} (contains IDs to exclude).")
+                        print(f"Excluding region {region_index} (contains IDs to exclude).")
                     connect_filter.DeleteSpecifiedRegion(region_index)
                     break
             connect_filter.DeleteSpecifiedRegion(region_index)
@@ -770,7 +784,7 @@ class RingDetector:
                 found_target = True
         if not found_target:
             if debug:
-                print("    No target region found after exclusion.")
+                print("No target region found after exclusion.")
             return None
         connect_filter.Update()
         target_ug = connect_filter.GetOutput()
@@ -780,7 +794,7 @@ class RingDetector:
             return target_pd
         else:
             if debug:
-                print("    Final region after exclusion is empty or invalid.")
+                print("Final region after exclusion is empty or invalid.")
             return None
 
     # -------------------- Standard TOP_ENDO Workflow --------------------
