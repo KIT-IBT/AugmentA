@@ -1,166 +1,234 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Apr 19 14:55:02 2021
-
-@author: Luca Azzolin
-
-Copyright 2021 Luca Azzolin
-
-Licensed to the Apache Software Foundation (ASF) under one
-or more contributor license agreements.  See the NOTICE file
-distributed with this work for additional information
-regarding copyright ownership.  The ASF licenses this file
-to you under the Apache License, Version 2.0 (the
-"License"); you may not use this file except in compliance
-with the License.  You may obtain a copy of the License at
-
-  http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing,
-software distributed under the License is distributed on an
-"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-KIND, either express or implied.  See the License for the
-specific language governing permissions and limitations
-under the License.  
+MODIFIED version of open_orifices_manually.py
+- Removed call to old extract_rings.run()
+- Returns cut mesh path and apex_id
 """
 import argparse
+import os
+from typing import Any, Tuple, List, Dict, Union
 
 import pymeshfix
 import pyvista as pv
 import vtk
+import sys
 
-import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
-from Atrial_LDRBM.Generate_Boundaries import extract_rings
-from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
-from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
+# Assuming these helpers are available in the environment
+try:
+    from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
+    from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
+    from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
+    from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
+    from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
+    from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+    from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region
+except ImportError as e:
+    print(f"Error importing helper methods in open_orifices_manually: {e}")
+    # Define dummy functions or raise error if essential
+    raise
+
+# Removed import of old extract_rings
+# from Atrial_LDRBM.Generate_Boundaries import extract_rings
 
 pv.set_plot_theme('dark')
 
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region
 
-vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
-
-
-def parser():
+def parser() -> argparse.ArgumentParser:
+    # Keep parser as is
     parser = argparse.ArgumentParser(description='Cut veins manually')
-    parser.add_argument('--mesh',
-                        type=str,
-                        default="",
-                        help='path to mesh')
-    parser.add_argument('--atrium',
-                        type=str,
-                        default="",
-                        help='write LA or RA')
-    parser.add_argument('--size',
-                        type=float,
-                        default=30,
-                        help='patch radius in mesh units for curvature estimation')
-    parser.add_argument('--min_cutting_radius',
-                        type=float,
-                        default=7.5,
-                        help='radius to cut veins/valves in mm')
-    parser.add_argument('--max_cutting_radius',
-                        type=float,
-                        default=17.5,
-                        help='radius to cut veins/valves in mm')
-    parser.add_argument('--scale',
-                        type=int,
-                        default=1,
-                        help='normal unit is mm, set scaling factor if different')
-    parser.add_argument('--LAA',
-                        type=str,
-                        default="",
-                        help='LAA apex point index, leave empty if no LA')
-    parser.add_argument('--RAA',
-                        type=str,
-                        default="",
-                        help='RAA apex point index, leave empty if no RA')
-    parser.add_argument('--debug',
-                        type=int,
-                        default=0,
-                        help='set to 1 to check the predicted location of the appendage apex')
-    parser.add_argument('--MRI',
-                        type=int,
-                        default=0,
-                        help='set to 1 if the input is an MRI segmentation')
+    parser.add_argument('--mesh', type=str, default="", help='path to mesh')
+    parser.add_argument('--atrium', type=str, default="", help='write LA or RA')
+    # Add other arguments if needed by the function logic itself
+    parser.add_argument('--min_cutting_radius', type=float, default=7.5, help='radius to cut veins/valves in mm')
+    parser.add_argument('--max_cutting_radius', type=float, default=17.5, help='radius to cut veins/valves in mm')
+    parser.add_argument('--scale', type=float, default=1.0, help='scaling factor (if mesh units != mm)')
+    parser.add_argument('--MRI', type=int, default=0, help='set to 1 if the input is an MRI segmentation')
+    parser.add_argument('--debug', type=int, default=0, help='debug flag')
+    # LAA/RAA args are passed to the function but not used internally here for parsing
     return parser
 
 
-def open_orifices_manually(meshpath, atrium, MRI, scale=1, size=30, vessels_cutting_radius=7.5,
-                           valve_cutting_radius=17.5, LAA="", RAA="", debug=0):
-    meshname = meshpath.split("/")[-1]
-    full_path = meshpath[:-len(meshname)]
+def _clean_mesh(meshpath: str, atrium: str) -> Tuple[str, str]:
+    """
+    Clean the mesh from holes and self-intersecting triangles.
 
-    # Clean the mesh from holes and self intersecting triangles
+    Returns:
+        full_path: Directory containing the mesh.
+        clean_path: Path to the cleaned VTK file.
+    """
+    if not os.path.exists(meshpath):
+        raise FileNotFoundError(f"Mesh file {meshpath} not found.")
+
+    mesh_dir = os.path.dirname(meshpath)
+    clean_base = os.path.join(mesh_dir, f"{atrium}_clean")
+    clean_path_vtk = clean_base + ".vtk"
+    clean_path_obj = clean_base + ".obj"
+
+    print(f"  Cleaning mesh: {meshpath} -> {clean_path_vtk}")
     meshin = pv.read(meshpath)
     meshfix = pymeshfix.MeshFix(meshin)
     meshfix.repair()
-    meshfix.mesh.save(f"{full_path}/{atrium}_clean.vtk")
-    pv.save_meshio(f"{full_path}/{atrium}_clean.obj", meshfix.mesh, "obj")
 
-    mesh_with_data = smart_reader(meshpath)
+    try:
+        meshfix.mesh.save(clean_path_vtk)
+        # Also save OBJ as it might be needed by other steps implicitly
+        pv.save_meshio(clean_path_obj, meshfix.mesh, "obj")
+        print(f"  Cleaned mesh saved.")
+    except Exception as e:
+        raise RuntimeError(f"Error saving cleaned mesh: {e}")
+    return mesh_dir, clean_path_vtk  # Return path to VTK
 
-    mesh_clean = smart_reader(f"{full_path}/{atrium}_clean.vtk")
 
-    # Map point data to cleaned mesh
-    mesh = point_array_mapper(mesh_with_data, mesh_clean, "all")
+def _map_mesh(meshpath: str, clean_path: str) -> Any:
+    """
+    Map point data from the original mesh to the cleaned mesh.
+    """
+    print(f"  Mapping data from {meshpath} to {clean_path}")
+    try:
+        mesh_with_data = smart_reader(meshpath)
+        mesh_clean = smart_reader(clean_path)
+        mapped_mesh = point_array_mapper(mesh_with_data, mesh_clean, "all")
+        print(f"  Data mapping complete.")
+        return mapped_mesh
+    except Exception as e:
+        raise RuntimeError(f"Error during data mapping: {e}")
 
+
+def _get_orifices(atrium: str) -> List[str]:
+    """
+    Return the list of orifices for the given atrium.
+    """
     if atrium == "LA":
-        orifices = ['mitral valve', 'left inferior pulmonary vein', 'left superior pulmonary vein',
-                    'right inferior pulmonary vein', 'right superior pulmonary vein']
+        return ['mitral valve', 'left inferior pulmonary vein', 'left superior pulmonary vein',
+                'right inferior pulmonary vein', 'right superior pulmonary vein']
+    elif atrium == "RA":  # Added elif for clarity
+        return ['tricuspid valve', 'inferior vena cava', 'superior vena cava', 'coronary sinus']
     else:
-        orifices = ['tricuspid valve', 'inferior vena cava', 'superior vena cava', 'coronary sinus']
+        raise ValueError(f"Unknown atrium type for orifices: {atrium}")
 
-    for r in orifices:
-        picked_pt = pick_point(meshfix.mesh, f"center of the {r}")
-        if r == 'mitral valve' or r == 'tricuspid valve':
-            selected_radius = valve_cutting_radius
+
+def open_orifices_manually(meshpath: str,
+                           atrium: str,
+                           MRI: Union[int, bool],  # Keep args even if not used directly here
+                           scale: float = 1.0,
+                           size: float = 30,  # Keep args even if not used directly here
+                           min_cutting_radius: float = 7.5,
+                           max_cutting_radius: float = 17.5,
+                           LAA: Union[str, int] = "",  # Keep args even if not used directly here
+                           RAA: Union[str, int] = "",  # Keep args even if not used directly here
+                           debug: int = 0) -> Tuple[str, int]:  # MODIFIED: Return path and apex_id
+    """
+    Open atrial orifices manually by cleaning the mesh, mapping data,
+    letting user pick points, cutting holes, and identifying apex.
+    MODIFIED: Returns the path to the cut mesh and the apex ID.
+
+    Returns:
+        Tuple[str, int]: Path to the cut VTK file, apex ID.
+    """
+    print(f"--- Starting Manual Orifice Opening for {atrium} ---")
+    # Clean the mesh
+    full_path, clean_path = _clean_mesh(meshpath, atrium)
+
+    # Map point data to the cleaned mesh
+    mesh_mapped = _map_mesh(meshpath, clean_path)
+    current_mesh_vtk = mesh_mapped  # Start cutting from mapped mesh
+
+    # Process each orifice: pick a point and cut the mesh with the appropriate radius
+    orifices = _get_orifices(atrium)
+    print("Processing orifices...")
+    for r_idx, r_name in enumerate(orifices):
+        print(f"  Processing orifice {r_idx + 1}/{len(orifices)}: {r_name}")
+        # Read the *current* state of the mesh for picking
+        # Need to use PyVista PolyData for picking
+        try:
+            mesh_pv_for_picking = pv.PolyData(current_mesh_vtk)
+            if mesh_pv_for_picking.n_points == 0:
+                raise ValueError(f"Mesh became empty before picking {r_name}")
+            picked_pt = pick_point(mesh_pv_for_picking, f"center of the {r_name}")
+            if picked_pt is None:
+                raise RuntimeError(f"Point picking cancelled or failed for {r_name}.")
+        except Exception as e:
+            raise RuntimeError(f"Error during point picking setup for {r_name}: {e}")
+
+        # Determine radius based on orifice type
+        if 'valve' in r_name.lower():
+            selected_radius = max_cutting_radius
         else:
-            selected_radius = vessels_cutting_radius
+            selected_radius = min_cutting_radius
+        print(f"    Cutting '{r_name}' with radius {selected_radius} at {picked_pt}")
 
-        mesh = cut_mesh_with_radius(mesh, picked_pt, selected_radius)
+        # Cut the VTK object
+        try:
+            current_mesh_vtk = cut_mesh_with_radius(current_mesh_vtk, picked_pt, selected_radius)
+            if current_mesh_vtk is None or current_mesh_vtk.GetNumberOfPoints() == 0:
+                raise ValueError("Mesh became empty after cutting.")
+        except Exception as e:
+            raise RuntimeError(f"Error cutting mesh for {r_name}: {e}")
 
-    model = extract_largest_region(mesh)
+    # Extract largest region after all cuts
+    print("Extracting largest connected region...")
+    model_final_vtk = extract_largest_region(current_mesh_vtk)
+    if model_final_vtk is None or model_final_vtk.GetNumberOfPoints() == 0:
+        raise RuntimeError("Mesh empty after extracting largest region.")
 
-    vtk_polydata_writer(f"{full_path}/{atrium}_cutted.vtk", model)
+    # Define final output path
+    cutted_path = os.path.join(full_path, f"{atrium}_cutted.vtk")
+    print(f"Saving final cut mesh to: {cutted_path}")
+    vtk_polydata_writer(cutted_path, model_final_vtk)
 
-    mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
+    # Manually pick the appendage apex on the final cut mesh
+    print("Select appendage apex...")
+    try:
+        mesh_pv_final = pv.PolyData(model_final_vtk)
+        apex_coord = pick_point(mesh_pv_final, f"{atrium} appendage apex")
+        if apex_coord is None:
+            raise RuntimeError("Apex point picking cancelled or failed.")
+    except Exception as e:
+        raise RuntimeError(f"Error during apex picking setup: {e}")
 
-    apex = pick_point(mesh_from_vtk, "atrial appendage apex")
+    # Find the closest point ID on the final VTK model
+    print("Finding closest point ID for apex...")
+    apex_id = find_closest_point(model_final_vtk, apex_coord)
+    if apex_id < 0:
+        raise RuntimeError("Could not find closest point for selected apex.")
+    print(f"Apex ID determined: {apex_id}")
 
-    model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
+    # --- REMOVED CALL TO OLD extract_rings ---
+    # command = ["--mesh", cutted_path, "--LAA", str(LAA), "--RAA", str(RAA)]
+    # print(f"extract rings with: {command}")
+    # extract_rings.run(command)
+    # --- END REMOVAL ---
 
-    apex_id = find_closest_point(model, apex)
-    if atrium == "LA":
-        LAA = apex_id
-    elif atrium == "RA":
-        RAA = apex_id
-
-    meshpath = f"{full_path}/{atrium}_cutted.vtk"
-
-    command = ["--mesh", meshpath, "--LAA", str(LAA), "--RAA", str(RAA)]
-    print(f"extract rings with:{command}")
-    extract_rings.run(command)
-
-    return apex_id
+    print(f"--- Manual Orifice Opening Finished ---")
+    # MODIFIED: Return the path and the apex ID
+    return cutted_path, apex_id
 
 
-def run():
+# Keep the run() function for potential standalone execution if needed
+# but it won't be called by the main pipeline anymore.
+def run_standalone():
     args = parser().parse_args()
-
-    apex_id = open_orifices_manually(args.mesh, args.atrium, args.MRI, args.scale, args.size, args.min_cutting_radius,
-                                     args.max_cutting_radius, args.LAA, args.RAA, args.debug)
-
-
-def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
-                                                                               thr2)
+    try:
+        cut_mesh, final_apex_id = open_orifices_manually(
+            args.mesh,
+            args.atrium,
+            args.MRI,
+            args.scale,
+            30,  # size is not used in manual, pass default
+            args.min_cutting_radius,
+            args.max_cutting_radius,
+            "",  # LAA/RAA are determined here, not needed as input
+            "",
+            args.debug
+        )
+        print(f"Standalone run complete. Cut mesh: {cut_mesh}, Apex ID: {final_apex_id}")
+        # NOTE: This standalone run does NOT trigger the ring detection anymore.
+    except Exception as e:
+        print(f"Standalone execution failed: {e}")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
-    run()
+    run_standalone()
+
