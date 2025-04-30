@@ -21,7 +21,6 @@ class BaseMesh:
         self.mesh_path = mesh_path
         self.polydata = polydata
 
-        # If a mesh path is provided but no polydata, read the mesh from file.
         if self.mesh_path and not self.polydata:
             self.read(self.mesh_path)
 
@@ -99,31 +98,12 @@ class MeshReader(BaseMesh):
 
 
 class MeshWriter(BaseMesh):
-    """
-    A class for writing meshes to file.
-    """
 
     def write_mesh(self, file_path: str, format: str = "vtk") -> None:
-        """
-        Writes the mesh to a file using the specified format.
-
-        @param file_path: Destination file path.
-        @param format: Format for the output file ("vtk" or "obj").
-        @return: None.
-        """
         self.write(file_path, format=format)
 
 
 class MeshConverter(BaseMesh):
-    """
-    A class for converting meshes between formats.
-    """
-
     def convert_mesh(self, output_format: str) -> None:
-        """
-        Converts the mesh to the given output format.
-
-        @param output_format: Desired output format (e.g., "vtk" or "obj").
-        @return: None.
-        """
         self.convert(output_format)
+
