@@ -1,20 +1,21 @@
 import os
+
 import numpy as np
 import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
-from sklearn.cluster import KMeans, DBSCAN
-
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, initialize_plane_with_points, initialize_plane
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from sklearn.cluster import KMeans
+from vtk.numpy_interface import dataset_adapter as dsa
 
 from Atrial_LDRBM.Generate_Boundaries.file_manager import write_vtk, write_vtx_file
 from Atrial_LDRBM.Generate_Boundaries.mesh import MeshReader
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
+    get_center_of_mass, get_feature_edges, get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, \
+    initialize_plane_with_points, initialize_plane
+from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold
 
 
 class Ring:
@@ -86,10 +87,8 @@ class RingDetector:
             return False
 
         if check_cells:
-            if hasattr(vtk_object, 'GetNumberOfPolys') and vtk_object.GetNumberOfPolys() == 0:
-                return False
-
-            if hasattr(vtk_object, 'GetNumberOfCells') and vtk_object.GetNumberOfCells() == 0:
+            cells_are_empty = hasattr(vtk_object, 'GetNumberOfCells') and vtk_object.GetNumberOfCells() == 0
+            if cells_are_empty:
                 return False
 
         if check_ids and (not vtk_object.GetPointData() or not vtk_object.GetPointData().GetArray("Ids")):
@@ -188,7 +187,8 @@ class RingDetector:
         return ring_obj
 
     # -------------------- Ring Classification and Marking --------------------
-    def _cluster_rings(self, rings: list[Ring], n_clusters: int = 2, debug: bool = False) -> tuple[list, list, np.ndarray | None]:
+    def _cluster_rings(self, rings: list[Ring], n_clusters: int = 2, debug: bool = False) -> tuple[
+        list, list, np.ndarray | None]:
         """
         Clusters non-MV rings using KMeans to separate anatomical groups.
         """
@@ -305,7 +305,8 @@ class RingDetector:
             RSPV_idx = self._cutting_plane_to_identify_RSPV(LPV_indices, RPV_indices, rings, debug=debug)
 
         self._name_pv_subgroup(LPV_indices, "L", rings, apex_dist_is_superior=True, debug=debug)
-        self._name_pv_subgroup(RPV_indices, "R", rings, apex_dist_is_superior=False, ref_superior_idx=RSPV_idx, debug=debug)
+        self._name_pv_subgroup(RPV_indices, "R", rings, apex_dist_is_superior=False, ref_superior_idx=RSPV_idx,
+                               debug=debug)
 
         LPV_point_ids = []
         RPV_point_ids = []
@@ -369,7 +370,7 @@ class RingDetector:
             if largest_two[0].ap_dist < largest_two[1].ap_dist:
                 tv_ring = largest_two[0]
             else:
-                tv_ring =largest_two[1]
+                tv_ring = largest_two[1]
 
         elif len(rings) == 1:
             tv_ring = rings[0]
@@ -602,7 +603,8 @@ class RingDetector:
             if self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True):
                 temp_poly = vtk.vtkPolyData()
                 temp_poly.DeepCopy(ring_obj.vtk_polydata)
-                tag_data = numpy_to_vtk(np.full((ring_obj.np,), ring_obj.id, dtype=int), deep=True, array_type=vtk.VTK_INT)
+                tag_data = numpy_to_vtk(np.full((ring_obj.np,), ring_obj.id, dtype=int), deep=True,
+                                        array_type=vtk.VTK_INT)
                 tag_data.SetName("temp_ring_id")
                 temp_poly.GetPointData().AddArray(tag_data)
                 append_filter.AddInputData(temp_poly)
@@ -618,7 +620,8 @@ class RingDetector:
         append_filter.Update()
 
         extracted_mesh = get_elements_above_plane(append_filter.GetOutput(), plane)
-        if self._validate_vtk_data(extracted_mesh, check_points=True) and extracted_mesh.GetPointData().GetArray("temp_ring_id"):
+        if self._validate_vtk_data(extracted_mesh, check_points=True) and extracted_mesh.GetPointData().GetArray(
+                "temp_ring_id"):
             extracted_ids = vtk_to_numpy(extracted_mesh.GetPointData().GetArray("temp_ring_id"))
             if extracted_ids.size > 0:
                 potential_rspv = int(extracted_ids[0])
