@@ -525,13 +525,12 @@ def AugmentA(args):
                     resample_input_path_vtk = f'{resample_input_base}.vtk'
                     resample_input_path_obj = f'{resample_input_base}.obj'
 
-                    if not os.path.exists(resample_input_path_obj):
-                        if not os.path.exists(resample_input_path_vtk):
-                             raise FileNotFoundError(f"Cannot find {resample_input_path_vtk} or {resample_input_path_obj} for resampling.")
 
-                        meshin = pv.read(resample_input_path_vtk)
-                        pv.save_meshio(resample_input_path_obj, meshin, "obj")
-                        # todo: just overwrite regardless
+                    if not os.path.exists(resample_input_path_vtk):
+                         raise FileNotFoundError(f"Cannot find {resample_input_path_vtk} or {resample_input_path_obj} for resampling.")
+
+                    meshin = pv.read(resample_input_path_vtk)
+                    pv.save_meshio(resample_input_path_obj, meshin, "obj")
 
                     # Determine apex ID for resampling (use the one found manually earlier)
                     apex_id_for_resample = -1
