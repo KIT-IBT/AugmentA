@@ -345,175 +345,159 @@ class RingDetector:
 
         return b_tag, centroids, rings
 
+
     def _cutting_plane_to_identify_UAC(self,
-                                       LPVs_indices: list,
-                                       RPVs_indices: list,
+                                       LPV_indices: list[int],
+                                       RPV_indices: list[int],
                                        rings: list[Ring],
                                        LA_region: vtk.vtkPolyData,
-                                       debug: bool = False):
+                                       debug: bool = False) -> None:
 
+        # ring‐center means
+        lpv_centers = [rings[i].center for i in LPV_indices]
+        lpv_mean = np.mean(lpv_centers, axis=0)
 
-        # Need at least one PV on each side
-        if not LPVs_indices or not RPVs_indices:
-            return
+        rpv_centers = [rings[i].center for i in RPV_indices]
+        rpv_mean = np.mean(rpv_centers, axis=0)
 
-        # ── plane through MV, mean‑LPV, mean‑RPV ───────────────────────────────
-        lpv_mean = np.mean([rings[i].center for i in LPVs_indices], axis=0)
-        rpv_mean = np.mean([rings[i].center for i in RPVs_indices], axis=0)
-        mv_mean = next(r.center for r in rings if r.name == "MV")
+        mv_index = np.argmax([r.np for r in rings])
+        mv_mean = rings[mv_index].center
+
         plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
 
-        # ── geometry above plane & its boundary graph ─────────────────────────
-        surface_above_plane = get_elements_above_plane(LA_region, plane)
-        surf_over = apply_vtk_geom_filter(surface_above_plane)
-        boundary = get_feature_edges(
-            surf_over,
-            boundary_edges_on=True,
-            feature_edges_on=False,
-            manifold_edges_on=False,
-            non_manifold_edges_on=False)
+        # Extract surface above plane and get its boundary edges
+        above = get_elements_above_plane(LA_region, plane)
+        surface = apply_vtk_geom_filter(above)
+        boundary = get_feature_edges(surface,
+                                     boundary_edges_on=True,
+                                     feature_edges_on=False,
+                                     manifold_edges_on=False,
+                                     non_manifold_edges_on=False)
 
-        # fast point‑lookup
-        ids_on_boundary = vtk_to_numpy(boundary.GetPointData().GetArray("Ids"))
-        bnd_points = vtk_to_numpy(boundary.GetPoints().GetData())
-        tree = cKDTree(bnd_points)
+        bnd_pts = vtk_to_numpy(boundary.GetPoints().GetData())
+        bnd_ids = vtk_to_numpy(boundary.GetPointData().GetArray("Ids"))
+        tree = cKDTree(bnd_pts)
 
-        # collect **ALL** ring IDs exactly like the procedural code
-        all_ring_ids: set[int] = set()
-        for r in rings:
-            ids_this = vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
-            all_ring_ids.update(ids_this)
+        # Collect all ring point IDs
+        all_ids = set()
+        for ring in rings:
+            ids = vtk_to_numpy(ring.vtk_polydata.GetPointData().GetArray("Ids"))
+            all_ids.update(ids)
 
-        # additionally separate MV into ant / post for debugging output
-        mv_ids_all = vtk_to_numpy(next(r for r in rings if r.name == "MV")
-                                  .vtk_polydata.GetPointData().GetArray("Ids"))
-        mv_ant = set(ids_on_boundary).intersection(mv_ids_all)
-        mv_post = set(mv_ids_all) - mv_ant
-        write_vtx_file(os.path.join(self.outdir, 'ids_MV_ant.vtx'), list(mv_ant))
-        write_vtx_file(os.path.join(self.outdir, 'ids_MV_post.vtx'), list(mv_post))
-        if debug:
-            print(f"MV_ant: {len(mv_ant)} pts, MV_post: {len(mv_post)} pts.")
+        # MV anterior/posterior
+        mv_ring = next(r for r in rings if r.name == "MV")
+        mv_ids = set(vtk_to_numpy(mv_ring.vtk_polydata.GetPointData().GetArray("Ids")))
+        mv_ant = set(bnd_ids).intersection(mv_ids)
+        mv_post = mv_ids - mv_ant
 
-        # ── indices on boundary graph for Dijkstra ‐ just like the script ────
-        lpv_bb_idx = find_closest_point(boundary, lpv_mean)
-        rpv_bb_idx = find_closest_point(boundary, rpv_mean)
+        write_vtx_file(os.path.join(self.outdir, "ids_MV_ant.vtx"), list(mv_ant))
+        write_vtx_file(os.path.join(self.outdir, "ids_MV_post.vtx"), list(mv_post))
 
-        mv_poly = next(r.vtk_polydata for r in rings if r.name == "MV")
-        lpv_mv_proj_idx = find_closest_point(mv_poly, lpv_mean)
-        rpv_mv_proj_idx = find_closest_point(mv_poly, rpv_mean)
-        lpv_mv_idx = find_closest_point(boundary, mv_poly.GetPoint(lpv_mv_proj_idx))
-        rpv_mv_idx = find_closest_point(boundary, mv_poly.GetPoint(rpv_mv_proj_idx))
+        # Find boundary‐graph vertices for MV and PV means
+        lpv_bb = find_closest_point(boundary, lpv_mean)
+        rpv_bb = find_closest_point(boundary, rpv_mean)
 
-        if min(lpv_bb_idx, rpv_bb_idx, lpv_mv_idx, rpv_mv_idx) < 0:
-            if debug:
-                print("Warning: invalid start/end vertex for UAC paths.")
-            return
+        mv_poly = mv_ring.vtk_polydata
+        lpv_mv_idx = find_closest_point(mv_poly, lpv_mean)
+        rpv_mv_idx = find_closest_point(mv_poly, rpv_mean)
+        lpv_mv = find_closest_point(boundary, mv_poly.GetPoint(lpv_mv_idx))
+        rpv_mv = find_closest_point(boundary, mv_poly.GetPoint(rpv_mv_idx))
 
-        # vtk‑Dijkstra setup
+        self._write_uac_path(boundary,
+                             tree,
+                             bnd_ids,
+                             all_ids,
+                             lpv_bb,
+                             lpv_mv,
+                             "ids_MV_LPV.vtx")
+
+        self._write_uac_path(boundary,
+                             tree,
+                             bnd_ids,
+                             all_ids,
+                             rpv_bb,
+                             rpv_mv,
+                             "ids_MV_RPV.vtx")
+
+        self._write_uac_path(boundary,
+                             tree,
+                             bnd_ids,
+                             all_ids,
+                             lpv_bb,
+                             rpv_bb,
+                             "ids_RPV_LPV.vtx")
+
+    def _write_uac_path(self,
+                        boundary: vtk.vtkPolyData,
+                        tree: cKDTree,
+                        bnd_ids: np.ndarray,
+                        all_ids: set[int],
+                        start_idx: int,
+                        end_idx: int,
+                        filename: str) -> None:
+        """
+        Run a Dijkstra geodesic path on `boundary` from start_idx to end_idx,
+        map points back to boundary IDs, exclude any in all_ids, and write to disk.
+        """
         dijkstra = vtk.vtkDijkstraGraphGeodesicPath()
         dijkstra.SetInputData(boundary)
+        dijkstra.SetStartVertex(start_idx)
+        dijkstra.SetEndVertex(end_idx)
+        dijkstra.Update()
+
+        coords = vtk_to_numpy(dijkstra.GetOutput().GetPoints().GetData())
+        _, idxs = tree.query(coords)
+        path_ids = set(bnd_ids[idxs]) - all_ids
+
+        write_vtx_file(os.path.join(self.outdir, filename), list(path_ids))
 
 
-        def _compute_and_write_geodesic_path(start_idx: int,
-                                             end_idx: int,
-                                             out_name: str) -> None:
-            """Run Dijkstra, drop vertices that are already part of *any* ring,
-            write IDs to disk – may be empty (matches legacy behaviour)."""
-            dijkstra.SetStartVertex(start_idx)
-            dijkstra.SetEndVertex(end_idx)
-            dijkstra.Update()
-            path_poly = dijkstra.GetOutput()
-
-            ids_filtered: list[int] = []
-            if path_poly and path_poly.GetNumberOfPoints():
-                coords = vtk_to_numpy(path_poly.GetPoints().GetData())
-                # map back to boundary indices
-                _, idxs = tree.query(coords)
-                raw_ids = set(ids_on_boundary[idxs])
-                ids_filtered = list(raw_ids - all_ring_ids)  # ← ORIGINAL LINE
-
-            # always write a file – even if empty – exactly like the script
-            write_vtx_file(os.path.join(self.outdir, out_name), ids_filtered)
-            if debug:
-                print(f"Wrote {out_name} with {len(ids_filtered)} pts.")
-
-        # three roof / MV paths
-        _compute_and_write_geodesic_path(lpv_bb_idx, lpv_mv_idx, 'ids_MV_LPV.vtx')
-        _compute_and_write_geodesic_path(rpv_bb_idx, rpv_mv_idx, 'ids_MV_RPV.vtx')
-        _compute_and_write_geodesic_path(lpv_bb_idx, rpv_bb_idx, 'ids_RPV_LPV.vtx')
-
-        if debug:
-            print("UAC path calculation finished.")
-
-    def _cutting_plane_to_identify_RSPV(self, LPVs_indices: list, RPVs_indices: list,
-                                        rings: list[Ring], debug: bool = False) -> int | None:
+    @staticmethod
+    def _cutting_plane_to_identify_RSPV(LPV_indices: list[int],
+                                        RPV_indices: list[int],
+                                        rings: list[Ring],
+                                        debug: bool = False) -> int:
         """
         Uses a cutting plane on RPV candidate rings to identify the RSPV.
 
         Returns:
             The ring ID of the identified RSPV, or None on failure.
         """
-        if not LPVs_indices or not RPVs_indices:
-            return None
-        mv_rings = [r for r in rings if r.name == "MV"]
-        if not mv_rings:
-            return None
-        mv_mean = mv_rings[0].center
+        lpv_centers = [rings[i].center for i in LPV_indices]
+        lpv_mean = np.mean(lpv_centers, axis=0)
 
-        try:
-            LPVs_c = np.array([rings[i].center for i in LPVs_indices])
-            lpv_mean = np.mean(LPVs_c, axis=0)
-            RPVs_c = np.array([rings[i].center for i in RPVs_indices])
-            rpv_mean = np.mean(RPVs_c, axis=0)
-            plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
-        except Exception:
-            return None
+        rpv_centers = [rings[i].center for i in RPV_indices]
+        rpv_mean = np.mean(rpv_centers, axis=0)
 
+        mv_index = int(np.argmax([r.np for r in rings]))
+        mv_mean = rings[mv_index].center
+
+        plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
+
+        # append all RPV ring meshes, tagging each point with ring.id
         append_filter = vtk.vtkAppendPolyData()
-        valid_rpvs_appended = False
-        original_ids = set()
-        for i in RPVs_indices:
-            ring_obj = rings[i]
 
-            if self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True):
-                temp_poly = vtk.vtkPolyData()
-                temp_poly.DeepCopy(ring_obj.vtk_polydata)
-                tag_data = numpy_to_vtk(np.full((ring_obj.np,), ring_obj.id, dtype=int), deep=True, array_type=vtk.VTK_INT)
-                tag_data.SetName("temp_ring_id")
-                temp_poly.GetPointData().AddArray(tag_data)
-                append_filter.AddInputData(temp_poly)
-                original_ids.add(ring_obj.id)
-                valid_rpvs_appended = True
-            else:
-                if debug:
-                    print(f"Warning: Skipping RPV ring {ring_obj.id} due to invalid data.")
+        for idx in RPV_indices:
+            ring = rings[idx]
+            temp = vtk.vtkPolyData()
+            temp.DeepCopy(ring.vtk_polydata)
 
-        if not valid_rpvs_appended:
-            return None
+            ids_array = numpy_to_vtk(np.full(ring.np, ring.id, dtype=int), deep=True, array_type=vtk.VTK_INT)
+            ids_array.SetName("id")
+            temp.GetPointData().SetScalars(ids_array)
+
+            append_filter.AddInputData(temp)
 
         append_filter.Update()
 
-        extracted_mesh = get_elements_above_plane(append_filter.GetOutput(), plane)
-        if self._validate_vtk_data(extracted_mesh, check_points=True) and extracted_mesh.GetPointData().GetArray("temp_ring_id"):
-            extracted_ids = vtk_to_numpy(extracted_mesh.GetPointData().GetArray("temp_ring_id"))
-            if extracted_ids.size > 0:
-                potential_rspv = int(extracted_ids[0])
-                if potential_rspv in original_ids:
-                    if debug:
-                        print(f"RSPV identified: Ring {potential_rspv}")
-                    return potential_rspv
-                else:
-                    if debug:
-                        print(f"Warning: Extracted ID {potential_rspv} not in original RPV set.")
-                    return None
-            else:
-                if debug:
-                    print("Warning: RSPV extraction yielded no valid IDs.")
-                return None
-        else:
-            if debug:
-                print("Warning: RSPV extraction failed or returned no points/IDs.")
-            return None
+        # Extract points above the plane
+        extracted = get_elements_above_plane(append_filter.GetOutput(), plane)
+
+        # Grab the first “id” value as the RSPV ring id
+        id_vtk = extracted.GetPointData().GetArray("id")
+        ids = vtk_to_numpy(id_vtk)
+        return int(ids[0])
+
 
     # -------------------- TV Splitting --------------------
     def _split_tv(self, tv_polydata: vtk.vtkPolyData, tv_center: tuple,
