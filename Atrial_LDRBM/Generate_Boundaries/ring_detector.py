@@ -1,6 +1,9 @@
 import os
+from typing import Tuple, List, Any
+
 import numpy as np
 import vtk
+from numpy import signedinteger, long
 from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans, DBSCAN
@@ -74,28 +77,34 @@ class RingDetector:
         self.outdir = outdir
         os.makedirs(self.outdir, exist_ok=True)
 
-    def _validate_vtk_data(self, vtk_object, check_points=True, check_cells=False, check_ids=False) -> bool:
-        """
-        Verifies that a VTK object is valid and optionally checks for the existence
-        of points, cells, and the 'Ids' array in its point data.
-        """
+    def _validate_vtk_data(
+        self,
+        vtk_object,
+        check_points: bool = True,
+        check_cells: bool = False,
+        check_ids: bool = False
+    ) -> bool:
+        """True if the VTK object contains the requested information."""
         if not vtk_object:
             return False
 
+        # points -----------------------------------------------------------------
         if check_points and vtk_object.GetNumberOfPoints() == 0:
             return False
 
         if check_cells:
-            if hasattr(vtk_object, 'GetNumberOfPolys') and vtk_object.GetNumberOfPolys() == 0:
+            # Accept any dataset that actually contains cells (lines **or** polys)
+            if hasattr(vtk_object, "GetNumberOfCells") and vtk_object.GetNumberOfCells() == 0:
                 return False
 
-            if hasattr(vtk_object, 'GetNumberOfCells') and vtk_object.GetNumberOfCells() == 0:
+        # Ids array --------------------------------------------------------------
+        if check_ids:
+            pd = vtk_object.GetPointData()
+            if pd is None or pd.GetArray("Ids") is None or pd.GetArray("Ids").GetNumberOfTuples() == 0:
                 return False
-
-        if check_ids and (not vtk_object.GetPointData() or not vtk_object.GetPointData().GetArray("Ids")):
-            return False
 
         return True
+
 
     # Ring Detection Workflow
     def detect_rings(self, debug: bool = False) -> list[Ring]:
@@ -109,28 +118,7 @@ class RingDetector:
                                            manifold_edges_on=False,
                                            non_manifold_edges_on=False)
 
-        # Validate the boundary edges output to ensure there are lines/cells.
-        if not self._validate_vtk_data(boundary_edges, check_cells=True):
-            if debug:
-                print("Warning: No boundary edge segments found on the surface.")
-            return []
-
-        # Ensure that the boundary edges have the original point IDs
-        if not self._validate_vtk_data(boundary_edges, check_ids=True):
-            if debug:
-                print("Warning: Boundary edges missing 'Ids'. Attempting to generate...")
-
-            boundary_edges = generate_ids(boundary_edges, "Ids", "CellIds")
-
-            if not self._validate_vtk_data(boundary_edges, check_ids=True):
-                print("  Error: Failed to obtain 'Ids' on boundary edges; aborting ring detection.")
-                return []
-
-        if debug:
-            print(f"Found {boundary_edges.GetNumberOfLines()} boundary segments.")
-            print("Extracting connected components to form individual rings.")
-
-        # Use connectivity filtering to separate the boundary edges into connected components.
+        # Use connectivity filtering to separate the boundary edges into connected components
         connect_filter = init_connectivity_filter(boundary_edges, ExtractionModes.ALL_REGIONS)
         num_regions = connect_filter.GetNumberOfExtractedRegions()
         connect_filter.SetExtractionModeToSpecifiedRegions()
@@ -143,33 +131,29 @@ class RingDetector:
             if ring_obj:
                 detected_rings.append(ring_obj)
 
-        if debug:
-            print(f"Detected {len(detected_rings)} rings.")
+            connect_filter.DeleteSpecifiedRegion(region_index)
+            connect_filter.Update()
+
         return detected_rings
 
     def _process_detected_ring_region(self, connect_filter, region_index, debug=False) -> Ring | None:
         """
         Processes a single connected component from the connectivity filter, cleaning and converting it to a Ring object.
         """
+        # Tell the connect filter to focus only on the i-th region
         connect_filter.AddSpecifiedRegion(region_index)
+        # Executes the filter for the specified region
         connect_filter.Update()
+        # Gets the actual geometric data (points and lines) for this single ring
         region_ug = connect_filter.GetOutput()
 
-        # Clean unused points
+        # Converts vtkUnstructuredGrid output from the connectivity filter into a vtkPolyData
         region_pd = apply_vtk_geom_filter(region_ug)
         region_pd = clean_polydata(region_pd)
 
-        # Validate that the processed region contains points and has the required 'Ids'
-        if not self._validate_vtk_data(region_pd, check_points=True, check_ids=True):
-            if debug:
-                print(f"Warning: Region {region_index} is empty or missing 'Ids'. Skipping.")
-
-            connect_filter.DeleteSpecifiedRegion(region_index)
-            return None
-
         if debug:
             # Save a debug version of the ring for inspection
-            debug_path = os.path.join(self.outdir, f'debug_ring_{region_index}.vtk')
+            debug_path = os.path.join(self.outdir, f'ring_{region_index}.vtk')
             write_vtk(debug_path, region_pd)
 
         ring_poly_copy = vtk.vtkPolyData()
@@ -177,397 +161,289 @@ class RingDetector:
 
         # Compute the center of mass and distance from the apex for classification
         center = get_center_of_mass(region_pd, set_use_scalars_as_weights=False)
-        distance = np.sqrt(np.sum((np.array(self.apex) - np.array(center)) ** 2))
+        distance = np.sqrt(np.sum((np.array(self.apex) - np.array(center)) ** 2, axis=0))
         num_pts = region_pd.GetNumberOfPoints()
 
-        # Create the Ring object with the computed properties
         ring_obj = Ring(region_index, "", num_pts, center, distance, ring_poly_copy)
 
-        connect_filter.DeleteSpecifiedRegion(region_index)
-        connect_filter.Update()
         return ring_obj
 
     # -------------------- Ring Classification and Marking --------------------
-    def _cluster_rings(self, rings: list[Ring], n_clusters: int = 2, debug: bool = False) -> tuple[list, list, np.ndarray | None]:
+    def _cluster_rings(self,
+                       rings: list[Ring],
+                       n_clusters: int = 2,
+                       debug: bool = False) -> tuple[list[int], list[int], list[int], int]:
         """
         Clusters non-MV rings using KMeans to separate anatomical groups.
         """
-        # Calculating pv indices
-        non_mv_indices = [idx for idx, r in enumerate(rings) if r.name != "MV"]
+        # Calculating Pulmonary Vein indices
+        pvs = [idx for idx, r in enumerate(rings) if r.name != "MV"]
 
-        if not non_mv_indices:
-            if debug:
-                print("_cluster_rings: No rings available for clustering (all may be MV).")
-            return [], [], None
-
-        non_mv_centers = [rings[idx].center for idx in non_mv_indices]
-        actual_clusters = min(n_clusters, len(non_mv_centers))
-
-        if actual_clusters < 1:
-            return [], [], None
-
-        if actual_clusters == 1:
-            if debug:
-                print(f"_cluster_rings: Only one ring available; assigning it to group 1.")
-            return non_mv_indices, [], np.array([0] * len(non_mv_centers))
-
-        try:
-            estimator = KMeans(n_clusters=actual_clusters, n_init='auto', random_state=0)
-            labels = estimator.fit_predict(non_mv_centers)
-
-        except Exception as e:
-            print(f"Error during clustering: {e}")
-            return [], [], None
+        estimator = KMeans(n_clusters=n_clusters)
+        non_mv_centers = [rings[idx].center for idx in pvs]
+        labels = estimator.fit_predict(non_mv_centers)
 
         # Determine which cluster has the ring closest to the apex
-        ap_dists = [rings[idx].ap_dist for idx in non_mv_indices]
-        closest_idx = np.argmin(ap_dists)
-        label_closest = labels[closest_idx]
+        ap_dists = [rings[idx].ap_dist for idx in pvs]
+        min_ap_dist = np.argmin(ap_dists)
 
-        group1 = [non_mv_indices[i] for i, lab in enumerate(labels) if lab == label_closest]
-        group2 = [non_mv_indices[i] for i, lab in enumerate(labels) if lab != label_closest]
+        label_LPV = labels[min_ap_dist]
 
-        if debug:
-            print(f"_cluster_rings: Group1 (size {len(group1)}), Group2 (size {len(group2)})")
-        return group1, group2, labels
+        # split into left vs right
+        LPVs = [pvs[i] for i, lab in enumerate(labels) if lab == label_LPV]
+        RPVs = [pvs[i] for i, lab in enumerate(labels) if lab != label_LPV]
 
-    def _name_pv_subgroup(self, group_indices: list, group_name_prefix: str,
-                          rings: list[Ring], apex_dist_is_superior: bool,
-                          ref_superior_idx: int | None = None, debug: bool = False):
+        return pvs, LPVs, RPVs, min_ap_dist
+
+    def _name_pv_subgroup(self,
+                          group_indices: list[int],
+                          group_name_prefix: str,
+                          rings: list[Ring],
+                          local_seed_idx: int) -> None:
         """
         Helper method to assign anatomical names (superior/inferior) to a subgroup of PV rings.
         The group_name_prefix is either "L" for left or "R" for right.
         """
-        if not group_indices:
-            return
-        if len(group_indices) == 1:
-            rings[group_indices[
-                0]].name = f"{group_name_prefix}SPV" if apex_dist_is_superior else f"{group_name_prefix}IPV"
-            if debug:
-                print(f"Named single {group_name_prefix} ring: {rings[group_indices[0]].name}")
-            return
-
+        # Get centers of rings in the current group_indices
+        estimator = KMeans(n_clusters=2)
         subgroup_centers = [rings[idx].center for idx in group_indices]
+        labels = estimator.fit_predict(subgroup_centers)
 
-        try:
-            estimator = KMeans(n_clusters=2, n_init='auto', random_state=0)
-            labels = estimator.fit_predict(subgroup_centers)
-        except Exception as e:
-            if debug:
-                print(f"Warning: Clustering failed for {group_name_prefix} subgroup: {e}")
-            return
+        seed_label  = labels[local_seed_idx]
+        SPV_idxs = [group_indices[i] for i, lab in enumerate(labels) if lab == seed_label]
+        IPV_idxs = [group_indices[i] for i, lab in enumerate(labels) if lab != seed_label]
 
-        superior_label = -1
-        if ref_superior_idx is not None and ref_superior_idx in group_indices:
-            try:
-                local_ref_idx = group_indices.index(ref_superior_idx)
-                superior_label = labels[local_ref_idx]
-                if debug:
-                    print(f"Using reference index {ref_superior_idx} for Superior label {superior_label}.")
-            except ValueError:
-                if debug:
-                    print(f"Warning: Reference index {ref_superior_idx} not found in group. Falling back.")
-                ref_superior_idx = None
+        for idx in SPV_idxs:
+            rings[idx].name = f"{group_name_prefix}SPV"
+        for idx in IPV_idxs:
+            rings[idx].name = f"{group_name_prefix}IPV"
 
-        if superior_label == -1:
-            subgroup_apex_dists = [rings[idx].ap_dist for idx in group_indices]
-            local_idx = np.argmin(subgroup_apex_dists) if apex_dist_is_superior else np.argmax(subgroup_apex_dists)
-            superior_label = labels[local_idx]
-            if debug:
-                print(f"Using apex distance to set Superior label {superior_label} for {group_name_prefix}PVs.")
 
-        for local_idx, original_idx in enumerate(group_indices):
-            is_superior = (labels[local_idx] == superior_label)
-            rings[original_idx].name = f"{group_name_prefix}SPV" if is_superior else f"{group_name_prefix}IPV"
-            if debug:
-                print(f"Named ring at index {original_idx}: {rings[original_idx].name}")
-
-    def mark_la_rings(self, adjusted_LAA_id: int, rings: list[Ring], b_tag: np.ndarray,
-                      centroids: dict, LA_region: vtk.vtkPolyData, debug: bool = False) -> tuple[np.ndarray, dict]:
+    def mark_la_rings(self,
+                      LAA_id: int,
+                      rings: list[Ring],
+                      b_tag: np.ndarray,
+                      centroids: dict,
+                      LA_region: vtk.vtkPolyData,
+                      debug: bool = False)\
+            -> tuple[np.ndarray, dict]:
         """
         Marks the left atrial rings (MV and PVs) by assigning anatomical names, updating
         boundary tags in the b_tag array, and recording centroids.
         """
-        if not rings:
-            return b_tag, centroids
 
-        # Identify the MV ring by choosing the ring with the most points
-        mv_ring_index = np.argmax([r.np for r in rings])
-        rings[mv_ring_index].name = "MV"
-        if debug:
-            print(f"Identified MV: Ring {mv_ring_index} (Size: {rings[mv_ring_index].np})")
+        # Identify the Mitral Valve ring by choosing the ring with the most points
+        mv_idx = np.argmax([r.np for r in rings])
+        rings[mv_idx].name = "MV"
 
         # Cluster non-MV rings into left and right groups.
-        LPV_indices, RPV_indices, _ = self._cluster_rings(rings, n_clusters=2, debug=debug)
+        pvs, LPVs, RPVs, min_ap_dist = self._cluster_rings(rings, debug=debug)
 
-        RSPV_idx = None
-        if LPV_indices and RPV_indices:
-            RSPV_idx = self._cutting_plane_to_identify_RSPV(LPV_indices, RPV_indices, rings, debug=debug)
+        LSPV_id = LPVs.index(pvs[min_ap_dist])
+        self._cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA_region, self.outdir)
 
-        self._name_pv_subgroup(LPV_indices, "L", rings, apex_dist_is_superior=True, debug=debug)
-        self._name_pv_subgroup(RPV_indices, "R", rings, apex_dist_is_superior=False, ref_superior_idx=RSPV_idx, debug=debug)
+        global_rspv = self._cutting_plane_to_identify_RSPV(LPVs, RPVs, rings)
+        RSPV_id = RPVs.index(global_rspv)
 
-        LPV_point_ids = []
-        RPV_point_ids = []
-        final_centroids = centroids.copy()
+        self._name_pv_subgroup(LPVs, "L", rings, local_seed_idx=LSPV_id)
+        self._name_pv_subgroup(RPVs, "R", rings, local_seed_idx=RSPV_id)
+
+        LPV_ids: list[int] = []
+        RPV_ids: list[int] = []
         tag_map = {"MV": 1, "LIPV": 2, "LSPV": 3, "RIPV": 4, "RSPV": 5}
 
-        # Assign boundary tags and write ring ID files
-        for ring_obj in rings:
-            if not ring_obj.name or ring_obj.name not in tag_map:
+        for ring in rings:
+            ring_name = ring.name
+            id_vec = vtk_to_numpy(ring.vtk_polydata.GetPointData().GetArray("Ids"))
+
+            tag = tag_map.get(ring_name)
+            if tag is None:
                 continue
 
-            if not self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True, check_ids=True):
-                if debug:
-                    print(f"Skipping ring {ring_obj.id} ('{ring_obj.name}') due to invalid data.")
-                continue
+            b_tag[id_vec] = tag
 
-            point_ids = vtk_to_numpy(ring_obj.vtk_polydata.GetPointData().GetArray("Ids"))
-            if point_ids.size == 0:
-                continue
+            if ring_name in ("LIPV", "LSPV"):
+                LPV_ids.extend(id_vec.tolist())
+            elif ring_name in ("RIPV", "RSPV"):
+                RPV_ids.extend(id_vec.tolist())
 
-            tag_value = tag_map[ring_obj.name]
-            try:
-                b_tag[point_ids] = tag_value
-            except IndexError:
-                print(f"Error: Point IDs for ring {ring_obj.name} out of bounds. Skipping tagging.")
-                continue
+            file_path = os.path.join(self.outdir, f"ids_{ring_name}.vtx")
+            write_vtx_file(file_path, id_vec)
+            centroids[ring_name] = ring.center
 
-            write_vtx_file(os.path.join(self.outdir, f'ids_{ring_obj.name}.vtx'), point_ids)
-            final_centroids[ring_obj.name] = ring_obj.center
-            if ring_obj.name.startswith("L"):
-                LPV_point_ids.extend(list(point_ids))
-            if ring_obj.name.startswith("R"):
-                RPV_point_ids.extend(list(point_ids))
+        write_vtx_file(os.path.join(self.outdir, "ids_LAA.vtx"), LAA_id)
+        write_vtx_file(os.path.join(self.outdir, "ids_LPV.vtx"), LPV_ids)
+        write_vtx_file(os.path.join(self.outdir, "ids_RPV.vtx"), RPV_ids)
 
-        # Perform additional UAC analysis on the left atrial region.
-        self._cutting_plane_to_identify_UAC(LPV_indices, RPV_indices, rings, LA_region, debug=debug)
-        write_vtx_file(os.path.join(self.outdir, 'ids_LAA.vtx'), adjusted_LAA_id)
-        if LPV_point_ids:
-            write_vtx_file(os.path.join(self.outdir, 'ids_LPV.vtx'), LPV_point_ids)
-        if RPV_point_ids:
-            write_vtx_file(os.path.join(self.outdir, 'ids_RPV.vtx'), RPV_point_ids)
+        return b_tag, centroids
 
-        if debug:
-            print("LA ring marking complete.")
-        return b_tag, final_centroids
-
-    def mark_ra_rings(self, adjusted_RAA_id: int, rings: list[Ring], b_tag: np.ndarray,
-                      centroids: dict, debug: bool = False) -> tuple[np.ndarray, dict, list[Ring]]:
+    def mark_ra_rings(self,
+                      adjusted_RAA_id: int,
+                      rings: list[Ring],
+                      b_tag: np.ndarray,
+                      centroids: dict,
+                      debug: bool = False
+                      ) -> tuple[np.ndarray, dict, list[Ring]]:
         """
         Marks the right atrial rings (TV, SVC, IVC, CS) by assigning anatomical names,
         updating the b_tag array with boundary tags, and recording centroids.
         """
-        if not rings:
-            return b_tag, centroids, rings
 
         # Identify the TV ring by choosing the closer of the two largest rings.
-        tv_ring = None
-        if len(rings) >= 2:
-            largest_two = sorted(rings, key=lambda r: r.np, reverse=True)[:2]
+        lengths = [r.np for r in rings]
+        sorted_idx = np.argsort(lengths)
+        largest_two = sorted_idx[-2:]
+        i0, i1 = largest_two[0], largest_two[1]
 
-            if largest_two[0].ap_dist < largest_two[1].ap_dist:
-                tv_ring = largest_two[0]
-            else:
-                tv_ring =largest_two[1]
+        if rings[i0].ap_dist < rings[i1].ap_dist:
+            tv_index = i0
+        else:
+            tv_index = i1
 
-        elif len(rings) == 1:
-            tv_ring = rings[0]
+        rings[tv_index].name = "TV"
 
-        if not tv_ring:
-            return b_tag, centroids, rings
+        # Other ring indices
+        other_indices = [i for i in range(len(rings)) if i != tv_index]
 
-        tv_ring.name = "TV"
-        if debug:
-            print(f"  Identified TV: Ring {tv_ring.id} (Size: {tv_ring.np}, Dist: {tv_ring.ap_dist:.2f})")
+        # Cluster other centers
+        centers = [rings[i].center for i in other_indices]
+        estimator = KMeans(n_clusters=2)
+        labels = estimator.fit_predict(centers)
 
-        # Cluster remaining rings to identify SVC, IVC, and CS.
-        other_indices = [i for i, r in enumerate(rings) if r.name != "TV"]
-        if other_indices:
-            SVC_indices, IVC_CS_indices, _ = self._cluster_rings(rings, n_clusters=2, debug=debug)
-            if SVC_indices:
-                svc_idx = max({idx: rings[idx].np for idx in SVC_indices}, key=lambda k: rings[k].np)
-                rings[svc_idx].name = "SVC"
-                if debug:
-                    print(f"  Identified SVC: Ring {svc_idx} (Size: {rings[svc_idx].np})")
+        # Seed SVC by apex distance
+        ap_dists = [rings[i].ap_dist for i in other_indices]
+        svc_seed = np.argmin(ap_dists)
+        svc_label = labels[svc_seed]
+        svc_cands = [other_indices[j] for j, lab in enumerate(labels) if lab == svc_label]
+        svc_index = svc_cands[0]
+        rings[svc_index].name = "SVC"
 
-            if IVC_CS_indices:
-                ivc_idx = max({idx: rings[idx].np for idx in IVC_CS_indices}, key=lambda k: rings[k].np)
-                rings[ivc_idx].name = "IVC"
+        # Identify IVC (IVC = largest of the other cluster)
+        ivc_cs_indices = [other_indices[j] for j, lab in enumerate(labels) if lab != svc_label]
+        ivc_counts = [rings[i].np for i in ivc_cs_indices]
+        ivc_pos = int(np.argmax(ivc_counts))
+        ivc_index = ivc_cs_indices[ivc_pos]
+        rings[ivc_index].name = "IVC"
 
-                if debug:
-                    print(f"  Identified IVC: Ring {ivc_idx} (Size: {rings[ivc_idx].np})")
-                cs_indices = [idx for idx in IVC_CS_indices if idx != ivc_idx]
+        # If third ring remains, name it CS
+        if len(other_indices) > 2:
+            remaining = [i for i in other_indices if i not in {svc_index, ivc_index}]
+            cs_index = remaining[0]
+            rings[cs_index].name = "CS"
 
-                if cs_indices:
-                    rings[cs_indices[0]].name = "CS"
-
-                    if debug:
-                        print(f"  Identified CS: Ring {cs_indices[0]} (Size: {rings[cs_indices[0]].np})")
-
-                        if len(cs_indices) > 1:
-                            print(f"    Warning: Multiple CS candidates {cs_indices}, assigned first.")
-
-        final_centroids = centroids.copy()
+        # Boundary tags, per‐ring .vtx, centroids
         tag_map = {"TV": 6, "SVC": 7, "IVC": 8, "CS": 9}
-        for ring_obj in rings:
-            if not ring_obj.name or ring_obj.name not in tag_map:
-                continue
+        for ring in rings:
+            name = ring.name # for tiny performance gain
+            if name in tag_map:
+                ids = vtk_to_numpy(ring.vtk_polydata.GetPointData().GetArray("Ids"))
+                b_tag[ids] = tag_map[name]
+                write_vtx_file(os.path.join(self.outdir, f"ids_{name}.vtx"), ids)
+                centroids[name] = ring.center
 
-            if not self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True, check_ids=True):
-                if debug:
-                    print(f"  Skipping RA ring {ring_obj.id} ('{ring_obj.name}') due to invalid data.")
-                continue
+        write_vtx_file(os.path.join(self.outdir, "ids_RAA.vtx"), adjusted_RAA_id)
 
-            point_ids = vtk_to_numpy(ring_obj.vtk_polydata.GetPointData().GetArray("Ids"))
+        return b_tag, centroids, rings
 
-            if point_ids.size == 0:
-                continue
+    def _cutting_plane_to_identify_UAC(self,
+                                       LPVs_indices: list,
+                                       RPVs_indices: list,
+                                       rings: list[Ring],
+                                       LA_region: vtk.vtkPolyData,
+                                       debug: bool = False):
 
-            try:
-                b_tag[point_ids] = tag_map[ring_obj.name]
-            except IndexError:
-                print(f"  Error: Point IDs for ring {ring_obj.name} out of bounds. Skipping tagging.")
-                continue
 
-            write_vtx_file(os.path.join(self.outdir, f'ids_{ring_obj.name}.vtx'), point_ids)
-            final_centroids[ring_obj.name] = ring_obj.center
-
-        write_vtx_file(os.path.join(self.outdir, 'ids_RAA.vtx'), adjusted_RAA_id)
-        if debug:
-            print("RA ring marking complete.")
-        return b_tag, final_centroids, rings
-
-    # -------------------- UAC Path and RSPV Identification --------------------
-    def _cutting_plane_to_identify_UAC(self, LPVs_indices: list, RPVs_indices: list,
-                                       rings: list[Ring], LA_region: vtk.vtkPolyData, debug: bool = False):
-        """
-        Identifies MV anterior/posterior boundaries and calculates UAC geodesic paths
-        by applying a cutting plane, then using Dijkstra's algorithm on the boundary network.
-        """
-        # Ensure groups exist; if not, we cannot compute UAC paths.
+        # Need at least one PV on each side
         if not LPVs_indices or not RPVs_indices:
             return
 
-        try:
-            # Calculate the mean centers for LPV and RPV groups.
-            LPVs_c = np.array([rings[i].center for i in LPVs_indices])
-            lpv_mean = np.mean(LPVs_c, axis=0)
-            RPVs_c = np.array([rings[i].center for i in RPVs_indices])
-            rpv_mean = np.mean(RPVs_c, axis=0)
-            # Find the MV ring's center from the ring with name "MV"
-            mv_mean = next(r.center for r in rings if r.name == "MV")
-            # Create a cutting plane using MV center and the average PV centers.
-            plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
-        except Exception as e:
-            if debug:
-                print(f"Error calculating UAC plane: {e}")
-            return
+        # ── plane through MV, mean‑LPV, mean‑RPV ───────────────────────────────
+        lpv_mean = np.mean([rings[i].center for i in LPVs_indices], axis=0)
+        rpv_mean = np.mean([rings[i].center for i in RPVs_indices], axis=0)
+        mv_mean = next(r.center for r in rings if r.name == "MV")
+        plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
 
-        # Extract the geometry from LA_region that lies above the cutting plane.
+        # ── geometry above plane & its boundary graph ─────────────────────────
         surface_above_plane = get_elements_above_plane(LA_region, plane)
-        surface_pd = apply_vtk_geom_filter(surface_above_plane)
-        # Extract boundary edges from the resulting geometry.
-        boundary_edges = get_feature_edges(
-            surface_pd,
+        surf_over = apply_vtk_geom_filter(surface_above_plane)
+        boundary = get_feature_edges(
+            surf_over,
             boundary_edges_on=True,
             feature_edges_on=False,
             manifold_edges_on=False,
-            non_manifold_edges_on=False
-        )
-        if not self._validate_vtk_data(boundary_edges, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Could not extract valid boundary edges for UAC path calculation.")
-            return
+            non_manifold_edges_on=False)
 
-        # Build a KDTree for boundary points to facilitate geodesic path mapping.
-        boundary_points = vtk_to_numpy(boundary_edges.GetPoints().GetData())
-        tree = cKDTree(boundary_points)
-        ids_on_boundary = vtk_to_numpy(boundary_edges.GetPointData().GetArray("Ids"))
+        # fast point‑lookup
+        ids_on_boundary = vtk_to_numpy(boundary.GetPointData().GetArray("Ids"))
+        bnd_points = vtk_to_numpy(boundary.GetPoints().GetData())
+        tree = cKDTree(bnd_points)
 
-        # For filtering paths later, get all 'Ids' from all rings.
-        MV_ids_all = set(
-            vtk_to_numpy(next(r.vtk_polydata.GetPointData().GetArray("Ids") for r in rings if r.name == "MV")))
-        MV_ant = set(ids_on_boundary).intersection(MV_ids_all)
-        MV_post = MV_ids_all - MV_ant
-        if MV_ant:
-            write_vtx_file(os.path.join(self.outdir, 'ids_MV_ant.vtx'), list(MV_ant))
-        if MV_post:
-            write_vtx_file(os.path.join(self.outdir, 'ids_MV_post.vtx'), list(MV_post))
+        # collect **ALL** ring IDs exactly like the procedural code
+        all_ring_ids: set[int] = set()
+        for r in rings:
+            ids_this = vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids"))
+            all_ring_ids.update(ids_this)
+
+        # additionally separate MV into ant / post for debugging output
+        mv_ids_all = vtk_to_numpy(next(r for r in rings if r.name == "MV")
+                                  .vtk_polydata.GetPointData().GetArray("Ids"))
+        mv_ant = set(ids_on_boundary).intersection(mv_ids_all)
+        mv_post = set(mv_ids_all) - mv_ant
+        write_vtx_file(os.path.join(self.outdir, 'ids_MV_ant.vtx'), list(mv_ant))
+        write_vtx_file(os.path.join(self.outdir, 'ids_MV_post.vtx'), list(mv_post))
         if debug:
-            print(f"  MV_ant: {len(MV_ant)} points, MV_post: {len(MV_post)} points.")
+            print(f"MV_ant: {len(mv_ant)} pts, MV_post: {len(mv_post)} pts.")
 
-        if debug:
-            print("  Calculating UAC geodesic paths using Dijkstra's algorithm...")
-        # Find start and end vertices on the boundary edges for the paths.
-        lpv_bb_idx = find_closest_point(boundary_edges, lpv_mean)
-        rpv_bb_idx = find_closest_point(boundary_edges, rpv_mean)
-        # Use the MV ring polydata to project the LPV and RPV means onto MV.
+        # ── indices on boundary graph for Dijkstra ‐ just like the script ────
+        lpv_bb_idx = find_closest_point(boundary, lpv_mean)
+        rpv_bb_idx = find_closest_point(boundary, rpv_mean)
+
         mv_poly = next(r.vtk_polydata for r in rings if r.name == "MV")
         lpv_mv_proj_idx = find_closest_point(mv_poly, lpv_mean)
         rpv_mv_proj_idx = find_closest_point(mv_poly, rpv_mean)
-        if lpv_mv_proj_idx < 0 or rpv_mv_proj_idx < 0:
+        lpv_mv_idx = find_closest_point(boundary, mv_poly.GetPoint(lpv_mv_proj_idx))
+        rpv_mv_idx = find_closest_point(boundary, mv_poly.GetPoint(rpv_mv_proj_idx))
+
+        if min(lpv_bb_idx, rpv_bb_idx, lpv_mv_idx, rpv_mv_idx) < 0:
             if debug:
-                print("  Warning: Failed to project PV points onto MV ring for UAC calculation.")
-            return
-        # Get the coordinates from the MV ring for these projections.
-        lpv_mv_idx = find_closest_point(boundary_edges, mv_poly.GetPoint(lpv_mv_proj_idx))
-        rpv_mv_idx = find_closest_point(boundary_edges, mv_poly.GetPoint(rpv_mv_proj_idx))
-        if lpv_bb_idx < 0 or rpv_bb_idx < 0 or lpv_mv_idx < 0 or rpv_mv_idx < 0:
-            if debug:
-                print("  Warning: Invalid start/end indices for Dijkstra's algorithm.")
+                print("Warning: invalid start/end vertex for UAC paths.")
             return
 
-        # Gather all ring IDs to later filter out any paths that are part of existing rings.
-        all_ring_ids = set()
-        for r in rings:
-            if r.name and self._validate_vtk_data(r.vtk_polydata, check_ids=True):
-                try:
-                    all_ring_ids.update(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
-                except Exception:
-                    pass
-
-        # Initialize Dijkstra's algorithm on the boundary edges network.
+        # vtk‑Dijkstra setup
         dijkstra = vtk.vtkDijkstraGraphGeodesicPath()
-        dijkstra.SetInputData(boundary_edges)
+        dijkstra.SetInputData(boundary)
 
-        def _compute_and_write_geodesic_path(start_idx, end_idx, out_name):
-            """Helper function to compute a geodesic path and write its point IDs to file."""
-            if debug:
-                print(f"    Computing geodesic path for {out_name}...")
+
+        def _compute_and_write_geodesic_path(start_idx: int,
+                                             end_idx: int,
+                                             out_name: str) -> None:
+            """Run Dijkstra, drop vertices that are already part of *any* ring,
+            write IDs to disk – may be empty (matches legacy behaviour)."""
             dijkstra.SetStartVertex(start_idx)
             dijkstra.SetEndVertex(end_idx)
             dijkstra.Update()
             path_poly = dijkstra.GetOutput()
-            if self._validate_vtk_data(path_poly, check_points=True):
-                path_coords = vtk_to_numpy(path_poly.GetPoints().GetData())
 
-                try:
-                    _, path_indices = tree.query(path_coords)
-                    path_ids_raw = set(ids_on_boundary[path_indices])
-                    path_ids_filtered = list(path_ids_raw - all_ring_ids)
-                    if path_ids_filtered:
-                        write_vtx_file(os.path.join(self.outdir, out_name), path_ids_filtered)
-                        if debug:
-                            print(f"Wrote {out_name} with {len(path_ids_filtered)} points.")
-                    else:
-                        if debug:
-                            print(f"Warning: {out_name} path resulted in zero points after filtering.")
+            ids_filtered: list[int] = []
+            if path_poly and path_poly.GetNumberOfPoints():
+                coords = vtk_to_numpy(path_poly.GetPoints().GetData())
+                # map back to boundary indices
+                _, idxs = tree.query(coords)
+                raw_ids = set(ids_on_boundary[idxs])
+                ids_filtered = list(raw_ids - all_ring_ids)  # ← ORIGINAL LINE
 
-                except Exception as e:
-                    if debug:
-                        print(f"Error during KDTree query for {out_name}: {e}")
-            else:
-                if debug:
-                    print(f"Warning: Failed to compute {out_name} path or path is empty.")
+            # always write a file – even if empty – exactly like the script
+            write_vtx_file(os.path.join(self.outdir, out_name), ids_filtered)
+            if debug:
+                print(f"Wrote {out_name} with {len(ids_filtered)} pts.")
 
-        # Calculate and write three UAC geodesic paths.
+        # three roof / MV paths
         _compute_and_write_geodesic_path(lpv_bb_idx, lpv_mv_idx, 'ids_MV_LPV.vtx')
         _compute_and_write_geodesic_path(rpv_bb_idx, rpv_mv_idx, 'ids_MV_RPV.vtx')
         _compute_and_write_geodesic_path(lpv_bb_idx, rpv_bb_idx, 'ids_RPV_LPV.vtx')
 
         if debug:
-            print("  UAC path calculation finished.")
+            print("UAC path calculation finished.")
 
     def _cutting_plane_to_identify_RSPV(self, LPVs_indices: list, RPVs_indices: list,
                                         rings: list[Ring], debug: bool = False) -> int | None:
