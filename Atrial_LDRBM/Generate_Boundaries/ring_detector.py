@@ -3,10 +3,9 @@ from typing import Tuple, List, Any
 
 import numpy as np
 import vtk
-from numpy import signedinteger, long
 from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
-from sklearn.cluster import KMeans, DBSCAN
+from sklearn.cluster import KMeans
 
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
@@ -482,6 +481,7 @@ class RingDetector:
             temp = vtk.vtkPolyData()
             temp.DeepCopy(ring.vtk_polydata)
 
+            # Create a VTK integer array where each point in the ring gets the value `ring.id`
             ids_array = numpy_to_vtk(np.full(ring.np, ring.id, dtype=int), deep=True, array_type=vtk.VTK_INT)
             ids_array.SetName("id")
             temp.GetPointData().SetScalars(ids_array)
@@ -500,57 +500,31 @@ class RingDetector:
 
 
     # -------------------- TV Splitting --------------------
-    def _split_tv(self, tv_polydata: vtk.vtkPolyData, tv_center: tuple,
-                  ivc_center: tuple, svc_center: tuple, debug: bool = False):
+    def _split_tv(self,
+                  tv_polydata: vtk.vtkPolyData,
+                  tv_center: tuple[float, float, float],
+                  ivc_center: tuple[float, float, float],
+                  svc_center: tuple[float, float, float],
+                  debug: bool = False) -> None:
         """
         Splits the tricuspid valve (TV) ring into two regions: free wall (TV_F)
         and septal wall (TV_S). Writes separate VTX files for each.
         """
-        if not self._validate_vtk_data(tv_polydata, check_points=True, check_ids=True):
-            if debug:
-                print("Warning (_split_tv): Invalid TV polydata or missing IDs.")
-            return
-        if not all([tv_center, ivc_center, svc_center]):
-            if debug:
-                print("Warning (_split_tv): Missing center points.")
-            return
+        norm1 = -get_normalized_cross_product(tv_center, svc_center, ivc_center)
+        plane_f = initialize_plane(norm1, tv_center)
+        tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv_polydata, plane_f))
+        ids_f = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
+        write_vtx_file(os.path.join(self.outdir, "ids_TV_F.vtx"), ids_f)
 
-        try:
-            # Calculate the normal for the free wall using the cross product
-            norm_free = -get_normalized_cross_product(tv_center, svc_center, ivc_center)
-            tv_f_plane = initialize_plane(norm_free, tv_center)
-        except Exception as e:
-            if debug:
-                print(f"Error calculating TV_F plane: {e}")
-            return
+        norm2 = -norm1
+        plane_s = initialize_plane(norm2, tv_center)
+        tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv_polydata,plane_s,
+                                                              extract_boundary_cells_on=True))
+        ids_s = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
+        write_vtx_file(os.path.join(self.outdir, "ids_TV_S.vtx"), ids_s)
 
-        # Extract TV_F region using the cutting plane
-        tv_f_ug = get_elements_above_plane(tv_polydata, tv_f_plane)
-        tv_f_pd = apply_vtk_geom_filter(tv_f_ug)
-        if self._validate_vtk_data(tv_f_pd, check_points=True, check_ids=True):
-            tv_f_ids = vtk_to_numpy(tv_f_pd.GetPointData().GetArray("Ids"))
-            if tv_f_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, 'ids_TV_F.vtx'), tv_f_ids)
-                if debug:
-                    print(f"Wrote ids_TV_F.vtx ({len(tv_f_ids)} points)")
-        else:
-            if debug:
-                print("Warning: TV_F splitting failed or produced empty results.")
-
-        # Invert the free wall normal to get the septal wall normal
-        norm_septal = -norm_free
-        tv_s_plane = initialize_plane(norm_septal, tv_center)
-        tv_s_ug = get_elements_above_plane(tv_polydata, tv_s_plane, extract_boundary_cells_on=True)
-        tv_s_pd = apply_vtk_geom_filter(tv_s_ug)
-        if self._validate_vtk_data(tv_s_pd, check_points=True, check_ids=True):
-            tv_s_ids = vtk_to_numpy(tv_s_pd.GetPointData().GetArray("Ids"))
-            if tv_s_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, 'ids_TV_S.vtx'), tv_s_ids)
-                if debug:
-                    print(f"Wrote ids_TV_S.vtx ({len(tv_s_ids)} points)")
-        else:
-            if debug:
-                print("Warning: TV_S splitting failed or produced empty results.")
+        if debug:
+            print(f"Split TV: {len(ids_f)} free‐wall pts, {len(ids_s)} septal‐wall pts.")
 
     # -------------------- Boundary Loop and Region Extraction --------------------
     def _find_top_boundary_loop(self, boundary_edges_polydata: vtk.vtkPolyData,
@@ -600,64 +574,30 @@ class RingDetector:
             print("Warning: No connecting boundary loop found.")
         return top_cut_loop
 
-    def _get_region_excluding_ids(self, mesh: vtk.vtkPolyData, ids_to_exclude: list[int],
-                                  debug: bool = False) -> vtk.vtkPolyData | None:
-        """
-        Returns the connected region in the mesh that does NOT contain any of the specified IDs.
-        This is used to isolate the final TOP_ENDO or TOP_EPI region.
-        """
-        if not self._validate_vtk_data(mesh, check_points=True, check_ids=True):
-            return None
-        if not ids_to_exclude:
-            return None
+    @staticmethod
+    def _get_region_not_including_ids(mesh, ids):
+        connect = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
+        num_regions = connect.GetNumberOfExtractedRegions()
+        for region_id in range(num_regions):
+            connect.AddSpecifiedRegion(region_id)
+            connect.Update()
+            surface = connect.GetOutput()
+            # Clean unused points
+            surface = clean_polydata(surface)
 
-        connect_filter = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
-        num_regions = connect_filter.GetNumberOfExtractedRegions()
-        exclude_region_id = -1
-        ids_to_exclude_set = set(ids_to_exclude)
-        if debug:
-            print(f"_get_region_excluding_ids: Evaluating {num_regions} regions for exclusion.")
+            pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
 
-        # Find which region contains any of the IDs to be excluded.
-        for region_index in range(num_regions):
-            connect_filter.AddSpecifiedRegion(region_index)
-            connect_filter.Update()
-            region_ug = connect_filter.GetOutput()
-            region_pd = apply_vtk_geom_filter(region_ug)
-            region_pd = clean_polydata(region_pd)
-            if self._validate_vtk_data(region_pd, check_points=True, check_ids=True):
-                region_ids = set(vtk_to_numpy(region_pd.GetPointData().GetArray("Ids")))
-                if not region_ids.isdisjoint(ids_to_exclude_set):
-                    exclude_region_id = region_index
-                    if debug:
-                        print(f"Excluding region {region_index} (contains IDs to exclude).")
-                    connect_filter.DeleteSpecifiedRegion(region_index)
-                    break
-            connect_filter.DeleteSpecifiedRegion(region_index)
+            if ids not in pts_surf:
+                found_id = region_id
+                # TODO: decided adding the following -> break
 
-        # Reinitialize filter to add all regions except the excluded one.
-        connect_filter = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
-        found_target = False
-        for region_index in range(num_regions):
-            if region_index != exclude_region_id:
-                connect_filter.AddSpecifiedRegion(region_index)
-                found_target = True
-        if not found_target:
-            if debug:
-                print("No target region found after exclusion.")
-            return None
-        connect_filter.Update()
-        target_ug = connect_filter.GetOutput()
-        target_pd = apply_vtk_geom_filter(target_ug)
-        target_pd = clean_polydata(target_pd)
-        if self._validate_vtk_data(target_pd, check_points=True):
-            return target_pd
-        else:
-            if debug:
-                print("Final region after exclusion is empty or invalid.")
-            return None
+            # delete added region id
+            connect.DeleteSpecifiedRegion(region_id)
+            connect.Update()
+        connect.AddSpecifiedRegion(found_id)
+        connect.Update()
+        return connect.GetOutput()
 
-    # -------------------- Standard TOP_ENDO Workflow --------------------
     def cutting_plane_to_identify_tv_f_tv_s(self, model: vtk.vtkPolyData, rings: list[Ring],
                                             debug: bool = True) -> None:
         """
@@ -666,107 +606,222 @@ class RingDetector:
         and isolates the region of interest.
         """
         # Retrieve required rings (TV, SVC, IVC) from the provided list.
-        tv_ring = next((r for r in rings if r.name == "TV"), None)
-        svc_ring = next((r for r in rings if r.name == "SVC"), None)
-        ivc_ring = next((r for r in rings if r.name == "IVC"), None)
-        if not all([tv_ring, svc_ring, ivc_ring]):
-            if debug:
-                print("Warning: Missing required rings for TOP_ENDO workflow. Aborting.")
-            return
+        tv_list = [r for r in rings if r.name == "TV"]
+        svc_list = [r for r in rings if r.name == "SVC"]
+        ivc_list = [r for r in rings if r.name == "IVC"]
+        tv_ring, svc_ring, ivc_ring = tv_list[0], svc_list[0], ivc_list[0]
+
+        # Make the cutting plane through TV -> SVC -> IVC -> TV
+        tv_center = np.array(tv_ring.center)
+        svc_center = np.array(svc_ring.center)
+        ivc_center = np.array(ivc_ring.center)
+        tv_f_plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
+
+        surf = apply_vtk_geom_filter(model)
+        above_plane = get_elements_above_plane(surf, tv_f_plane)
+        surface_over = apply_vtk_geom_filter(above_plane)
+
+        if debug:
+            write_vtx_file(os.path.join(self.outdir, "cutted_RA.vtk"), surface_over)
 
         # Split the TV ring into its free and septal parts.
-        self._split_tv(tv_ring.vtk_polydata, tv_ring.center, ivc_ring.center, svc_ring.center, debug=debug)
+        self._split_tv(tv_ring.vtk_polydata, tv_center, ivc_center, svc_center, debug=debug)
+
+        # Pull point‐ID arrays from SVC & IVC
+        svc_pts = vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
+        ivc_pts = vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
+
+        # Extract the top cut feature edge
+        top_cut = self._extract_top_cut(surface_over, ivc_pts, svc_pts, debug)
+
         if debug:
-            print("TV splitting completed.")
+            write_vtx_file(os.path.join(self.outdir, "top_endo_epi.vtk"), top_cut)
 
-        try:
-            # Create a cutting plane using the negative normalized cross product.
-            norm_1 = -get_normalized_cross_product(tv_ring.center, svc_ring.center, ivc_ring.center)
-            tv_f_plane = initialize_plane(norm_1, tv_ring.center)
-        except Exception as e:
-            if debug:
-                print(f"Error creating cutting plane: {e}")
-            return
+        # Mark points that lie on SVC or IVC
+        top_ids = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))
+        to_delete = np.zeros(top_ids.shape, dtype=int)
+        for idx, pt in enumerate(top_ids):
+            if pt in svc_pts or pt in ivc_pts:
+                to_delete[idx] = 1
 
-        # Extract geometry above the cutting plane from the input model.
-        surface_over = apply_vtk_geom_filter(get_elements_above_plane(model, tv_f_plane))
-        if not self._validate_vtk_data(surface_over, check_points=True):
-            if debug:
-                print("Warning: No geometry extracted above the TV cutting plane.")
-            return
+        # Threshold away those points
+        mesh_ds = dsa.WrapDataObject(top_cut)
+        mesh_ds.PointData.append(to_delete, "delete")
+        thresh = get_lower_threshold(mesh_ds.VTKObject,
+                                     0,
+                                     "vtkDataObject::FIELD_ASSOCIATION_POINTS",
+                                     "delete")
 
-        # Extract boundary edges from the extracted surface.
-        gamma_top = get_feature_edges(surface_over, boundary_edges_on=True, feature_edges_on=False,
-                                      manifold_edges_on=False, non_manifold_edges_on=False)
-        if not self._validate_vtk_data(gamma_top, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Feature edges extraction failed or missing 'Ids'.")
-            return
+        threshed = apply_vtk_geom_filter(thresh.GetOutputPort(), True)
 
-        # Find the boundary loop that connects the IVC and SVC rings.
-        ivc_ids = vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
-        svc_ids = vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
-        top_cut_loop = self._find_top_boundary_loop(gamma_top, ivc_ids, svc_ids, debug=debug)
-        if not self._validate_vtk_data(top_cut_loop, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Failed to isolate the connecting boundary loop.")
-            return
+        # Pick the MV‐point ID from the original top_cut
+        mv_id = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))[0]
 
-        # Remove points from the loop that belong to the IVC and SVC rings.
-        pts_in_loop = vtk_to_numpy(top_cut_loop.GetPointData().GetArray("Ids"))
-        svc_ivc_set = set(ivc_ids).union(set(svc_ids))
-        to_delete = np.array([1 if pt in svc_ivc_set else 0 for pt in pts_in_loop], dtype=int)
+        # Final TOP_ENDO IDs
+        top_endo_ids = self._get_top_endo_ids(mv_id, threshed)
+
+        write_vtx_file(os.path.join(self.outdir, "ids_TOP_ENDO.vtx"), top_endo_ids)
+
+    @staticmethod
+    def _is_top_endo_epi_cut(ivc_ids: np.ndarray,
+                             svc_ids: np.ndarray,
+                             border_points: list[int]) -> bool:
+        """
+        Returns if the given region cuts the mesh into top and lower cut for endo and epi
+        :param ivc_points: Points labeled as IVC (Inferior vena cava)
+        :param svc_points: Points labeled as SVC (Superior vena cava)
+        :param points: all points associated with this region
+        :return:
+        """
+        has_ivc = False
+        has_svc = False
+        # if there is point of region_id in both svc and ivc then it is the "top_endo+epi" we need
+        for pt in border_points:
+            if pt in ivc_ids:
+                has_ivc = True
+            if pt in svc_ids:
+                has_svc = True
+            if has_ivc and has_svc:
+                return True
+
+        return False
+
+    def _extract_top_cut(self,
+                         surface_over_tv_f: vtk.vtkPolyData,
+                         ivc_ids: np.ndarray,
+                         svc_ids: np.ndarray,
+                         debug: bool = False) -> vtk.vtkPolyData:
+        """
+        Equivalent to extract_top_cut(outdir, surface_over_tv_f, ivc_points, svc_points, debug)
+        in extract_rings.py, but returns the cleaned loop directly.
+        """
+        # Get feature edges of the surface
+        gamma_top = get_feature_edges(surface_over_tv_f,
+                                      boundary_edges_on=True,
+                                      feature_edges_on=False,
+                                      manifold_edges_on=False,
+                                      non_manifold_edges_on=False)
+
         if debug:
-            print(f"Marked {np.sum(to_delete)} SVC/IVC points for deletion from the loop.")
-        top_cut_ds = dsa.WrapDataObject(top_cut_loop)
-        top_cut_ds.PointData.append(to_delete, "delete")
-        thresh = get_lower_threshold(top_cut_ds.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
-        threshed = apply_vtk_geom_filter(thresh.GetOutput())
-        threshed = clean_polydata(threshed)
-        if not self._validate_vtk_data(threshed, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Thresholding/cleaning failed for TOP_ENDO region.")
-            return
+            surface_over_tv_f = apply_vtk_geom_filter(gamma_top)
+            write_vtx_file(os.path.join(self.outdir, '/gamma_top.vtk'), surface_over_tv_f)
 
-        # Determine which TV point (from the TV ring) to use as the exclusion marker.
-        tv_ids = vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids"))
-        threshed_ids = vtk_to_numpy(threshed.GetPointData().GetArray("Ids"))
-        tv_on_boundary = list(set(tv_ids).intersection(set(threshed_ids)))
-        ids_to_exclude = tv_on_boundary[:1] if tv_on_boundary else []
-        if not ids_to_exclude:
+        # Initialize connectivity filter for those edges
+        conn = init_connectivity_filter(gamma_top, ExtractionModes.SPECIFIED_REGIONS)
+        num_regions = conn.GetNumberOfExtractedRegions()
+        top_region = None
+
+        # Test each region for the “top” loop
+        for region_id in range(num_regions):
+            conn.AddSpecifiedRegion(region_id)
+            conn.Update()
+
+            surface_over_tv_fX = conn.GetOutput()
+            surface_over_tv_fX = clean_polydata(surface_over_tv_fX)
             if debug:
-                print("Warning: No TV points found on the thresholded loop; using fallback.")
-            closest_idx = find_closest_point(threshed, tv_ring.center)
-            if closest_idx >= 0:
-                try:
-                    ids_to_exclude = [int(threshed.GetPointData().GetArray("Ids").GetValue(closest_idx))]
-                except Exception:
-                    return
+                write_vtx_file(os.path.join(self.outdir, f'/gamma_top_{str(region_id)}.vtk'), surface_over_tv_fX)
+
+            # Gather boundary point coordinates
+            border_points = vtk_to_numpy(surface_over_tv_fX.GetPoints().GetData()).tolist()
+            if self._is_top_endo_epi_cut(ivc_ids, svc_ids, border_points):
+                top_region = region_id
+                break # (Early break when found, following original logic here)
             else:
-                return
-        if debug:
-            print(f"Using exclude ID(s): {ids_to_exclude}")
+                print(f"Region {region_id} is not the top cut for endo and epi")
 
-        # Isolate the region that does not contain the excluded ID.
-        top_endo_region = self._get_region_excluding_ids(threshed, ids_to_exclude, debug=debug)
-        if self._validate_vtk_data(top_endo_region, check_points=True, check_ids=True):
-            top_endo_ids = vtk_to_numpy(top_endo_region.GetPointData().GetArray("Ids"))
-            if top_endo_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, 'ids_TOP_ENDO.vtx'), top_endo_ids)
-                if debug:
-                    print(f"TOP_ENDO identification complete with {len(top_endo_ids)} points.")
-            else:
-                if debug:
-                    print("Warning: Final TOP_ENDO region has empty IDs.")
-        else:
-            if debug:
-                print("Warning: Failed to isolate final TOP_ENDO region.")
+            conn.DeleteSpecifiedRegion(region_id)
+            conn.Update()
+
+        # Select that region, clean, and return
+        # TODO: Decided adding the following or not -> conn.InitializeSpecifiedRegionList()
+        conn.AddSpecifiedRegion(top_region)
+        conn.Update()
+        top_cut = clean_polydata(conn.GetOutput())
+
+        if debug:
+            write_vtx_file(os.path.join(self.outdir, f"gamma_top_{top_region}.vtx"),
+                           vtk_to_numpy(top_cut.GetPointData().GetArray("Ids")))
+
+        return top_cut
+
+    def _get_region_excluding_ids(self,
+                                  mesh: vtk.vtkPolyData,
+                                  ids_to_exclude: list[int],
+                                  debug: bool = False) -> vtk.vtkPolyData:
+        """
+        Equivalent to get_region_not_including_ids(mesh, ids) in extract_rings.py.
+        Splits mesh into connected regions and returns the first region that
+        does NOT contain any of the specified point IDs.
+        """
+        # initialize connectivity filter for specified regions
+        conn = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
+        num_regions = conn.GetNumberOfExtractedRegions()
+
+        found_region = None
+        for region_id in range(num_regions):
+            conn.AddSpecifiedRegion(region_id)
+            conn.Update()
+            region = conn.GetOutput()
+            region = clean_polydata(region)
+
+            pts = vtk_to_numpy(region.GetPointData().GetArray("Ids"))
+
+            # If none of the exclude IDs appear here, this is our region
+            contains = False
+            for ex in ids_to_exclude:
+                if ex in pts:
+                    contains = True
+                    break
+
+            if not contains:
+                found_region = region_id
+                break
+
+            # Remove and continue
+            conn.DeleteSpecifiedRegion(region_id)
+            conn.Update()
+
+        if found_region is None:
+            # fallback: empty polydata
+            return vtk.vtkPolyData()
+
+        # Select the found region and return
+        conn.InitializeSpecifiedRegionList()
+        conn.AddSpecifiedRegion(found_region)
+        conn.Update()
+        return conn.GetOutput()
+
+
+    def _get_top_endo_ids(self,
+                          mv_id: int,
+                          threshed_mesh: vtk.vtkPolyData,
+                          debug: bool = False) -> np.ndarray:
+        """
+        Equivalent to get_top_endo_ids(...) from extract_rings.py.
+        Starts from the thresholded mesh, excludes the single MV ID,
+        cleans the result, and returns the remaining point IDs.
+        """
+        # Exclude MV point from the mesh
+        region = self._get_region_excluding_ids(threshed_mesh, [mv_id], debug=debug)
+        cleaned = clean_polydata(region)
+
+        # Extract its 'Ids' array
+        ids_array = cleaned.GetPointData().GetArray("Ids")
+        top_endo_ids = vtk_to_numpy(ids_array)
+
+        return top_endo_ids
 
     # -------------------- Specialized TOP_EPI/ENDO Workflow --------------------
-    def _process_top_surface(self, surface_model: vtk.vtkPolyData, plane: vtk.vtkPlane,
-                             ivc_ring_ids: np.ndarray, svc_ring_ids: np.ndarray,
-                             tv_ring_center: tuple, tv_ring_ids: np.ndarray,
-                             surface_name: str, vtx_filename: str, debug: bool = False) -> np.ndarray | None:
+    def _process_top_surface(self,
+                             surface_model: vtk.vtkPolyData,
+                             plane: vtk.vtkPlane,
+                             ivc_ring_ids: np.ndarray,
+                             svc_ring_ids: np.ndarray,
+                             tv_center: tuple,
+                             tv_ring_ids: np.ndarray,
+                             surface_name: str,
+                             vtx_filename: str,
+                             debug: bool = False ) -> np.ndarray | None:
         """
         Helper function to process a top surface (either EPI or ENDO) by applying a cutting plane,
         extracting boundary edges, filtering out unwanted regions, and isolating the final TOP region.
@@ -774,88 +829,55 @@ class RingDetector:
         Returns:
             A NumPy array of point IDs for the identified TOP surface, or None on failure.
         """
-        if debug:
-            print(f"  Starting TOP_{surface_name} identification...")
 
-        if not self._validate_vtk_data(surface_model, check_points=True, check_ids=True):
-            if debug:
-                print(f"    Warning: Invalid {surface_name} model or missing IDs.")
-            return None
 
         # Extract geometry above the given plane.
-        surface_over = apply_vtk_geom_filter(get_elements_above_plane(surface_model, plane))
-        if not self._validate_vtk_data(surface_over, check_points=True):
-            if debug:
-                print(f"    Warning: Failed to extract geometry above the plane for {surface_name}.")
-            return None
+        surf_over = apply_vtk_geom_filter(get_elements_above_plane(surface_model, plane))
 
         # Get the boundary edges (feature edges) from the extracted geometry.
-        gamma_top = get_feature_edges(surface_over, boundary_edges_on=True, feature_edges_on=False,
-                                      manifold_edges_on=False, non_manifold_edges_on=False)
-        if not self._validate_vtk_data(gamma_top, check_points=True, check_ids=True):
-            if debug:
-                print(f"    Warning: Failed to extract valid feature edges for {surface_name}.")
-            return None
+        gamma = get_feature_edges(surf_over,
+                                  boundary_edges_on=True,
+                                  feature_edges_on=False,
+                                  manifold_edges_on=False,
+                                  non_manifold_edges_on=False)
 
         # Find the connecting boundary loop using the provided IVC and SVC IDs.
-        top_cut_loop = self._find_top_boundary_loop(gamma_top, ivc_ring_ids, svc_ring_ids, debug=debug)
-        if not self._validate_vtk_data(top_cut_loop, check_points=True, check_ids=True):
-            if debug:
-                print(f"    Warning: Could not isolate the boundary loop for {surface_name}.")
-            return None
+        loop = self._extract_top_cut(surf_over, ivc_ring_ids, svc_ring_ids, debug=debug)
 
         # Filter out points from the loop that belong to the IVC/SVC rings.
-        pts_in_loop = vtk_to_numpy(top_cut_loop.GetPointData().GetArray("Ids"))
-        svc_ivc_set = set(ivc_ring_ids).union(set(svc_ring_ids))
-        to_delete = np.array([1 if pt in svc_ivc_set else 0 for pt in pts_in_loop], dtype=int)
-        top_cut_ds = dsa.WrapDataObject(top_cut_loop)
-        top_cut_ds.PointData.append(to_delete, "delete")
-        thresh = get_lower_threshold(top_cut_ds.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
-        threshed = apply_vtk_geom_filter(thresh.GetOutput())
-        threshed = clean_polydata(threshed)
-        if not self._validate_vtk_data(threshed, check_points=True, check_ids=True):
-            if debug:
-                print(f"    Warning: Thresholding/cleaning failed for {surface_name} boundary.")
-            return None
+        pts = vtk_to_numpy(loop.GetPointData().GetArray("Ids"))
 
-        # Determine which TV point to exclude by checking for intersection with TV ring IDs.
-        threshed_ids = vtk_to_numpy(threshed.GetPointData().GetArray("Ids"))
-        tv_ids_on_boundary = list(set(tv_ring_ids).intersection(set(threshed_ids)))
-        ids_to_exclude = tv_ids_on_boundary[:1] if tv_ids_on_boundary else []
-        if not ids_to_exclude:
-            if debug:
-                print(f"    Warning: No TV points found on {surface_name} boundary; using fallback.")
-            closest_idx = find_closest_point(threshed, tv_ring_center)
-            if closest_idx >= 0:
-                try:
-                    ids_to_exclude = [int(threshed.GetPointData().GetArray("Ids").GetValue(closest_idx))]
-                except Exception:
-                    return None
+        # Step 1: Convert IVC and SVC ring ID lists into sets
+        ivc_ids_set = set(ivc_ring_ids)
+        svc_ids_set = set(svc_ring_ids)
+        # Step 2: Combine them into a single set of excluded IDs
+        excluded_ids = ivc_ids_set.union(svc_ids_set)
+        # Step 3: Create a mask: 1 if the point ID is in the excluded set, otherwise 0
+        mask = []
+        for point_id in pts:
+            if point_id in excluded_ids:
+                mask.append(1)
             else:
-                return None
-        if debug:
-            print(f"    Exclude ID for {surface_name}: {ids_to_exclude}")
+                mask.append(0)
 
-        # Isolate the region that does not contain the exclude ID.
-        top_region = self._get_region_excluding_ids(threshed, ids_to_exclude, debug=debug)
-        if self._validate_vtk_data(top_region, check_points=True, check_ids=True):
-            top_ids = vtk_to_numpy(top_region.GetPointData().GetArray("Ids"))
-            if top_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, vtx_filename), top_ids)
-                if debug:
-                    print(f"  TOP_{surface_name} identification complete with {len(top_ids)} points.")
-                return top_ids
-            else:
-                if debug:
-                    print(f"    Warning: {surface_name} region identified but has empty IDs.")
-        else:
-            if debug:
-                print(f"    Warning: Failed to isolate final {surface_name} region.")
-        return None
+        mask = np.array(mask, dtype=int)
 
-    # -------------------- Specialized TOP_EPI/ENDO Workflow --------------------
-    def perform_tv_split_and_find_top_epi_endo(self, model_epi: vtk.vtkPolyData, endo_mesh_path: str,
-                                               rings: list[Ring], debug: bool = True):
+        ds = dsa.WrapDataObject(loop)
+        ds.PointData.append(mask, "delete")
+        th = get_lower_threshold(ds.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
+        threshed = apply_vtk_geom_filter(th.GetOutputPort())
+
+        mv_id = vtk_to_numpy(loop.GetPointData().GetArray("Ids"))[0]
+        final_ids = self._get_top_endo_ids(mv_id, threshed, debug=debug)
+
+        write_vtx_file(os.path.join(self.outdir, vtx_filename), final_ids)
+        return final_ids
+
+    def perform_tv_split_and_find_top_epi_endo(self,
+                                               model_epi: vtk.vtkPolyData,
+                                               endo_mesh_path: str,
+                                               rings: list[Ring],
+                                               debug: bool = True) -> None:
         """
         Specialized workflow for separate epi/endo surfaces.
         Splits the TV ring and then identifies separate TOP_EPI and TOP_ENDO regions.
@@ -866,86 +888,80 @@ class RingDetector:
             rings (list[Ring]): List of detected RA rings.
             debug (bool): Enables verbose debug output.
         """
-        # Retrieve required rings from the list.
-        tv_ring = next((r for r in rings if r.name == "TV"), None)
-        svc_ring = next((r for r in rings if r.name == "SVC"), None)
-        ivc_ring = next((r for r in rings if r.name == "IVC"), None)
-        if not all([tv_ring, svc_ring, ivc_ring]):
-            if debug:
-                print("Warning (TOP_EPI/ENDO): Missing required rings. Aborting specialized workflow.")
-            return
+        # Retrieve required rings from the list
+        tv_ring = None
+        svc_ring = None
+        ivc_ring = None
 
-        # Step 1: Perform TV splitting using the TV ring polydata.
-        self._split_tv(tv_ring.vtk_polydata, tv_ring.center, ivc_ring.center, svc_ring.center, debug=debug)
-        if debug:
-            print("TV splitting completed.")
+        # Find the rings by name
+        for ring in rings:
+            if ring.name == "TV":
+                tv_ring = ring
+            elif ring.name == "SVC":
+                svc_ring = ring
+            elif ring.name == "IVC":
+                ivc_ring = ring
 
-        # Step 2: Load the separate endocardial mesh using MeshReader.
-        try:
-            endo_loader = MeshReader(endo_mesh_path)
-            endo_mesh = endo_loader.get_polydata()
-            if not self._validate_vtk_data(endo_mesh, check_points=True):
-                raise ValueError("Endocardial mesh is empty.")
-            if not self._validate_vtk_data(endo_mesh, check_ids=True):
-                if debug:
-                    print(f"Warning: Endo mesh missing 'Ids'. Generating IDs...")
-                endo_mesh = generate_ids(endo_mesh, "Ids", "Ids")
-            if not self._validate_vtk_data(endo_mesh, check_ids=True):
-                raise ValueError("Failed to generate 'Ids' on endo mesh.")
-        except Exception as e:
-            if debug:
-                print(f"Error: Failed to load/prepare endo mesh: {e}")
-            return
+            # Exit early if all found
+            if tv_ring and svc_ring and ivc_ring:
+                break
 
-        # Step 3: Define the cutting plane using the TV, SVC, and IVC ring centers.
-        norm_1 = -get_normalized_cross_product(tv_ring.center, svc_ring.center, ivc_ring.center)
-        tv_f_plane = initialize_plane(norm_1, tv_ring.center)
+
+        # Perform TV splitting using the TV ring polydata.
+        self._split_tv(tv_ring.vtk_polydata,
+                       tv_ring.center,
+                       ivc_ring.center,
+                       svc_ring.center,
+                       debug=debug)
+
+        norm = -get_normalized_cross_product(tv_ring.center, svc_ring.center, ivc_ring.center)
+        tv_plane = initialize_plane(norm, tv_ring.center)
 
         # Step 4: Process the epi surface using the helper function.
-        self._process_top_surface(
-            surface_model=model_epi,
-            plane=tv_f_plane,
-            ivc_ring_ids=vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-            svc_ring_ids=vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-            tv_ring_center=tv_ring.center,
-            tv_ring_ids=vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-            surface_name="EPI",
-            vtx_filename="ids_TOP_EPI.vtx",
-            debug=debug
-        )
+        epi_ids = self._process_top_surface(surface_model=model_epi,
+                                            plane=tv_plane,
+                                            ivc_ring_ids=vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
+                                            svc_ring_ids=vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
+                                            tv_center=tv_ring.center,
+                                            tv_ring_ids=vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids")),
+                                            surface_name="EPI",
+                                            vtx_filename="ids_TOP_EPI.vtx",
+                                            debug=debug)
 
-        # Step 5: Map epi ring points to the endocardial mesh using KDTree.
-        if debug:
-            print("Mapping epi ring coordinates to endo mesh IDs...")
-        try:
-            svc_coords_epi = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData())
-            ivc_coords_epi = vtk_to_numpy(ivc_ring.vtk_polydata.GetPoints().GetData())
-            tv_coords_epi = vtk_to_numpy(tv_ring.vtk_polydata.GetPoints().GetData())
-            endo_coords = vtk_to_numpy(endo_mesh.GetPoints().GetData())
-            endo_ids_all = vtk_to_numpy(endo_mesh.GetPointData().GetArray("Ids"))
-            endo_tree = cKDTree(endo_coords)
-            _, ii_svc = endo_tree.query(svc_coords_epi)
-            pts_in_svc_endo = set(endo_ids_all[ii_svc])
-            _, ii_ivc = endo_tree.query(ivc_coords_epi)
-            pts_in_ivc_endo = set(endo_ids_all[ii_ivc])
-            _, ii_tv = endo_tree.query(tv_coords_epi)
-            pts_in_tv_endo = set(endo_ids_all[ii_tv])
-            if debug:
-                print("Mapping complete.")
-        except Exception as e:
-            if debug:
-                print(f"Error during KDTree mapping: {e}")
-            return
+        endo = MeshReader(endo_mesh_path).get_polydata()
+        if not endo.GetPointData().GetArray("Ids"):
+            endo = generate_ids(endo, "Ids", "Ids")
 
-        # Step 6: Process the endo surface using the helper function with the mapped IDs.
-        self._process_top_surface(
-            surface_model=endo_mesh,
-            plane=tv_f_plane,
-            ivc_ring_ids=np.array(list(pts_in_ivc_endo)),
-            svc_ring_ids=np.array(list(pts_in_svc_endo)),
-            tv_ring_center=tv_ring.center,
-            tv_ring_ids=np.array(list(pts_in_tv_endo)),
-            surface_name="ENDO",
-            vtx_filename="ids_TOP_ENDO.vtx",
-            debug=debug
-        )
+        # E) map epi ring coords → endo IDs via KDTree
+        # Convert endo geometry to NumPy arrays
+        endo_points = vtk_to_numpy(endo.GetPoints().GetData())
+        endo_ids = vtk_to_numpy(endo.GetPointData().GetArray("Ids"))
+
+        kdtree = cKDTree(endo_points)
+
+        # Convert epi ring points to NumPy
+        svc_points = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData())
+        ivc_points = vtk_to_numpy(ivc_ring.vtk_polydata.GetPoints().GetData())
+        tv_points = vtk_to_numpy(tv_ring.vtk_polydata.GetPoints().GetData())
+
+        # Query KDTree to find the index of the nearest endo point for each epi point
+        _, svc_nn_idx = kdtree.query(svc_points)
+        _, ivc_nn_idx = kdtree.query(ivc_points)
+        _, tv_nn_idx = kdtree.query(tv_points)
+
+        # Step 5: Map nearest indices to endocardial IDs, store as sets
+        mapped_svc = set(endo_ids[svc_nn_idx])
+        mapped_ivc = set(endo_ids[ivc_nn_idx])
+        mapped_tv = set(endo_ids[tv_nn_idx])
+
+        endo_ids = self._process_top_surface(surface_model=endo,
+                                             plane=tv_plane,
+                                             ivc_ring_ids=np.array(list(mapped_ivc)),
+                                             svc_ring_ids=np.array(list(mapped_svc)),
+                                             tv_center=tv_ring.center,
+                                             tv_ring_ids=np.array(list(mapped_tv)),
+                                             surface_name="ENDO",
+                                             vtx_filename="ids_TOP_ENDO.vtx",
+                                             debug=debug)
+
+        return {"TOP_EPI": epi_ids, "TOP_ENDO": endo_ids }
