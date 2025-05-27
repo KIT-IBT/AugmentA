@@ -196,6 +196,7 @@ def AugmentA(args):
 
             current_mesh_file_path = cut_path
             processed_mesh = os.path.splitext(current_mesh_file_path)[0]
+
             print(f"Mesh after orifice cutting by {orifice_func.__name__}: {current_mesh_file_path}")
             print(f"Apex ID picked by {orifice_func.__name__} for '{args.atrium} appendage apex ID picked': {apex_id}")
 
@@ -212,9 +213,12 @@ def AugmentA(args):
             print(f"Using LAA apex ID={generator.la_apex}, RAA ID={generator.ra_apex}")
 
             try:
-                generator.extract_rings(surface_mesh_path=current_mesh_file_path)
-                print(f"Ring extraction complete. Outputs under '{os.path.splitext(current_mesh_file_path)[0]}'.")
-                processed_mesh = os.path.splitext(current_mesh_file_path)[0]
+                processed_mesh_base_after_cut = os.path.splitext(current_mesh_file_path)[0]
+                path_for_rings_obj_after_cut = _ensure_obj_available(processed_mesh_base_after_cut, ".vtk") # e.g. /headless/data/LA_cutted.obj
+                generator.extract_rings(surface_mesh_path=path_for_rings_obj_after_cut)
+                # generator.extract_rings(surface_mesh_path=current_mesh_file_path)
+                print(f"INFO: Ring extraction complete. Outputs expected in directory: '{processed_mesh_base_after_cut}_surf/'.")
+                processed_mesh = processed_mesh_base_after_cut
             except Exception as e:
                 print(f"Error in extract_rings('{current_mesh_file_path}'): {e}")
                 sys.exit(1)
@@ -284,7 +288,6 @@ def AugmentA(args):
 
 
     if args.SSM_fitting and not args.closed_surface:
-        target_base_for_ssm_ops = processed_mesh
         target_base_for_ssm_ops = os.path.join(mesh_dir, f"{args.atrium}_cutted")
         print(f"Using target base for SSM operations: '{target_base_for_ssm_ops}'")
 
@@ -422,47 +425,44 @@ def AugmentA(args):
         generator.la_apex, generator.ra_apex = original_gen_laa, original_gen_raa
 
         if args.atrium == "LA":
-            la_main.run(["--mesh",
-                         current_processed_mesh_base_in_ssm,
-                         "--np",
-                         str(n_cpu),
-                         "--normals_outside",
-                         str(args.normals_outside),
-                         "--ofmt",
-                         args.ofmt,
-                         "--debug",
-                         str(args.debug),
+            la_main.run(["--mesh", current_processed_mesh_base_in_ssm,
+                         "--np", str(n_cpu),
+                         "--normals_outside", str(args.normals_outside),
+                         "--ofmt", args.ofmt,
+                         "--debug", str(args.debug),
                          "--overwrite-behaviour",
                          "append"])
+
         elif args.atrium == "RA":
-            ra_main.run(["--mesh",
-                         current_processed_mesh_base_in_ssm,
-                         "--np",
-                         str(n_cpu),
-                         "--normals_outside",
-                         str(args.normals_outside),
-                         "--ofmt",
-                         args.ofmt,
-                         "--debug",
-                         str(args.debug),
+            ra_main.run(["--mesh", current_processed_mesh_base_in_ssm,
+                         "--np", str(n_cpu),
+                         "--normals_outside", str(args.normals_outside),
+                         "--ofmt", args.ofmt,
+                         "--debug", str(args.debug),
                          "--overwrite-behaviour",
                          "append"])
+
+        processed_mesh = current_processed_mesh_base_in_ssm  # Update main tracker
+        print(f"INFO: SSM path complete. Main 'processed_mesh' updated to: {processed_mesh}")
 
     elif not args.SSM_fitting:
         fiber_mesh_base = processed_mesh
-        print(f"Preparing to resample: {fiber_mesh_base}")
 
         if args.resample_input and args.find_appendage:
-            source_extension_for_resampling_input = ".vtk" if "_cutted" in os.path.basename(processed_mesh) else mesh_ext
-            if processed_mesh == meshname_old and "_cutted" not in os.path.basename(processed_mesh):  # If it's still the original mesh
-                source_extension_for_resampling_input = mesh_ext
+            print(f"INFO: Conditional resampling active: Preparing to resample original mesh '{meshname_old}'.")
 
-
-            # We can assume resample_surf_mesh can handle meshname_old directly (e.g. path/to/file without ext).
-            #_ensure_obj_available(meshname_old, mesh_ext)  # mesh_ext is original extension
-            path_to_resample_input_obj = _ensure_obj_available(processed_mesh, source_extension_for_resampling_input)
-
+            _ensure_obj_available(meshname_old, mesh_ext)
             apex_id_for_this_resample = -1
+
+            source_ext_for_current_pm = mesh_ext  # Default
+            if processed_mesh == f"{meshname_old}_{args.atrium}_epi":
+                source_ext_for_current_pm = ".vtk"
+            elif "_cutted" in os.path.basename(processed_mesh):
+                source_ext_for_current_pm = ".vtk"
+
+            _ensure_obj_available(processed_mesh, source_ext_for_current_pm)
+
+            _ensure_obj_available(processed_mesh, source_ext_for_current_pm)
 
             resample_surf_mesh(meshname=processed_mesh,
                                target_mesh_resolution=args.target_mesh_resolution,
@@ -473,36 +473,52 @@ def AugmentA(args):
 
             processed_mesh = f"{processed_mesh}_res"
             fiber_mesh_base = processed_mesh
+            print(f"INFO: Original mesh resampled. 'processed_mesh' is now: {processed_mesh}")
 
             _ensure_obj_available(processed_mesh, original_extension=".ply")
+            print(f"INFO: Ensured {processed_mesh}.obj is available.")
 
             laa_from_resampled_csv, raa_from_resampled_csv = _load_apex_ids(processed_mesh)
             if args.atrium == "LA" or args.atrium == "LA_RA":
                 generator.la_apex = laa_from_resampled_csv
             if args.atrium == "RA" or args.atrium == "LA_RA":
                 generator.ra_apex = raa_from_resampled_csv
-            print(f"INFO: Generator apex IDs updated from resampled mesh CSV: LAA={generator.la_apex}, RAA={generator.ra_apex}")
+            print(f"INFO: Generator apex IDs updated from '{processed_mesh}_mesh_data.csv': LAA={generator.la_apex}, RAA={generator.ra_apex}")
         else:
-            print(f"INFO: No resampling in 'not SSM fitting' path, or condition not met. 'processed_mesh' remains: {processed_mesh}")
+            print(f"INFO: No resampling of original mesh in this specific non-SSM branch. "
+                  f"'processed_mesh' ({processed_mesh}) and 'fiber_mesh_base' ({fiber_mesh_base}) remain from prior steps.")
 
+        current_mesh_actual_extension = mesh_ext
         if processed_mesh == f"{meshname_old}_{args.atrium}_epi":
             # This mesh was created by generator.separate_epi_endo, which writes both .vtk and .obj.
             # We prefer .vtk as a source for conversion if .obj was somehow missing.
             current_mesh_actual_extension = ".vtk"
-
         elif "_cutted" in os.path.basename(processed_mesh):
             # This mesh was created by open_orifices_manually (refactored), which saves .vtk for the cut mesh.
             current_mesh_actual_extension = ".vtk"
-
         elif "_res" in os.path.basename(processed_mesh):
             # This mesh was created by resample_surf_mesh, which saves .ply.
             current_mesh_actual_extension = ".ply"
-
         else:
             current_mesh_actual_extension = mesh_ext
 
         path_for_labeling_obj = _ensure_obj_available(processed_mesh, current_mesh_actual_extension)
         print(f"INFO: Ensured OBJ file for ring extraction for all non-SSM paths: {path_for_labeling_obj}")
+
+        # TODO: Check if procedural code does it here
+        print(f"INFO: Finalizing apex IDs for labeling from: {processed_mesh}_mesh_data.csv")
+        laa_from_pm_csv, raa_from_pm_csv = _load_apex_ids(processed_mesh)
+        if laa_from_pm_csv is not None:
+            if generator.la_apex != laa_from_pm_csv:
+                print(f"INFO: Updating generator.la_apex from {generator.la_apex} to {laa_from_pm_csv} (from {processed_mesh}_mesh_data.csv)")
+            generator.la_apex = laa_from_pm_csv
+
+        if raa_from_pm_csv is not None:
+            if generator.ra_apex != raa_from_pm_csv:
+                print(f"INFO: Updating generator.ra_apex from {generator.ra_apex} to {raa_from_pm_csv} (from {processed_mesh}_mesh_data.csv)")
+            generator.ra_apex = raa_from_pm_csv
+
+        print(f"INFO: Apex IDs now set in generator for labeling '{processed_mesh}': LAA={generator.la_apex}, RAA={generator.ra_apex}")
 
         if args.atrium == "LA_RA":
             try:
@@ -512,22 +528,15 @@ def AugmentA(args):
                 print(f"ERROR during LA_RA extract_rings: {e}")
                 sys.exit(1)
 
-            # Fiber generation for LA_RA
-            _original_atrium_arg_temp = args.atrium  # Store before temporary change
-
             print(f"INFO: Running LA fibers for LA_RA on mesh: {fiber_mesh_base}")
             args.atrium = "LA"
+
             la_main.run(
-                ["--mesh",
-                 fiber_mesh_base,
-                 "--np",
-                 str(n_cpu),
-                 "--normals_outside",
-                 str(args.normals_outside),
-                 "--ofmt",
-                 args.ofmt,
-                 "--debug",
-                 str(args.debug),
+                ["--mesh", fiber_mesh_base,
+                 "--np", str(n_cpu),
+                 "--normals_outside", str(args.normals_outside),
+                 "--ofmt", args.ofmt,
+                 "--debug", str(args.debug),
                  "--overwrite-behaviour",
                  "append"]
             )
@@ -535,29 +544,35 @@ def AugmentA(args):
             print(f"INFO: Running RA fibers for LA_RA on mesh: {fiber_mesh_base}")
             args.atrium = "RA"
             ra_main.run(
-                ["--mesh",
-                 fiber_mesh_base,
-                 "--np",
-                 str(n_cpu),
-                 "--normals_outside",
-                 str(args.normals_outside),
-                 "--ofmt",
-                 args.ofmt,
-                 "--debug",
-                 str(args.debug),
+                ["--mesh", fiber_mesh_base,
+                 "--np", str(n_cpu),
+                 "--normals_outside", str(args.normals_outside),
+                 "--ofmt", args.ofmt,
+                 "--debug", str(args.debug),
                  "--overwrite-behaviour",
                  "append"]
             )
 
-            # Go back to the original atrium label
-            args.atrium = _original_atrium_arg_temp
+            args.atrium = "LA_RA"
+            scale_val = 1000 * float(args.scale)
+            input_mesh_carp_txt = f"{fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber"
+            output_mesh_carp_txt_um = f"{input_mesh_carp_txt}_um"
+            cmd1 = (f"meshtool convert "
+                    f"-imsh={input_mesh_carp_txt} "
+                    f"-ifmt=carp_txt "
+                    f"-omsh={output_mesh_carp_txt_um} "
+                    f"-ofmt=carp_txt "
+                    f"-scale={scale_val}")
 
-            os.system(f"meshtool convert -imsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber "
-                      f"-ifmt=carp_txt -omsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber_um "
-                      f"-ofmt=carp_txt -scale={1000 * args.scale}")
+            input_mesh_for_vtk_conversion = output_mesh_carp_txt_um
+            output_mesh_vtk_um = output_mesh_carp_txt_um
+            cmd2 = (f"meshtool convert "
+                    f"-imsh={input_mesh_for_vtk_conversion} "
+                    f"-ifmt=carp_txt "
+                    f"-omsh={output_mesh_vtk_um} -ofmt=vtk")
 
-            os.system(f"meshtool convert -imsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber_um "
-                      f"-ifmt=carp_txt -omsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber_um -ofmt=vtk")
+            os.system(cmd1)
+            os.system(cmd2)
 
         if args.atrium == "LA":
             print(f"INFO: LA path (non-SSM). Labeling and preparing fibers for: {processed_mesh}")
@@ -597,43 +612,44 @@ def AugmentA(args):
                 origin_mesh_vtk_path_map_LA = os.path.join(old_folder_for_map_LA, f"{args.atrium}.vtk")  # e.g. LA.vtk
                 volumetric_surf_vtk_path_map_LA = os.path.join(new_folder_for_map_LA, f"{args.atrium}.vtk")
                 la_main.run(
-                    ["--mesh",
-                     fiber_mesh_base,
-                     "--np",
-                     str(n_cpu),
-                     "--normals_outside",
-                     str(args.normals_outside),
-                     "--ofmt",
-                     args.ofmt,
-                     "--debug",
-                     str(args.debug),
+                    ["--mesh", fiber_mesh_base,
+                     "--np", str(n_cpu),
+                     "--normals_outside", str(0),
+                     "--mesh_type", "vol"
+                     "--ofmt", args.ofmt,
+                     "--debug", str(args.debug),
                      "--overwrite-behaviour",
                      "append"]
                 )
+
             else:
                 la_main.run(
-                    ["--mesh",
-                     fiber_mesh_base,
-                     "--np",
-                     str(n_cpu),
-                     "--normals_outside",
-                     str(args.normals_outside),
-                     "--ofmt",
-                     args.ofmt,
-                     "--debug",
-                     str(args.debug),
+                    ["--mesh", fiber_mesh_base,
+                     "--np", str(n_cpu),
+                     "--normals_outside", str(args.normals_outside),
+                     "--ofmt", args.ofmt,
+                     "--debug", str(args.debug),
                      "--overwrite-behaviour",
                      "append"]
                 )
 
-                os.system(f"meshtool convert -imsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber "
-                          f"-ifmt=carp_txt -omsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber_um "
-                          f"-ofmt=carp_txt -scale={1000 * args.scale}")
+                scale_val_la = 1000 * float(args.scale)
+                input_mesh_carp_txt_LA = f"{fiber_mesh_base}_fibers/result_{args.atrium}/{args.atrium}_bilayer_with_fiber"
+                output_mesh_carp_txt_um_LA = f"{input_mesh_carp_txt_LA}_um"
 
-                os.system(
-                    f"meshtool convert -imsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber_um "
-                    f"-ifmt=carp_txt -omsh={fiber_mesh_base}_fibers/result_RA/{args.atrium}_bilayer_with_fiber_um -ofmt=vtk")
+                cmd1_la = (f"meshtool convert "
+                           f"-imsh={input_mesh_carp_txt_LA} -ifmt=carp_txt "
+                           f"-omsh={output_mesh_carp_txt_um_LA} -ofmt=carp_txt "
+                           f"-scale={scale_val_la}")
 
+                input_mesh_for_vtk_conversion_LA = output_mesh_carp_txt_um_LA
+                output_mesh_vtk_um_LA = output_mesh_carp_txt_um_LA
+                cmd2_la = (f"meshtool convert "
+                           f"-imsh={input_mesh_for_vtk_conversion_LA} -ifmt=carp_txt "
+                           f"-omsh={output_mesh_vtk_um_LA} -ofmt=vtk")
+
+                os.system(cmd1_la)
+                os.system(cmd2_la)
 
         elif args.atrium == "RA":
             print(f"INFO: RA path (non-SSM). Current 'processed_mesh' for labeling: {processed_mesh}")
@@ -698,76 +714,85 @@ def AugmentA(args):
                      "append"]
                 )
 
-        if args.debug:
-            print(f"INFO: Debug plotting. Using mesh base: {processed_mesh}")
+    final_mesh_base_for_plot = ""
+    if args.SSM_fitting and not args.closed_surface:
+        final_mesh_base_for_plot = current_processed_mesh_base_in_ssm
+    elif not args.SSM_fitting:
+        final_mesh_base_for_plot = fiber_mesh_base
 
-            path_to_plot_file = ""
-            is_volumetric_plot = "_vol" in os.path.basename(processed_mesh) and args.closed_surface
+    if args.debug:
+        print(f"INFO: Debug plotting. Using mesh base: {processed_mesh}")
 
-            if is_volumetric_plot:
-                path_to_plot_file = f'{processed_mesh}_fibers/result_{args.atrium}/{args.atrium}_vol_with_fiber.{args.ofmt}'
+        final_mesh_input_to_fibers = ""
+        is_volumetric_plot = "_vol" in os.path.basename(final_mesh_base_for_plot) and args.closed_surface
+
+        if is_volumetric_plot:
+            path_to_plot_file = f"{processed_mesh}_fibers/result_{args.atrium}/{args.atrium}_vol_with_fiber.{args.ofmt}"
+        else:
+            # For LA_RA, the procedural script specifically constructed path using result_RA,
+            # even if args.atrium was restored to "LA_RA". We need to respect this.
+            # args.atrium at the point of plotting in procedural was its final state.
+            if args.atrium == 'LA_RA':
+                # In LA_RA case, fibers for RA part were in result_RA, and args.atrium was LA_RA for path construction.
+                path_to_plot_file = f"{processed_mesh}_fibers/result_RA/{args.atrium}_bilayer_with_fiber.{args.ofmt}"
             else:
-                # For LA_RA, the procedural script specifically constructed path using result_RA,
-                # even if args.atrium was restored to "LA_RA". We need to respect this.
-                # args.atrium at the point of plotting in procedural was its final state.
-                if args.atrium == 'LA_RA':
-                    # In LA_RA case, fibers for RA part were in result_RA, and args.atrium was LA_RA for path construction.
-                    path_to_plot_file = f'{processed_mesh}_fibers/result_RA/{args.atrium}_bilayer_with_fiber.{args.ofmt}'
-                else:
-                    path_to_plot_file = f'{processed_mesh}_fibers/result_{args.atrium}/{args.atrium}_bilayer_with_fiber.{args.ofmt}'
+                path_to_plot_file = f"{final_mesh_base_for_plot}_fibers/result_{args.atrium}/{args.atrium}_bilayer_with_fiber.{args.ofmt}"
 
-            try:
-                bil = pv.read(path_to_plot_file)
+        try:
+            bil = pv.read(path_to_plot_file)
 
-                scalar_viz_key = None
-                tag_data_array = None
+            scalar_viz_key = None
+            tag_data_array = None
+            if 'elemTag' in bil.point_data:
+                tag_data_array = bil.point_data['elemTag']
+            elif 'elemTag' in bil.cell_data:
+                bil = bil.cell_data_to_point_data(pass_cell_data=True)
                 if 'elemTag' in bil.point_data:
                     tag_data_array = bil.point_data['elemTag']
-                elif 'elemTag' in bil.cell_data:
-                    bil = bil.cell_data_to_point_data(pass_cell_data=True)
-                    if 'elemTag' in bil.point_data:
-                        tag_data_array = bil.point_data['elemTag']
 
-                if tag_data_array is not None:
-                    processed_tags_for_viz = tag_data_array.copy()
-                    mask = processed_tags_for_viz > 99
-                    processed_tags_for_viz[mask] = 0
-                    mask = processed_tags_for_viz > 80
-                    processed_tags_for_viz[mask] = 20
-                    mask_gt50 = processed_tags_for_viz > 50
-                    processed_tags_for_viz[mask_gt50] -= 50
-                    mask_gt10 = processed_tags_for_viz > 10
-                    processed_tags_for_viz[mask_gt10] -= 10
-                    bil.point_data['elemTag_visualized'] = processed_tags_for_viz
-                    scalar_viz_key = 'elemTag_visualized'
+
+            processed_tags_for_viz = tag_data_array.copy()
+
+            mask = processed_tags_for_viz > 99
+            processed_tags_for_viz[mask] = 0
+
+            mask = processed_tags_for_viz > 80
+            processed_tags_for_viz[mask] = 20
+
+            mask_gt10 = processed_tags_for_viz > 10
+            processed_tags_for_viz[mask_gt10] -= 10
+
+            mask_gt50 = processed_tags_for_viz > 50
+            processed_tags_for_viz[mask_gt50] -= 50
+
+            bil.point_data['elemTag_visualized'] = processed_tags_for_viz
+            scalar_viz_key = 'elemTag_visualized'
+
+
+            p = pv.Plotter(notebook=False)
+            if not args.closed_surface:
+                if 'fiber' in bil.point_data:
+                    geom = pv.Line()
+                    scale_glyph_by = scalar_viz_key if scalar_viz_key and scalar_viz_key in bil.point_data else None
+
+                    try:
+                        fibers = bil.glyph(orient="fiber", factor=0.5, geom=geom, scale=scale_glyph_by)
+                        p.add_mesh(fibers,
+                                   show_scalar_bar=False,
+                                   cmap='tab20',
+                                   line_width=10,
+                                   render_lines_as_tubes=True)
+
+                    except Exception as e_glyph:
+                        print(f"WARNING: Could not create fiber glyphs: {e_glyph}")
                 else:
-                    print("WARNING: 'elemTag' not found for plotting.")
+                    print("WARNING: 'fiber' data not found for glyphing.")
 
-                p = pv.Plotter(notebook=False)
-                if not args.closed_surface:
-                    if not is_volumetric_plot:
-                        if 'fiber' in bil.point_data:
-                            geom = pv.Line()
-                            scale_glyph_by = scalar_viz_key if scalar_viz_key and scalar_viz_key in bil.point_data else None
+                p.add_mesh(bil, scalars=scalar_viz_key, show_scalar_bar=False, cmap='tab20')
+                p.show()
 
-                            try:
-                                fibers = bil.glyph(orient="fiber", factor=0.5, geom=geom, scale=scale_glyph_by)
-                                p.add_mesh(fibers,
-                                           show_scalar_bar=False,
-                                           cmap='tab20',
-                                           line_width=10,
-                                           render_lines_as_tubes=True)
+        except Exception as e:
+            print(f"ERROR during debug plotting: {e}")
 
-                            except Exception as e_glyph:
-                                print(f"WARNING: Could not create fiber glyphs: {e_glyph}")
-                        else:
-                            print("WARNING: 'fiber' data not found for glyphing.")
-
-                    p.add_mesh(bil, scalars=scalar_viz_key, show_scalar_bar=False, cmap='tab20')
-                    p.show()
-
-            except Exception as e:
-                print(f"ERROR during debug plotting: {e}")
-
-        elif args.debug and not processed_mesh:  # If processed_mesh ended up empty/None
-            print("WARNING: Debug plotting enabled, but final mesh base for fiber results was not determined. Skipping plot.")
+    elif args.debug and not processed_mesh:  # If processed_mesh ended up empty/None
+        print("WARNING: Debug plotting enabled, but final mesh base for fiber results was not determined. Skipping plot.")
