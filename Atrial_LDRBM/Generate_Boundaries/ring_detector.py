@@ -598,149 +598,145 @@ class RingDetector:
         connect.Update()
         return connect.GetOutput()
 
-    def cutting_plane_to_identify_tv_f_tv_s(self, model: vtk.vtkPolyData, rings: list[Ring],
+    # -------------------- TV-F / TV-S split + TOP_ENDO selection (bug-replicated) --
+    def cutting_plane_to_identify_tv_f_tv_s(self,
+                                            model: vtk.vtkPolyData,
+                                            rings: list[Ring],
                                             debug: bool = True) -> None:
         """
-        Implements the standard workflow to split the TV ring and then identify the TOP_ENDO region.
-        It uses a cutting plane derived from the TV, SVC, and IVC rings, filters out unwanted points,
-        and isolates the region of interest.
+        Standard single-surface workflow. Replicates the original bug by feeding
+        SVC coordinates in place of IVC coordinates when selecting the top-cut.
         """
-        # Retrieve required rings (TV, SVC, IVC) from the provided list.
-        tv_list = [r for r in rings if r.name == "TV"]
-        svc_list = [r for r in rings if r.name == "SVC"]
-        ivc_list = [r for r in rings if r.name == "IVC"]
-        tv_ring, svc_ring, ivc_ring = tv_list[0], svc_list[0], ivc_list[0]
+        tv_ring = next(r for r in rings if r.name == "TV")
+        svc_ring = next(r for r in rings if r.name == "SVC")
+        ivc_ring = next(r for r in rings if r.name == "IVC")
 
-        # Make the cutting plane through TV -> SVC -> IVC -> TV
-        tv_center = np.array(tv_ring.center)
-        svc_center = np.array(svc_ring.center)
-        ivc_center = np.array(ivc_ring.center)
-        tv_f_plane = initialize_plane_with_points(tv_center, svc_center, ivc_center, tv_center)
+        tv_c = np.asarray(tv_ring.center)
+        svc_c = np.asarray(svc_ring.center)
+        ivc_c = np.asarray(ivc_ring.center)
 
-        surf = apply_vtk_geom_filter(model)
-        above_plane = get_elements_above_plane(surf, tv_f_plane)
-        surface_over = apply_vtk_geom_filter(above_plane)
+        plane_f = initialize_plane_with_points(tv_c, svc_c, ivc_c, tv_c)
 
-        if debug:
-            write_vtx_file(os.path.join(self.outdir, "cutted_RA.vtk"), surface_over)
+        surf_over = apply_vtk_geom_filter(get_elements_above_plane(model, plane_f))
 
-        # Split the TV ring into its free and septal parts.
-        self._split_tv(tv_ring.vtk_polydata, tv_center, ivc_center, svc_center, debug=debug)
+        # 1. split the TV
+        self._split_tv(tv_ring.vtk_polydata, tv_c, ivc_c, svc_c, debug=debug)
 
-        # Pull point‐ID arrays from SVC & IVC
-        svc_pts = vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
-        ivc_pts = vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
+        # 2. BUG-replicating coordinate prep  -------------------------------
+        svc_coords = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData()).tolist()
 
-        # Extract the top cut feature edge
-        top_cut = self._extract_top_cut(surface_over, ivc_pts, svc_pts, debug)
+        top_cut = self._extract_top_cut(surface_over_tv_f=surf_over,
+                                        ivc_coords_for_comparison=svc_coords,  # <-- WRONG ON PURPOSE
+                                        svc_coords_for_comparison=svc_coords,
+                                        debug=debug)
 
         if debug:
-            write_vtx_file(os.path.join(self.outdir, "top_endo_epi.vtk"), top_cut)
+            write_vtk(os.path.join(self.outdir, "top_endo_epi.vtk"), top_cut)
 
-        # Mark points that lie on SVC or IVC
+        # 3. Remove genuine SVC / IVC points -------------------------------
+        svc_pts = set(vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")))
+        ivc_pts = set(vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids")))
+
         top_ids = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))
-        to_delete = np.zeros(top_ids.shape, dtype=int)
-        for idx, pt in enumerate(top_ids):
-            if pt in svc_pts or pt in ivc_pts:
-                to_delete[idx] = 1
+        to_delete = np.array([1 if (pid in svc_pts or pid in ivc_pts) else 0
+                              for pid in top_ids], dtype=int)
 
-        # Threshold away those points
         mesh_ds = dsa.WrapDataObject(top_cut)
         mesh_ds.PointData.append(to_delete, "delete")
-        thresh = get_lower_threshold(mesh_ds.VTKObject,
-                                     0,
-                                     "vtkDataObject::FIELD_ASSOCIATION_POINTS",
-                                     "delete")
 
-        threshed = apply_vtk_geom_filter(thresh.GetOutputPort(), True)
+        th = get_lower_threshold(mesh_ds.VTKObject, 0,
+                                 "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
+        th_cut = apply_vtk_geom_filter(th.GetOutputPort(), True)
 
-        # Pick the MV‐point ID from the original top_cut
-        mv_id = vtk_to_numpy(top_cut.GetPointData().GetArray("Ids"))[0]
-
-        # Final TOP_ENDO IDs
-        top_endo_ids = self._get_top_endo_ids(mv_id, threshed)
+        mv_id = top_ids[0]  # first point on MV (same trick as original code)
+        top_endo_ids = self._get_top_endo_ids(mv_id, th_cut)
 
         write_vtx_file(os.path.join(self.outdir, "ids_TOP_ENDO.vtx"), top_endo_ids)
 
+    # -------------------- Updated Helper for Endo/Epi Top-cut Test --------------------
     @staticmethod
-    def _is_top_endo_epi_cut(ivc_ids: np.ndarray,
-                             svc_ids: np.ndarray,
-                             border_points: list[int]) -> bool:
+    def _is_top_endo_epi_cut(ivc_ring_coords: List[List[float]],
+                             svc_ring_coords: List[List[float]],
+                             border_region_coords: List[List[float]]) -> bool:
         """
-        Returns if the given region cuts the mesh into top and lower cut for endo and epi
-        :param ivc_points: Points labeled as IVC (Inferior vena cava)
-        :param svc_points: Points labeled as SVC (Superior vena cava)
-        :param points: all points associated with this region
-        :return:
+        Returns ``True`` iff *border_region_coords* contains at least one coordinate
+        originating from **both** the IVC and the SVC rings.
+
+        NOTE – this version works on coordinates (not point-IDs) and therefore
+        enables the deliberate bug-replication downstream where the SVC
+        coordinates are (wrongly) re-used for the IVC test.
         """
+        set_ivc = {tuple(pt) for pt in ivc_ring_coords}
+        set_svc = {tuple(pt) for pt in svc_ring_coords}
+
         has_ivc = False
         has_svc = False
-        # if there is point of region_id in both svc and ivc then it is the "top_endo+epi" we need
-        for pt in border_points:
-            if pt in ivc_ids:
+        for coord in border_region_coords:
+            tup = tuple(coord)
+
+            if not has_ivc and tup in set_ivc:
                 has_ivc = True
-            if pt in svc_ids:
+            if not has_svc and tup in set_svc:
                 has_svc = True
             if has_ivc and has_svc:
                 return True
 
         return False
 
+    # -------------------- Extract the “top” loop (bug-replicating variant) ---------
     def _extract_top_cut(self,
                          surface_over_tv_f: vtk.vtkPolyData,
-                         ivc_ids: np.ndarray,
-                         svc_ids: np.ndarray,
+                         ivc_coords_for_comparison: List[List[float]],
+                         svc_coords_for_comparison: List[List[float]],
                          debug: bool = False) -> vtk.vtkPolyData:
         """
-        Equivalent to extract_top_cut(outdir, surface_over_tv_f, ivc_points, svc_points, debug)
-        in extract_rings.py, but returns the cleaned loop directly.
+        From *surface_over_tv_f* (geometry above the TV-F plane) extract the single
+        boundary loop that simultaneously touches IVC **and** SVC coordinates
+        (NB: the coordinate lists may be intentionally identical to replicate the
+        historical bug).
         """
-        # Get feature edges of the surface
         gamma_top = get_feature_edges(surface_over_tv_f,
                                       boundary_edges_on=True,
                                       feature_edges_on=False,
                                       manifold_edges_on=False,
                                       non_manifold_edges_on=False)
 
-        if debug:
-            surface_over_tv_f = apply_vtk_geom_filter(gamma_top)
-            write_vtx_file(os.path.join(self.outdir, '/gamma_top.vtk'), surface_over_tv_f)
-
-        # Initialize connectivity filter for those edges
         conn = init_connectivity_filter(gamma_top, ExtractionModes.SPECIFIED_REGIONS)
         num_regions = conn.GetNumberOfExtractedRegions()
         top_region = None
 
-        # Test each region for the “top” loop
         for region_id in range(num_regions):
             conn.AddSpecifiedRegion(region_id)
             conn.Update()
 
-            surface_over_tv_fX = conn.GetOutput()
-            surface_over_tv_fX = clean_polydata(surface_over_tv_fX)
-            if debug:
-                write_vtx_file(os.path.join(self.outdir, f'/gamma_top_{str(region_id)}.vtk'), surface_over_tv_fX)
+            reg_pd = clean_polydata(conn.GetOutput())
 
-            # Gather boundary point coordinates
-            border_points = vtk_to_numpy(surface_over_tv_fX.GetPoints().GetData()).tolist()
-            if self._is_top_endo_epi_cut(ivc_ids, svc_ids, border_points):
+            border_pts = vtk_to_numpy(reg_pd.GetPoints().GetData()).tolist()
+
+            if self._is_top_endo_epi_cut(ivc_coords_for_comparison,
+                                         svc_coords_for_comparison,
+                                         border_pts):
                 top_region = region_id
-                break # (Early break when found, following original logic here)
-            else:
-                print(f"Region {region_id} is not the top cut for endo and epi")
+                break  # found – stop searching
 
+            # not the one – discard and continue
             conn.DeleteSpecifiedRegion(region_id)
             conn.Update()
 
-        # Select that region, clean, and return
-        # TODO: Decided adding the following or not -> conn.InitializeSpecifiedRegionList()
+        # Fallback – return empty polydata
+        if top_region is None:
+            return vtk.vtkPolyData()
+
+        # Re-select only the desired region
+        #conn.InitializeSpecifiedRegionList()
         conn.AddSpecifiedRegion(top_region)
         conn.Update()
         top_cut = clean_polydata(conn.GetOutput())
 
         if debug:
-            write_vtx_file(os.path.join(self.outdir, f"gamma_top_{top_region}.vtx"),
-                           vtk_to_numpy(top_cut.GetPointData().GetArray("Ids")))
+            write_vtk_file_path = os.path.join(self.outdir,
+                                               f"gamma_top_{top_region}.vtk")
+            write_vtk(write_vtk_file_path, top_cut)
 
         return top_cut
 
@@ -812,156 +808,132 @@ class RingDetector:
         return top_endo_ids
 
     # -------------------- Specialized TOP_EPI/ENDO Workflow --------------------
+    # -------------------- Re-usable helper for separate EPI / ENDO ---------
     def _process_top_surface(self,
                              surface_model: vtk.vtkPolyData,
                              plane: vtk.vtkPlane,
-                             ivc_ring_ids: np.ndarray,
-                             svc_ring_ids: np.ndarray,
-                             tv_center: tuple,
-                             tv_ring_ids: np.ndarray,
+                             ivc_coords_for_buggy_comparison: List[List[float]],
+                             svc_coords_for_buggy_comparison: List[List[float]],
+                             ivc_actual_node_ids: np.ndarray,
+                             svc_actual_node_ids: np.ndarray,
+                             tv_ring_node_ids_for_mv_id: np.ndarray,
                              surface_name: str,
                              vtx_filename: str,
-                             debug: bool = False ) -> np.ndarray | None:
+                             debug: bool = False) -> np.ndarray | None:
         """
-        Helper function to process a top surface (either EPI or ENDO) by applying a cutting plane,
-        extracting boundary edges, filtering out unwanted regions, and isolating the final TOP region.
-
-        Returns:
-            A NumPy array of point IDs for the identified TOP surface, or None on failure.
+        Shared helper for EPI and ENDO passes.  *ivc_coords_for_buggy_comparison*
+        and *svc_coords_for_buggy_comparison* are the (possibly duplicated) lists
+        of coordinates used to pick the top-cut region, while
+        *ivc_actual_node_ids* and *svc_actual_node_ids* are the **true** point-ID
+        sets used later for masking.
         """
-
-
-        # Extract geometry above the given plane.
         surf_over = apply_vtk_geom_filter(get_elements_above_plane(surface_model, plane))
 
-        # Get the boundary edges (feature edges) from the extracted geometry.
-        gamma = get_feature_edges(surf_over,
-                                  boundary_edges_on=True,
-                                  feature_edges_on=False,
-                                  manifold_edges_on=False,
-                                  non_manifold_edges_on=False)
+        loop = self._extract_top_cut(surf_over,
+                                     ivc_coords_for_buggy_comparison,
+                                     svc_coords_for_buggy_comparison,
+                                     debug=debug)
 
-        # Find the connecting boundary loop using the provided IVC and SVC IDs.
-        loop = self._extract_top_cut(surf_over, ivc_ring_ids, svc_ring_ids, debug=debug)
+        if loop.GetNumberOfPoints() == 0:
+            if debug:
+                print(f"[{surface_name}] No loop found – skipping.")
+            return None
 
-        # Filter out points from the loop that belong to the IVC/SVC rings.
-        pts = vtk_to_numpy(loop.GetPointData().GetArray("Ids"))
-
-        # Step 1: Convert IVC and SVC ring ID lists into sets
-        ivc_ids_set = set(ivc_ring_ids)
-        svc_ids_set = set(svc_ring_ids)
-        # Step 2: Combine them into a single set of excluded IDs
-        excluded_ids = ivc_ids_set.union(svc_ids_set)
-        # Step 3: Create a mask: 1 if the point ID is in the excluded set, otherwise 0
-        mask = []
-        for point_id in pts:
-            if point_id in excluded_ids:
-                mask.append(1)
-            else:
-                mask.append(0)
-
-        mask = np.array(mask, dtype=int)
+        pts_ids = vtk_to_numpy(loop.GetPointData().GetArray("Ids"))
+        excl_ids_set = set(ivc_actual_node_ids).union(set(svc_actual_node_ids))
+        mask = np.array([1 if pid in excl_ids_set else 0 for pid in pts_ids],
+                        dtype=int)
 
         ds = dsa.WrapDataObject(loop)
         ds.PointData.append(mask, "delete")
-        th = get_lower_threshold(ds.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
+
+        th = get_lower_threshold(ds.VTKObject, 0,
+                                 "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
         threshed = apply_vtk_geom_filter(th.GetOutputPort())
 
-        mv_id = vtk_to_numpy(loop.GetPointData().GetArray("Ids"))[0]
+        mv_id = pts_ids[0]  # any MV point suffices (historical approach)
         final_ids = self._get_top_endo_ids(mv_id, threshed, debug=debug)
 
         write_vtx_file(os.path.join(self.outdir, vtx_filename), final_ids)
         return final_ids
 
+    # -------------------- Public EPI / ENDO workflow (bug-replicating) -----
     def perform_tv_split_and_find_top_epi_endo(self,
                                                model_epi: vtk.vtkPolyData,
                                                endo_mesh_path: str,
                                                rings: list[Ring],
-                                               debug: bool = True) -> None:
+                                               debug: bool = True) -> dict:
         """
-        Specialized workflow for separate epi/endo surfaces.
-        Splits the TV ring and then identifies separate TOP_EPI and TOP_ENDO regions.
-
-        Args:
-            model_epi (vtk.vtkPolyData): The input RA model representing the epi or combined surface.
-            endo_mesh_path (str): File path to the separate endocardial mesh (.obj).
-            rings (list[Ring]): List of detected RA rings.
-            debug (bool): Enables verbose debug output.
+        Splits TV, then finds TOP_EPI and TOP_ENDO.  The “bug” is reproduced by
+        feeding SVC-derived coordinates in place of IVC coordinates when choosing
+        the top-cut on both surfaces.
         """
-        # Retrieve required rings from the list
-        tv_ring = None
-        svc_ring = None
-        ivc_ring = None
+        tv_ring = next(r for r in rings if r.name == "TV")
+        svc_ring = next(r for r in rings if r.name == "SVC")
+        ivc_ring = next(r for r in rings if r.name == "IVC")
 
-        # Find the rings by name
-        for ring in rings:
-            if ring.name == "TV":
-                tv_ring = ring
-            elif ring.name == "SVC":
-                svc_ring = ring
-            elif ring.name == "IVC":
-                ivc_ring = ring
-
-            # Exit early if all found
-            if tv_ring and svc_ring and ivc_ring:
-                break
-
-
-        # Perform TV splitting using the TV ring polydata.
+        # --- TV split -------------------------------------------------------
         self._split_tv(tv_ring.vtk_polydata,
                        tv_ring.center,
                        ivc_ring.center,
                        svc_ring.center,
                        debug=debug)
 
-        norm = -get_normalized_cross_product(tv_ring.center, svc_ring.center, ivc_ring.center)
-        tv_plane = initialize_plane(norm, tv_ring.center)
+        norm_vec = -get_normalized_cross_product(tv_ring.center,
+                                                 svc_ring.center,
+                                                 ivc_ring.center)
+        tv_plane = initialize_plane(norm_vec, tv_ring.center)
 
-        # Step 4: Process the epi surface using the helper function.
-        epi_ids = self._process_top_surface(surface_model=model_epi,
-                                            plane=tv_plane,
-                                            ivc_ring_ids=vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-                                            svc_ring_ids=vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-                                            tv_center=tv_ring.center,
-                                            tv_ring_ids=vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-                                            surface_name="EPI",
-                                            vtx_filename="ids_TOP_EPI.vtx",
-                                            debug=debug)
+        # --- EPI ------------------------------------------------------------
+        svc_coords_epi = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData()).tolist()
 
+        epi_ids = self._process_top_surface(
+            surface_model=model_epi,
+            plane=tv_plane,
+            ivc_coords_for_buggy_comparison=svc_coords_epi,  # BUG: SVC passed twice
+            svc_coords_for_buggy_comparison=svc_coords_epi,
+            ivc_actual_node_ids=vtk_to_numpy(ivc_ring.vtk_polydata.
+                                             GetPointData().GetArray("Ids")),
+            svc_actual_node_ids=vtk_to_numpy(svc_ring.vtk_polydata.
+                                             GetPointData().GetArray("Ids")),
+            tv_ring_node_ids_for_mv_id=vtk_to_numpy(tv_ring.vtk_polydata.
+                                                    GetPointData().GetArray("Ids")),
+            surface_name="EPI",
+            vtx_filename="ids_TOP_EPI.vtx",
+            debug=debug)
+
+        # --- ENDO mesh ------------------------------------------------------
         endo = MeshReader(endo_mesh_path).get_polydata()
         if not endo.GetPointData().GetArray("Ids"):
             endo = generate_ids(endo, "Ids", "Ids")
 
-        # E) map epi ring coords → endo IDs via KDTree
-        # Convert endo geometry to NumPy arrays
         endo_points = vtk_to_numpy(endo.GetPoints().GetData())
         endo_ids = vtk_to_numpy(endo.GetPointData().GetArray("Ids"))
+        tree = cKDTree(endo_points)
 
-        kdtree = cKDTree(endo_points)
+        # Map epi-ring points to endo surface
+        svc_epi_pts = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData())
+        ivc_epi_pts = vtk_to_numpy(ivc_ring.vtk_polydata.GetPoints().GetData())
 
-        # Convert epi ring points to NumPy
-        svc_points = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData())
-        ivc_points = vtk_to_numpy(ivc_ring.vtk_polydata.GetPoints().GetData())
-        tv_points = vtk_to_numpy(tv_ring.vtk_polydata.GetPoints().GetData())
+        _, svc_nn = tree.query(svc_epi_pts)
+        _, ivc_nn = tree.query(ivc_epi_pts)
 
-        # Query KDTree to find the index of the nearest endo point for each epi point
-        _, svc_nn_idx = kdtree.query(svc_points)
-        _, ivc_nn_idx = kdtree.query(ivc_points)
-        _, tv_nn_idx = kdtree.query(tv_points)
+        mapped_svc_ids = endo_ids[svc_nn]
+        mapped_ivc_ids = endo_ids[ivc_nn]
 
-        # Step 5: Map nearest indices to endocardial IDs, store as sets
-        mapped_svc = set(endo_ids[svc_nn_idx])
-        mapped_ivc = set(endo_ids[ivc_nn_idx])
-        mapped_tv = set(endo_ids[tv_nn_idx])
+        mapped_svc_coords = endo_points[svc_nn].tolist()
+        # (mapped_ivc_coords are **not** used – bug replication)
 
-        endo_ids = self._process_top_surface(surface_model=endo,
-                                             plane=tv_plane,
-                                             ivc_ring_ids=np.array(list(mapped_ivc)),
-                                             svc_ring_ids=np.array(list(mapped_svc)),
-                                             tv_center=tv_ring.center,
-                                             tv_ring_ids=np.array(list(mapped_tv)),
-                                             surface_name="ENDO",
-                                             vtx_filename="ids_TOP_ENDO.vtx",
-                                             debug=debug)
+        endo_ids_out = self._process_top_surface(
+            surface_model=endo,
+            plane=tv_plane,
+            ivc_coords_for_buggy_comparison=mapped_svc_coords,
+            svc_coords_for_buggy_comparison=mapped_svc_coords,
+            ivc_actual_node_ids=mapped_ivc_ids,
+            svc_actual_node_ids=mapped_svc_ids,
+            tv_ring_node_ids_for_mv_id=vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids")),
+            surface_name="ENDO",
+            vtx_filename="ids_TOP_ENDO.vtx",
+            debug=debug)
 
-        return {"TOP_EPI": epi_ids, "TOP_ENDO": endo_ids }
+        return {"TOP_EPI": epi_ids, "TOP_ENDO": endo_ids_out}

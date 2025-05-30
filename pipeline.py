@@ -25,6 +25,10 @@ specific language governing permissions and limitations
 under the License.
 
 """
+
+# TODO: WE WANT STEPS ENABLED OR DISABLED BY CHOICE SUCH THAT we do resampling first for 20 meshes and then user can come and pick the apex point
+# TODO: Next thing might be appendage point should be able to given from a text file instead of manually choosing
+
 import os
 from string import Template
 from typing import Dict, Tuple, Any
@@ -34,7 +38,6 @@ import numpy as np
 import pandas as pd
 import pyvista as pv
 from scipy.spatial import cKDTree
-
 
 from standalones.open_orifices_with_curvature import open_orifices_with_curvature
 from standalones.open_orifices_manually import open_orifices_manually
@@ -120,8 +123,6 @@ def _ensure_obj_available(base_path_no_ext: str, original_extension: str = ".vtk
 
 
 def AugmentA(args):
-    # TODO: Add a variable that is not scope limited for keeping id
-    # global apex_id
     apex_id_for_resampling: int = -1
 
 
@@ -133,8 +134,6 @@ def AugmentA(args):
     mesh_base, mesh_ext = os.path.splitext(mesh_filename)
     mesh_dir = os.path.dirname(args.mesh)
     meshname = os.path.join(mesh_dir, mesh_base)
-
-    laa_csv_id, raa_csv_id = _load_apex_ids(mesh_base)
 
     if args.normals_outside < 0:
         args.normals_outside = int(are_normals_outside(smart_reader(args.mesh)))
@@ -215,8 +214,8 @@ def AugmentA(args):
             try:
                 processed_mesh_base_after_cut = os.path.splitext(current_mesh_file_path)[0]
                 path_for_rings_obj_after_cut = _ensure_obj_available(processed_mesh_base_after_cut, ".vtk") # e.g. /headless/data/LA_cutted.obj
-                generator.extract_rings(surface_mesh_path=path_for_rings_obj_after_cut)
-                # generator.extract_rings(surface_mesh_path=current_mesh_file_path)
+                #generator.extract_rings(surface_mesh_path=processed_mesh_base_after_cut)
+                generator.extract_rings(surface_mesh_path=current_mesh_file_path)
                 print(f"INFO: Ring extraction complete. Outputs expected in directory: '{processed_mesh_base_after_cut}_surf/'.")
                 processed_mesh = processed_mesh_base_after_cut
             except Exception as e:
@@ -459,8 +458,6 @@ def AugmentA(args):
                 source_ext_for_current_pm = ".vtk"
             elif "_cutted" in os.path.basename(processed_mesh):
                 source_ext_for_current_pm = ".vtk"
-
-            _ensure_obj_available(processed_mesh, source_ext_for_current_pm)
 
             _ensure_obj_available(processed_mesh, source_ext_for_current_pm)
 

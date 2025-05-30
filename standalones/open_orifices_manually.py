@@ -58,7 +58,6 @@ def _clean_mesh(meshpath: str, atrium: str) -> Tuple[str, str]:
     clean_path_vtk = clean_base + ".vtk"
     clean_path_obj = clean_base + ".obj"
 
-    print(f"  Cleaning mesh: {meshpath} -> {clean_path_vtk}")
     meshin = pv.read(meshpath)
     meshfix = pymeshfix.MeshFix(meshin)
     meshfix.repair()
@@ -93,13 +92,22 @@ def _get_orifices(atrium: str) -> List[str]:
     Return the list of orifices for the given atrium.
     """
     if atrium == "LA":
-        return ['mitral valve', 'left inferior pulmonary vein', 'left superior pulmonary vein',
-                'right inferior pulmonary vein', 'right superior pulmonary vein']
-    elif atrium == "RA":  # Added elif for clarity
-        return ['tricuspid valve', 'inferior vena cava', 'superior vena cava', 'coronary sinus']
-    else:
-        raise ValueError(f"Unknown atrium type for orifices: {atrium}")
+        orifices = ['mitral valve',
+                    'left inferior pulmonary vein',
+                    'left superior pulmonary vein',
+                    'right inferior pulmonary vein',
+                    'right superior pulmonary vein']
 
+    elif atrium == "RA" or atrium == "LA_RA":
+        orifices = ['tricuspid valve',
+                    'inferior vena cava',
+                    'superior vena cava',
+                    'coronary sinus']
+
+    else:
+        raise ValueError(f"Unknown/Unsupported atrium type for orifices: {atrium}")
+
+    return orifices
 
 def open_orifices_manually(meshpath: str,
                            atrium: str,
@@ -206,7 +214,6 @@ def run_standalone():
             args.debug
         )
         print(f"Standalone run complete. Cut mesh: {cut_mesh}, Apex ID: {final_apex_id}")
-        # NOTE: This standalone run does NOT trigger the ring detection anymore.
     except Exception as e:
         print(f"Standalone execution failed: {e}")
         sys.exit(1)
