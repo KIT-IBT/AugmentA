@@ -396,8 +396,8 @@ class RingDetector:
 
         # Collect all ring point IDs
         all_ring_ids_set = set()
-        for ring_obj in rings:
-            ids = vtk_to_numpy(ring_obj.vtk_polydata.GetPointData().GetArray("Ids"))
+        for ring in rings:
+            ids = vtk_to_numpy(ring.vtk_polydata.GetPointData().GetArray("Ids"))
             all_ring_ids_set.update(ids)
 
         # MV anterior/posterior

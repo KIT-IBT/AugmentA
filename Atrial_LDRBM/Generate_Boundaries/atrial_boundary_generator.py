@@ -4,7 +4,7 @@ import shutil
 from glob import glob
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
@@ -61,25 +61,46 @@ class AtrialBoundaryGenerator:
         self.ring_info: Dict[str, Any] = {}
         self.element_tags: Dict[str, str] = {}
 
-        self.polydata = None
+        self.polydata = None  # Initial mesh polydata
+
         if os.path.exists(self.mesh_path):
             try:
                 reader = MeshReader(self.mesh_path)
                 self.polydata = reader.get_polydata()
 
-                if self.debug and (self.polydata is None or
-                                   self.polydata.GetNumberOfPoints() == 0):
-                    print(f"Warning: Initial mesh loaded from {self.mesh_path} "
-                          f"is empty or invalid.")
+                if self.debug:
+                    if self.polydata is None or self.polydata.GetNumberOfPoints() == 0:
+                        print(f"Warning: Initial mesh loaded from {self.mesh_path} is empty or invalid.")
+
             except Exception as e:
                 if self.debug:
-                    print(f"Warning: Could not load initial mesh "
-                          f"{self.mesh_path} in AtrialBoundaryGenerator "
-                          f"constructor: {e}")
+                    print(
+                        f"Warning: Could not load initial mesh {self.mesh_path} in AtrialBoundaryGenerator constructor: {e}")
         else:
             if self.debug:
-                print(f"Warning: Initial mesh_path {self.mesh_path} provided to "
-                      f"AtrialBoundaryGenerator does not exist.")
+                print(
+                    f"Warning: Initial mesh_path {self.mesh_path} provided to AtrialBoundaryGenerator does not exist.")
+
+        self.active_surface_for_rings: vtk.vtkPolyData = None
+
+        self.epi_surface_polydata: vtk.vtkPolyData = None
+        self.endo_surface_polydata: vtk.vtkPolyData = None
+        self.combined_wall_polydata: vtk.vtkPolyData = None
+        self.epi_surface_path: str = None
+        self.endo_surface_path: str = None
+        self.combined_wall_path: str = None
+
+        self.la_isolated_region_polydata: vtk.vtkPolyData = None
+        self.la_ring_detector: RingDetector = None
+        self.la_tagged_boundaries_polydata: vtk.vtkPolyData = None
+
+        self.ra_isolated_region_polydata: vtk.vtkPolyData = None
+        self.ra_ring_detector: RingDetector = None
+        self.ra_tagged_boundaries_polydata: vtk.vtkPolyData = None
+
+        self.active_ra_epi_for_top_rings: vtk.vtkPolyData = None
+        self.ra_isolated_region_for_top_epi_endo: vtk.vtkPolyData = None
+        self.ra_ring_detector_top_epi_endo: RingDetector = None
 
     def _get_base_mesh(self) -> str:
         """Returns the base mesh filename (without extension)."""
@@ -196,10 +217,12 @@ class AtrialBoundaryGenerator:
             print("ERROR: OBJ input for meshtool could not be prepared.")
             raise RuntimeError("Failed to prepare OBJ input for meshtool")
 
-    def _process_LA_region(self,
-                           input_mesh_polydata: vtk.vtkPolyData,
-                           outdir: str,
-                           is_biatrial: bool) -> dict:
+    def _process_LA_region(
+            self,
+            input_mesh_polydata: vtk.vtkPolyData,
+            outdir: str,
+            is_biatrial: bool
+    ) -> dict:
         """
         Processes the LA region and returns a centroid dictionary that now
         also includes the LAA apex (“LAA”) and the LAA base (“LAA_base”)
@@ -212,97 +235,89 @@ class AtrialBoundaryGenerator:
         final_centroids = {}
         laa_coord_on_input = None  # Store the LAA coordinate for reuse
 
+        # Validate and fetch the LAA apex coordinate
         try:
-            if not (0 <= self.la_apex and self.la_apex < input_mesh_polydata.GetNumberOfPoints()):
-                raise IndexError(f"LAA ID {self.la_apex} is out of bounds for current input mesh "
-                                 f"(size: {input_mesh_polydata.GetNumberOfPoints()}).")
+            num_points = input_mesh_polydata.GetNumberOfPoints()
+            if not (0 <= self.la_apex and self.la_apex < num_points):
+                raise IndexError(
+                    f"LAA ID {self.la_apex} is out of bounds for current input mesh "
+                    f"(size: {num_points})."
+                )
 
             laa_coord_on_input = input_mesh_polydata.GetPoint(self.la_apex)
             final_centroids["LAA"] = laa_coord_on_input
 
         except IndexError as e:
-            print(f"ERROR_ABG_LA: Invalid LAA ID {self.la_apex} for current input mesh. Cannot proceed. {e}")
+            print(
+                f"ERROR_ABG_LA: Invalid LAA ID {self.la_apex} for current input mesh. "
+                f"Cannot proceed. {e}"
+            )
             return {}
 
+        # If a base ID for the LAA was provided, validate and fetch its coordinate
         if self.la_base is not None:
             try:
-                if not (0 <= self.la_base and self.la_base < input_mesh_polydata.GetNumberOfPoints()):
+                num_points = input_mesh_polydata.GetNumberOfPoints()
+                if not (0 <= self.la_base and self.la_base < num_points):
                     raise IndexError(f"LAA_base ID {self.la_base} is out of bounds for current input mesh.")
 
                 final_centroids["LAA_base"] = input_mesh_polydata.GetPoint(self.la_base)
 
             except IndexError as e:
                 if self.debug:
-                    print(f"WARN_LA: LAA_base ID {self.la_base} invalid for current input. Not added to centroids. {e}")
+                    print(
+                        f"WARN_LA: LAA_base ID {self.la_base} invalid for current input. "
+                        f"Not added to centroids. {e}"
+                    )
 
-        """
-        la_ap_point_coord_for_csv = None
-        la_bs_point_coord_for_csv = None
-        if hasattr(self, "polydata") and self.polydata is not None:
-            if (self.la_apex is not None and
-                    0 <= self.la_apex < self.polydata.GetNumberOfPoints()):
-                la_ap_point_coord_for_csv = self.polydata.GetPoint(self.la_apex)
+        la_region_polydata: vtk.vtkPolyData = None
+        # Coordinate used for isolation if biatrial
 
-            if (self.la_base is not None and
-                    0 <= self.la_base < self.polydata.GetNumberOfPoints()):
-                la_bs_point_coord_for_csv = self.polydata.GetPoint(self.la_base)
-        """
-
-
-
-
-        # -------------------------------------------------- isolate region
         if is_biatrial:
+            # For biatrial meshes, isolate LA region from combined RA/LA mesh
             try:
+                # Get the actual LA apex coordinate from the full mesh
                 la_ap_point_coord = input_mesh_polydata.GetPoint(self.la_apex)
 
+                # Run a connectivity filter over all regions, then fetch the output
                 mesh_conn = init_connectivity_filter(input_mesh_polydata, ExtractionModes.ALL_REGIONS, True).GetOutput()
 
+                # Ensure connectivity filter output is valid
                 if mesh_conn is None or mesh_conn.GetNumberOfPoints() == 0:
-                    print(f"ERROR_ABG: Connectivity filter produced no output or empty mesh for processing.")
+                    print(f"ERROR: Connectivity filter produced no output or empty mesh for processing.")
                     raise RuntimeError(f"Connectivity filter failed for")
 
+                # Fetch the RegionId array to determine which points belong to LA
                 arr = mesh_conn.GetPointData().GetArray("RegionId")
                 if arr is None:
-                    msg = f"ABG LA/RA: 'RegionId' array not found on mesh_conn for input {input_mesh_polydata}"
+                    msg = f"LA_RA: 'RegionId' array not found on mesh_conn for input {input_mesh_polydata}"
                     print(f"ERROR: {msg}")
-
                     raise RuntimeError(msg)
 
                 arr.SetName("RegionID")
                 id_vector = vtk_to_numpy(arr)
 
-                if mesh_conn.GetNumberOfPoints() != len(id_vector):
-                    msg = (f"ABG LA/RA: Mismatch! mesh_conn has {mesh_conn.GetNumberOfPoints()} points, "
-                           f"but 'RegionID' array has {len(id_vector)} entries. Input mesh: {self.mesh_path}, "
-                           f"Processed surface for rings: name associated with 'input_mesh_polydata'.")
-                    print(f"ERROR: {msg}")
-
-                    raise RuntimeError(msg)
-
+                # Find the closest point index in mesh_conn to the LA apex coordinate
                 temp_LAA_id = find_closest_point(mesh_conn, la_ap_point_coord)
                 if temp_LAA_id < 0:
-                    msg = f"ABG LA: find_closest_point failed to find LA apex on mesh_conn (returned {temp_LAA_id}). Input mesh for connectivity: {self.mesh_path}, Processed: path was {input_mesh_polydata.GetObjectName() if hasattr(input_mesh_polydata, 'GetObjectName') else 'N/A'}"
+                    msg = (f"LA: find_closest_point failed to find LA apex on mesh_conn (returned {temp_LAA_id}). "
+                           f"Input mesh for connectivity: {self.mesh_path}, Processed: path was "
+                           f"{input_mesh_polydata.GetObjectName() if hasattr(input_mesh_polydata, 'GetObjectName') else 'N/A'}")
                     print(f"ERROR: {msg}")
                     raise RuntimeError(msg)
 
+                # Ensure the found index is within the bounds of the RegionID array
                 if temp_LAA_id >= len(id_vector):  # Check if the ID is too large for the region ID array
-                    msg = (f"ABG LA: Point index {temp_LAA_id} (from find_closest_point on mesh_conn) "
+                    msg = (f"LA: Point index {temp_LAA_id} (from find_closest_point on mesh_conn) "
                            f"is out of bounds for RegionID array (id_vector) of size {len(id_vector)}. "
-                           f"Mesh_conn points: {mesh_conn.GetNumberOfPoints()}. "
-                           f"This usually means the connectivity filter's RegionId pointdata doesn't cover all points in its output geometry, "
-                           f"or the chosen apex point on mesh_conn is an outlier without a region ID.")
+                           f"Mesh_conn points: {mesh_conn.GetNumberOfPoints()}.")
                     print(f"ERROR: {msg}")
-                    # Further debugging: print info about mesh_conn and the point itself
-                    # print(f"DEBUG_ABG_LA: mesh_conn details: {mesh_conn}")
-                    # if 0 <= temp_LAA_id < mesh_conn.GetNumberOfPoints():
-                    #     print(f"DEBUG_ABG_LA: Coordinates of problematic point {temp_LAA_id} in mesh_conn: {mesh_conn.GetPoint(temp_LAA_id)}")
-                    # else:
-                    #     print(f"DEBUG_ABG_LA: Problematic point ID {temp_LAA_id} is also out of bounds for mesh_conn itself.")
                     raise IndexError(msg)
 
+                # Determine which region tag corresponds to LA
                 LA_tag_val = id_vector[temp_LAA_id]
 
+                # Threshold the mesh to isolate only points with the LA tag value
                 la_thresh = get_threshold_between(
                     mesh_conn,
                     LA_tag_val,
@@ -310,17 +325,19 @@ class AtrialBoundaryGenerator:
                     "vtkDataObject::FIELD_ASSOCIATION_POINTS",
                     "RegionID"
                 )
-
                 la_poly_ug = la_thresh.GetOutput()
                 la_poly = apply_vtk_geom_filter(la_poly_ug)
 
+                # If the isolated LA polydata is valid and non-empty, regenerate 'Ids' array
                 if la_poly and la_poly.GetNumberOfPoints() > 0:
                     if la_poly.GetPointData().GetArray("Ids"):
                         if self.debug:
-                            print(
-                                f"DEBUG_ABG_LA: Removing existing 'Ids' from isolated LA part before local generation.")
+                            print("DEBUG_LA: Removing existing 'Ids' from isolated LA part before local generation.")
+
                         la_poly.GetPointData().RemoveArray("Ids")
-                        la_region_polydata = generate_ids(la_poly, "Ids", "Ids")
+
+                    la_region_polydata = generate_ids(la_poly, "Ids", "Ids")
+
                 else:
                     print("Warning: LA region extraction resulted in empty mesh.")
                     return {}
@@ -328,87 +345,106 @@ class AtrialBoundaryGenerator:
             except Exception as e:
                 print(f"ERROR during LA region extraction: {e}")
                 return {}
-        else:
-            la_region_polydata = input_mesh_polydata
 
+        else:
+            # Non-biatrial case: use the input mesh directly for LA processing
+            la_region_polydata = input_mesh_polydata
             try:
+                # Validate and fetch the LA apex coordinate from the LA-only mesh
                 la_ap_point_coord = la_region_polydata.GetPoint(self.la_apex)
+
             except IndexError:
                 print(f"ERROR: LA apex ID {self.la_apex} out of bounds for LA-only mesh.")
                 return {}
 
+            # If an 'Ids' array already exists, remove it before regenerating
             if la_region_polydata.GetPointData().GetArray("Ids"):
                 if self.debug:
-                    print(f"DEBUG_ABG_LA: LA-only: Removing existing 'Ids' before local generation for consistency.")
+                    print(f"DEBUG_LA: LA-only: Removing existing 'Ids' before local generation for consistency.")
                 la_region_polydata.GetPointData().RemoveArray("Ids")  # Ensure it's fresh if we regenerate
+
             la_region_polydata = generate_ids(la_region_polydata, "Ids", "Ids")
 
-        # ring detection
-        if la_region_polydata and la_ap_point_coord:
-            write_vtk(os.path.join(outdir, "LA.vtk"), la_region_polydata)
+        self.la_isolated_region_polydata = la_region_polydata
 
-            adjusted_LAA = find_closest_point(la_region_polydata, la_ap_point_coord)
+        # === Ring detection on the LA region ===
+        if self.la_isolated_region_polydata and la_ap_point_coord:
+            # Write the LA-only mesh to disk
+            write_vtk(os.path.join(outdir, "LA.vtk"), self.la_isolated_region_polydata)
+
+            # Find the index of the closest point to the LA apex on the LA-only mesh
+            adjusted_LAA = find_closest_point(self.la_isolated_region_polydata, la_ap_point_coord)
             if adjusted_LAA < 0:
                 adjusted_LAA = self.la_apex
 
-            apex_coord_for_detector = la_region_polydata.GetPoint(adjusted_LAA)
+            apex_coord_for_detector = self.la_isolated_region_polydata.GetPoint(adjusted_LAA)
 
             try:
-                detector_LA = RingDetector(la_region_polydata,
-                                           apex_coord_for_detector,
-                                           outdir)
-                rings_la = detector_LA.detect_rings(debug=self.debug)
+                self.la_ring_detector = RingDetector(
+                    self.la_isolated_region_polydata,
+                    apex_coord_for_detector,
+                    outdir
+                )
 
-                b_tag_la, la_centroids = detector_LA.mark_la_rings(
+                rings_la = self.la_ring_detector.detect_rings(debug=self.debug)
+
+                b_tag_la, la_centroids = self.la_ring_detector.mark_la_rings(
                     adjusted_LAA,
                     rings_la,
                     np.zeros(la_region_polydata.GetNumberOfPoints()),
                     {},
-                    la_region_polydata,
+                    self.la_isolated_region_polydata,
                     debug=self.debug
                 )
 
-                ds_la = dsa.WrapDataObject(la_region_polydata)
+                # Attach boundary tags to point data and write to disk
+                ds_la = dsa.WrapDataObject(self.la_isolated_region_polydata)
                 ds_la.PointData.append(b_tag_la, "boundary_tag")
-                write_vtk(os.path.join(outdir, "LA_boundaries_tagged.vtk"),
-                          ds_la.VTKObject)
 
-                # -------------------- add apex / base --------------------
+                self.la_tagged_boundaries_polydata = ds_la.VTKObject
+                write_vtk(os.path.join(outdir, "LA_boundaries_tagged.vtk"), self.la_tagged_boundaries_polydata)
 
+                # Copy centroids and ensure LAA coordinate is included
                 final_la_centroids = la_centroids.copy()
                 if 'la_ap_point_coord' in locals() and la_ap_point_coord is not None:
                     final_la_centroids["LAA"] = la_ap_point_coord
-                elif self.debug:
+
+                else:
                     try:
-                        if self.la_apex is not None and 0 <= self.la_apex < input_mesh_polydata.GetNumberOfPoints():
-                            final_la_centroids["LAA"] = input_mesh_polydata.GetPoint(self.la_apex)
+                        if self.la_apex is not None:
+                            num_points = input_mesh_polydata.GetNumberOfPoints()
+
+                            if 0 <= self.la_apex and self.la_apex < num_points:
+                                final_la_centroids["LAA"] = input_mesh_polydata.GetPoint(self.la_apex)
+
                             if self.debug:
-                                print(f"DEBUG_ABG_LA: Fallback used for 'LAA' coordinate in CSV output.")
-                        elif self.debug:
-                            print(
-                                f"WARN_ABG_LA: 'LAA' coordinate could not be determined for CSV (self.la_apex: {self.la_apex}).")
+                                print(f"DEBUG_LA: Fallback used for 'LAA' coordinate in CSV output.")
+                        else:
+                            if self.debug:
+                                print(f"WARN_LA: 'LAA' coordinate could not be determined for CSV (self.la_apex: {self.la_apex}).")
+
                     except IndexError:
                         if self.debug:
-                            print(
-                                f"WARN_ABG_LA: Error fetching 'LAA' coordinate for CSV via fallback (self.la_apex: {self.la_apex}).")
+                            print(f"WARN_LA: Error fetching 'LAA' coordinate for CSV via fallback (self.la_apex: {self.la_apex}).")
 
-                """    
-                if la_ap_point_coord_for_csv is not None:
-                    final_la_centroids["LAA"] = la_ap_point_coord_for_csv
-                if la_bs_point_coord_for_csv is not None:
-                    final_la_centroids["LAA_base"] = la_bs_point_coord_for_csv
-                """
-
+                # If a base ID was provided, attempt to include its coordinate
                 if self.la_base is not None:
                     try:
-                        if 0 <= self.la_base < input_mesh_polydata.GetNumberOfPoints():
+                        num_points = input_mesh_polydata.GetNumberOfPoints()
+
+                        if 0 <= self.la_base and self.la_base < num_points:
                             final_la_centroids["LAA_base"] = input_mesh_polydata.GetPoint(self.la_base)
-                        elif self.debug:
-                            print(f"WARN_ABG_LA: LAA_base ID {self.la_base} is out of bounds for current mesh; "
-                                  f"'LAA_base' not added to centroids for CSV.")
+
+                        else:
+                            if self.debug:
+                                print(f"WARN_ABG_LA: LAA_base ID {self.la_base} is out of bounds for current mesh; "
+                                      f"'LAA_base' not added to centroids for CSV.")
+
                     except IndexError:  # Should be caught by the bounds check, but as a safeguard
-                        if self.debug: print(
-                            f"WARN_ABG_LA: Error fetching 'LAA_base' coordinate for CSV (self.la_base: {self.la_base}).")
+                        if self.debug:
+                            print(
+                                f"WARN_LA: Error fetching 'LAA_base' coordinate for CSV (self.la_base: {self.la_base}).")
+
                 return final_la_centroids
 
             except Exception as e:
@@ -417,9 +453,6 @@ class AtrialBoundaryGenerator:
 
         return {}
 
-    # ---------------------------------------------------------------------
-    #  Modified RA processing – now adds RAA / RAA_base to centroid output
-    # ---------------------------------------------------------------------
     def _process_RA_region(self,
                            input_mesh_polydata: vtk.vtkPolyData,
                            outdir: str,
@@ -596,58 +629,83 @@ class AtrialBoundaryGenerator:
         if self.debug:
             print(f"Initiating standard ring extraction on: {surface_mesh_path}")
 
-        # Prepare output directory
-        # outdir = self._prepare_output_directory("_surf")
         surface_base = os.path.splitext(surface_mesh_path)[0]
         outdir = f"{surface_base}_surf"
         os.makedirs(outdir, exist_ok=True)
 
-        # Clear previous ids_* from this specific outdir
+        # Remove any existing 'ids_*' files in the output directory
         for f_path in glob(os.path.join(outdir, 'ids_*')):
             if os.path.isfile(f_path):
                 os.remove(f_path)
 
-        # Read the specified surface mesh
+        # Read the surface mesh file and ensure it has an "Ids" array on its points
         try:
-            # TODO: Check if surgace_mesh_path is .obj or not.
-            print(f"surface_mesh_path: {surface_mesh_path}")
-            print(f"Type of surface_mesh_path: {type(surface_mesh_path)}")
             mesh_obj = MeshReader(surface_mesh_path)
-            input_mesh_polydata = mesh_obj.get_polydata()
+            self.active_surface_for_rings = mesh_obj.get_polydata()
 
-            if not input_mesh_polydata.GetPointData() or not input_mesh_polydata.GetPointData().GetArray("Ids"):
-                input_mesh_polydata = generate_ids(input_mesh_polydata, "Ids", "Ids")
+            # If the mesh has no point data or no "Ids" array, generate one
+            pt_data = self.active_surface_for_rings.GetPointData()
+            if not pt_data or not pt_data.GetArray("Ids"):
+                self.active_surface_for_rings = generate_ids(self.active_surface_for_rings,
+                                                             "Ids",
+                                                             "Ids")
 
         except Exception as e:
             print(f"ERROR reading surface mesh {surface_mesh_path}: {e}")
             raise
 
-        centroids = {}
+        # Collect centroids from LA and RA regions (biatrial or single chamber)
+        centroids: Dict[Any, Any] = {}
 
         if self.la_apex is not None and self.ra_apex is not None:
-            # Biatrial case: process both from the input mesh
-            la_centroids = self._process_LA_region(input_mesh_polydata, outdir, is_biatrial=True)
+            # Biatrial case: process both LA and RA from the same mesh
+            la_centroids = self._process_LA_region(
+                self.active_surface_for_rings,
+                outdir,
+                is_biatrial=True
+            )
             centroids.update(la_centroids)
-            ra_centroids = self._process_RA_region(input_mesh_polydata, outdir, is_biatrial=True)
+
+            ra_centroids = self._process_RA_region(
+                self.active_surface_for_rings,
+                outdir,
+                is_biatrial=True
+            )
             centroids.update(ra_centroids)
 
         elif self.la_apex is not None:
-            # LA only case: process input mesh as LA
-            la_centroids = self._process_LA_region(input_mesh_polydata, outdir, is_biatrial=False)
+            # LA-only case: process LA region
+            la_centroids = self._process_LA_region(
+                self.active_surface_for_rings,
+                outdir,
+                is_biatrial=False
+            )
             centroids.update(la_centroids)
 
         elif self.ra_apex is not None:
-            # RA only case: process input mesh as RA
-            ra_centroids = self._process_RA_region(input_mesh_polydata, outdir, is_biatrial=False)
+            # RA-only case: process RA region
+            ra_centroids = self._process_RA_region(
+                self.active_surface_for_rings,
+                outdir,
+                is_biatrial=False
+            )
             centroids.update(ra_centroids)
+
         else:
+            # Neither apex provided: cannot proceed
             raise ValueError("No apex ID provided for extract_rings.")
 
-        processed_centroids_for_df = {key: list(value) for key, value in centroids.items()}
+        # Convert each centroid’s values into a list for DataFrame construction
+        processed_centroids_for_df: Dict[Any, List[Any]] = {}
+        for key, value in centroids.items():
+            processed_centroids_for_df[key] = list(value)
+
+        # Build a DataFrame and write it to CSV
         df = pd.DataFrame(processed_centroids_for_df)
         csv_path = os.path.join(outdir, "rings_centroids.csv")
         write_csv(csv_path, df)
 
+        # Store the raw centroids for later use
         self.ring_info = centroids
 
     def separate_epi_endo(self, tagged_volume_mesh_path: str, atrium: str) -> None:
@@ -659,14 +717,55 @@ class AtrialBoundaryGenerator:
             tagged_volume_mesh_path (str): Path to the tagged volume mesh.
             atrium (str): 'LA' or 'RA'.
         """
+        # Ensure element tags are loaded before proceeding
         if not self.element_tags:
             raise RuntimeError(
-                "Element tags missing in AtrialBoundaryGenerator. Call load_element_tags() before separate_epi_endo().")
+                "Element tags missing in AtrialBoundaryGenerator. "
+                "Call load_element_tags() before separate_epi_endo()."
+            )
 
         try:
-            separate_epi_endo(mesh_path=tagged_volume_mesh_path,
-                              atrium=atrium,
-                              element_tags=self.element_tags)
+            separate_epi_endo(
+                mesh_path=tagged_volume_mesh_path,
+                atrium=atrium,
+                element_tags=self.element_tags
+            )
+
+            # Extract base name (without extension) from the input path
+            base_vol_path_no_ext, _ = os.path.splitext(tagged_volume_mesh_path)
+            original_base_name = base_vol_path_no_ext
+
+            # If the filename ends with "_vol", strip that suffix
+            if base_vol_path_no_ext.endswith("_vol"):
+                original_base_name = base_vol_path_no_ext[:-4]
+
+            # Construct expected output file paths
+            self.epi_surface_path = f"{original_base_name}_{atrium}_epi.vtk"
+            self.endo_surface_path = f"{original_base_name}_{atrium}_endo.vtk"
+            self.combined_wall_path = f"{original_base_name}_{atrium}.vtk"
+
+            # Load the epicardial surface if it exists
+            if os.path.exists(self.epi_surface_path):
+                self.epi_surface_polydata = MeshReader(self.epi_surface_path).get_polydata()
+            else:
+                self.epi_surface_polydata = None
+                if self.debug:
+                    print(f"Warning: Epi surface file not found after separation: {self.epi_surface_path}")
+
+            # Load the endocardial surface if it exists
+            if os.path.exists(self.endo_surface_path):
+                self.endo_surface_polydata = MeshReader(self.endo_surface_path).get_polydata()
+            else:
+                self.endo_surface_polydata = None
+                if self.debug: print(f"Warning: Endo surface file not found after separation: {self.endo_surface_path}")
+
+            # Load the combined wall surface if it exists
+            if os.path.exists(self.combined_wall_path):
+                self.combined_wall_polydata = MeshReader(self.combined_wall_path).get_polydata()
+            else:
+                self.combined_wall_polydata = None
+                if self.debug: print(
+                    f"Warning: Combined wall file not found after separation: {self.combined_wall_path}")
 
         except Exception as e:
             print(f"ERROR during epi/endo separation call for {atrium} on {tagged_volume_mesh_path}: {e}")
@@ -802,7 +901,8 @@ class AtrialBoundaryGenerator:
         detected_ra_ring_objects = detector.detect_rings(debug=self.debug)
 
         if adj_id_on_ra_region < 0 and self.debug:
-            print(f'WARNING_TOP: RAA ID for mark_ra_rings is invalid ({adj_id_on_ra_region}). File ids_RAA.vtx may be affected.')
+            print(
+                f'WARNING_TOP: RAA ID for mark_ra_rings is invalid ({adj_id_on_ra_region}). File ids_RAA.vtx may be affected.')
 
         b_tag_numpy, ra_ring_centroids, updated_ra_ring_objects_list = detector.mark_ra_rings(
             adjusted_RAA_id=adj_id_on_ra_region,
@@ -819,10 +919,12 @@ class AtrialBoundaryGenerator:
                 if 0 <= self.ra_apex and self.ra_apex < mesh_pd.GetNumberOfPoints():
                     centroids["RAA"] = ra_ap_pt_on_mesh_pd
                     if self.debug:
-                        print(f"DEBUG_TOP: Added RAA coordinate {ra_ap_pt_on_mesh_pd} (ID {self.ra_apex} on input '{surface_mesh_path}') to local centroids.")
+                        print(
+                            f"DEBUG_TOP: Added RAA coordinate {ra_ap_pt_on_mesh_pd} (ID {self.ra_apex} on input '{surface_mesh_path}') to local centroids.")
             except Exception as e_raa_csv:
                 if self.debug:
-                    print(f"WARN_TOP: Error ensuring 'RAA' for local centroids (ID: {self.ra_apex}) from '{surface_mesh_path}'. {e_raa_csv}")
+                    print(
+                        f"WARN_TOP: Error ensuring 'RAA' for local centroids (ID: {self.ra_apex}) from '{surface_mesh_path}'. {e_raa_csv}")
         elif self.debug:
             print(f"DEBUG_TOP: self.ra_apex is None (re-check). 'RAA' coordinate not added.")
 
@@ -833,14 +935,17 @@ class AtrialBoundaryGenerator:
                     centroids["RAA_base"] = raa_base_coord_on_surface_mesh
 
                     if self.debug:
-                        print(f"DEBUG_TOP: Added RAA_base coordinate {raa_base_coord_on_surface_mesh} (ID {self.ra_base} on input '{surface_mesh_path}') to local centroids.")
+                        print(
+                            f"DEBUG_TOP: Added RAA_base coordinate {raa_base_coord_on_surface_mesh} (ID {self.ra_base} on input '{surface_mesh_path}') to local centroids.")
 
                 elif self.debug:
-                    print(f"WARN_TOP: RAA_base ID {self.ra_base} out of bounds for '{surface_mesh_path}'; 'RAA_base' not added.")
+                    print(
+                        f"WARN_TOP: RAA_base ID {self.ra_base} out of bounds for '{surface_mesh_path}'; 'RAA_base' not added.")
 
             except Exception as e_raabase_csv:
                 if self.debug:
-                    print(f"WARN_TOP: Error fetching 'RAA_base' for local centroids (ID: {self.ra_base}) from '{surface_mesh_path}'. {e_raabase_csv}")
+                    print(
+                        f"WARN_TOP: Error fetching 'RAA_base' for local centroids (ID: {self.ra_base}) from '{surface_mesh_path}'. {e_raabase_csv}")
 
         elif self.debug:
             print(f"DEBUG_TOP: self.ra_base is None. 'RAA_base' coordinate not added.")
