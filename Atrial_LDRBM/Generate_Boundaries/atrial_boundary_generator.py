@@ -465,39 +465,40 @@ class AtrialBoundaryGenerator:
         if self.ra_apex is None:
             return {}
 
-        # -------------------------------------------------- CSV coordinates
+        # Prepare apex/base coordinates from cached polydata (if present)
         ra_ap_point_coord_for_csv = None
         ra_bs_point_coord_for_csv = None
+
         if hasattr(self, "polydata") and self.polydata is not None:
-            if (self.ra_apex is not None and
-                    0 <= self.ra_apex < self.polydata.GetNumberOfPoints()):
+            num_pts = self.polydata.GetNumberOfPoints()
+
+            # Fetch RAA apex coordinate if within bounds
+            if 0 <= self.ra_apex and self.ra_apex < num_pts:
                 ra_ap_point_coord_for_csv = self.polydata.GetPoint(self.ra_apex)
 
-            if (self.ra_base is not None and
-                    0 <= self.ra_base < self.polydata.GetNumberOfPoints()):
+            # Fetch RAA base coordinate if within bounds
+            if 0 <= self.ra_base and self.ra_base < num_pts:
                 ra_bs_point_coord_for_csv = self.polydata.GetPoint(self.ra_base)
 
-        # -------------------------------------------------- isolate region
+        # Isolate the RA region (biatrial vs. RA-only)
         if is_biatrial:
             try:
+                # Get the RA apex coordinate from the combined mesh
                 ra_ap_point_coord = input_mesh_polydata.GetPoint(self.ra_apex)
 
-                mesh_conn = init_connectivity_filter(
-                    input_mesh_polydata, ExtractionModes.ALL_REGIONS, True
-                ).GetOutput()
+                # Apply connectivity filter over all regions
+                mesh_conn = init_connectivity_filter(input_mesh_polydata, ExtractionModes.ALL_REGIONS, True).GetOutput()
 
+                # Retrieve the RegionId array and convert to numpy
                 arr = mesh_conn.GetPointData().GetArray("RegionId")
                 arr.SetName("RegionID")
                 id_vector = vtk_to_numpy(arr)
 
-                # TODO: remove later
-                if mesh_conn.GetNumberOfPoints() != len(id_vector):
-                    print(
-                        f"WARNING_ABG_LA: Mismatch! mesh_conn has {mesh_conn.GetNumberOfPoints()} points, but RegionID array has {len(id_vector)} entries.")
-
+                # Find the index closest to the RA apex
                 temp_RAA_id = find_closest_point(mesh_conn, ra_ap_point_coord)
                 RA_tag_val = id_vector[temp_RAA_id]
 
+                # Threshold the mesh to isolate RA region by tag
                 ra_thresh = get_threshold_between(
                     mesh_conn,
                     RA_tag_val,
@@ -505,116 +506,127 @@ class AtrialBoundaryGenerator:
                     "vtkDataObject::FIELD_ASSOCIATION_POINTS",
                     "RegionID"
                 )
-
                 ra_poly_ug = ra_thresh.GetOutput()
                 ra_poly = apply_vtk_geom_filter(ra_poly_ug)
 
+                # If RA submesh is non-empty, regenerate its 'Ids' array
                 if ra_poly and ra_poly.GetNumberOfPoints() > 0:
                     # Explicitly remove any pre-existing "Ids" array from ra_poly
                     if ra_poly.GetPointData().GetArray("Ids"):
                         if self.debug:
-                            print(
-                                f"DEBUG_ABG_RA: Removing existing 'Ids' from isolated RA part before local generation.")
+                            print("DEBUG_RA: Removing existing 'Ids' from isolated RA part before local generation.")
                         ra_poly.GetPointData().RemoveArray("Ids")
 
                     ra_region_polydata = generate_ids(ra_poly, "Ids", "Ids")
+
                 else:
                     print("Warning: RA region extraction resulted in empty mesh.")
                     return {}
+
             except Exception as e:
                 print(f"ERROR during RA region extraction: {e}")
                 return {}
+
         else:
+            # RA-only case: use the input mesh directly
             ra_region_polydata = input_mesh_polydata
+
             try:
+                # Validate and fetch RA apex coordinate
                 ra_ap_point_coord = ra_region_polydata.GetPoint(self.ra_apex)
             except IndexError:
                 print(f"ERROR: RA apex ID {self.ra_apex} out of bounds for RA-only mesh.")
                 return {}
 
-            # For safety and consistency with the biatrial path's relabeling:
+            # Remove any existing 'Ids' array before regenerating
             if ra_region_polydata.GetPointData().GetArray("Ids"):
                 if self.debug:
-                    print(
-                        f"DEBUG_ABG_RA: RA-only: Removing existing 'Ids' before local generation for consistency.")
+                    print("DEBUG_RA: RA-only: Removing existing 'Ids' before local generation for consistency.")
                 ra_region_polydata.GetPointData().RemoveArray("Ids")
+
             ra_region_polydata = generate_ids(ra_region_polydata, "Ids", "Ids")
 
-        # -------------------------------------------------- ring detection
-        if ra_region_polydata and ra_ap_point_coord:
-            write_vtk(os.path.join(outdir, "RA.vtk"), ra_region_polydata)
+        # Caching isolated RA mesh for future reference
+        self.ra_isolated_region_polydata = ra_region_polydata
 
-            adjusted_RAA = find_closest_point(ra_region_polydata, ra_ap_point_coord)
+        # Ring detection on the isolated RA region
+        if self.ra_isolated_region_polydata and ra_ap_point_coord:
+            # Write the isolated RA mesh to disk
+            write_vtk(os.path.join(outdir, "RA.vtk"), self.ra_isolated_region_polydata)
+
+            # Find the index closest to the RA apex on the isolated mesh
+            adjusted_RAA = find_closest_point(self.ra_isolated_region_polydata, ra_ap_point_coord)
             if adjusted_RAA < 0:
                 adjusted_RAA = self.ra_apex
 
-            apex_coord_for_detector = ra_region_polydata.GetPoint(adjusted_RAA)
+            apex_coord_for_detector = self.ra_isolated_region_polydata.GetPoint(adjusted_RAA)
 
             try:
-                detector_RA = RingDetector(ra_region_polydata,
-                                           apex_coord_for_detector,
-                                           outdir)
+                detector_RA = RingDetector(
+                    self.ra_isolated_region_polydata,
+                    apex_coord_for_detector,
+                    outdir
+                )
+
                 rings_ra = detector_RA.detect_rings(debug=self.debug)
 
                 b_tag_ra, ra_centroids, rings_ra_obj = detector_RA.mark_ra_rings(
                     adjusted_RAA,
                     rings_ra,
-                    np.zeros(ra_region_polydata.GetNumberOfPoints()),
+                    np.zeros(self.ra_isolated_region_polydata.GetNumberOfPoints()),
                     {},
                     debug=self.debug
                 )
 
                 detector_RA.cutting_plane_to_identify_tv_f_tv_s(
-                    ra_region_polydata, rings_ra_obj, debug=self.debug
+                    self.ra_isolated_region_polydata,
+                    rings_ra_obj,
+                    debug=self.debug
                 )
 
-                ds_ra = dsa.WrapDataObject(ra_region_polydata)
+                # Attach boundary tags and write tagged mesh to disk
+                ds_ra = dsa.WrapDataObject(self.ra_isolated_region_polydata)
                 ds_ra.PointData.append(b_tag_ra, "boundary_tag")
-                write_vtk(os.path.join(outdir, "RA_boundaries_tagged.vtk"),
-                          ds_ra.VTKObject)
+                self.ra_tagged_boundaries_polydata = ds_ra.VTKObject
+                write_vtk(os.path.join(outdir, "RA_boundaries_tagged.vtk"), self.ra_tagged_boundaries_polydata)
 
-                # -------------------- add apex / base --------------------
-                """
-                final_ra_centroids = ra_centroids.copy()
-                if ra_ap_point_coord_for_csv is not None:
-                    final_ra_centroids["RAA"] = ra_ap_point_coord_for_csv
-                if ra_bs_point_coord_for_csv is not None:
-                    final_ra_centroids["RAA_base"] = ra_bs_point_coord_for_csv
-
-                return final_ra_centroids
-                """
+                # Prepare final centroids dictionary
                 final_ra_centroids = ra_centroids.copy()
 
-                # Add "RAA" coordinate.
-                # 'ra_ap_point_coord' is defined earlier in your method using
-                # input_mesh_polydata.GetPoint(self.ra_apex) or equivalent for the isolated RA region.
+                # Add "RAA" coordinate from the isolated mesh (fallback to original mesh)
                 if 'ra_ap_point_coord' in locals() and ra_ap_point_coord is not None:
                     final_ra_centroids["RAA"] = ra_ap_point_coord
-                elif self.debug:  # Fallback, similar to LA
+                else:
                     try:
-                        if self.ra_apex is not None and 0 <= self.ra_apex < input_mesh_polydata.GetNumberOfPoints():
-                            final_ra_centroids["RAA"] = input_mesh_polydata.GetPoint(self.ra_apex)
-                            if self.debug: print(f"DEBUG_ABG_RA: Fallback used for 'RAA' coordinate in CSV output.")
-                        elif self.debug:
-                            print(
-                                f"WARN_ABG_RA: 'RAA' coordinate could not be determined for CSV (self.ra_apex: {self.ra_apex}).")
-                    except IndexError:
-                        if self.debug: print(
-                            f"WARN_ABG_RA: Error fetching 'RAA' coordinate for CSV via fallback (self.ra_apex: {self.ra_apex}).")
+                        num_pts_input = input_mesh_polydata.GetNumberOfPoints()
 
-                # Add "RAA_base" coordinate, if self.ra_base is a valid ID for input_mesh_polydata.
+                        if 0 <= self.ra_apex and self.ra_apex < num_pts_input:
+                            final_ra_centroids["RAA"] = input_mesh_polydata.GetPoint(self.ra_apex)
+                            if self.debug:
+                                print(f"DEBUG_RA: Fallback used for 'RAA' coordinate in CSV output.")
+                        else:
+                            if self.debug:
+                                print(f"WARN_RA: 'RAA' coordinate could not be determined for CSV (self.ra_apex: {self.ra_apex}).")
+                    except IndexError:
+                        if self.debug:
+                            print(f"WARN_RA: Error fetching 'RAA' coordinate for CSV via fallback (self.ra_apex: {self.ra_apex}).")
+
+                # Add "RAA_base" coordinate if valid in the original mesh
                 if self.ra_base is not None:
                     try:
-                        if 0 <= self.ra_base < input_mesh_polydata.GetNumberOfPoints():
+                        num_pts_input = input_mesh_polydata.GetNumberOfPoints()
+                        if 0 <= self.ra_base and self.ra_base < num_pts_input:
                             final_ra_centroids["RAA_base"] = input_mesh_polydata.GetPoint(self.ra_base)
-                        elif self.debug:
-                            print(f"WARN_ABG_RA: RAA_base ID {self.ra_base} is out of bounds for current mesh; "
-                                  f"'RAA_base' not added to centroids for CSV.")
+                        else:
+                            if self.debug:
+                                print(f"WARN_ABG_RA: RAA_base ID {self.ra_base} is out of bounds for current mesh "
+                                      f"'RAA_base' not added to centroids for CSV.")
                     except IndexError:
-                        if self.debug: print(
-                            f"WARN_ABG_RA: Error fetching 'RAA_base' coordinate for CSV (self.ra_base: {self.ra_base}).")
+                        if self.debug:
+                            print(f"WARN_ABG_RA: Error fetching 'RAA_base' coordinate for CSV (self.ra_base: {self.ra_base}).")
 
                 return final_ra_centroids
+            
             except Exception as e:
                 print(f"ERROR during RA ring detection/marking: {e}")
                 return {}
