@@ -821,22 +821,24 @@ class AtrialBoundaryGenerator:
                 os.remove(f_path)
 
         reader = MeshReader(surface_mesh_path)
-        mesh_pd = reader.get_polydata()
-        if not mesh_pd or mesh_pd.GetNumberOfPoints() == 0:
+
+        self.active_ra_epi_for_top_rings = reader.get_polydata()
+
+        if not self.active_ra_epi_for_top_rings or self.active_ra_epi_for_top_rings.GetNumberOfPoints() == 0:
             print(f"ERROR_TOP: Mesh loaded from '{surface_mesh_path}' is empty or invalid. Aborting TOP_EPI_ENDO.")
             return
 
-        if mesh_pd.GetPointData().GetArray("Ids") is None:
+        if self.active_ra_epi_for_top_rings.GetPointData().GetArray("Ids") is None:
             if self.debug:
                 print(f"DEBUG_TOP: Generating 'Ids' for mesh_pd from '{surface_mesh_path}'.")
-            mesh_pd = generate_ids(mesh_pd, "Ids", "Ids")
+            self.active_ra_epi_for_top_rings = generate_ids(self.active_ra_epi_for_top_rings, "Ids", "Ids")
 
-        centroids: Dict[str, Any] = {}  # Dict[str, Tuple[float,float,float]]
+        centroids: Dict[str, Any] = {}  # TODO: Check and change to Dict[str, Tuple[float,float,float]]
 
         if self.la_apex is not None:
             if self.debug:
                 print(f"DEBUG_TOP: LAA ID (self.la_apex) is set. Processing LA region from '{surface_mesh_path}'.")
-            la_cents = self._process_LA_region(mesh_pd, outdir, is_biatrial=True)
+            la_cents = self._process_LA_region(self.active_ra_epi_for_top_rings, outdir, is_biatrial=True)
             centroids.update(la_cents)
 
         if self.ra_apex is None:
@@ -845,14 +847,17 @@ class AtrialBoundaryGenerator:
 
         # Isolate RA region
         try:
-            if not (0 <= self.ra_apex < mesh_pd.GetNumberOfPoints()):  # Check self.ra_apex validity for mesh_pd
-                raise IndexError(f"RAA ID {self.ra_apex} is out of bounds for surface_mesh_path '{surface_mesh_path}'.")
-            ra_ap_pt_on_mesh_pd = mesh_pd.GetPoint(self.ra_apex)
+            if not self.ra_apex >= 0:
+                if not self.active_ra_epi_for_top_rings.GetNumberOfPoints():
+                    raise IndexError(f"RAA ID {self.ra_apex} is out of bounds for surface_mesh_path '{surface_mesh_path}'.")
+
+            ra_ap_pt_on_mesh_pd = self.active_ra_epi_for_top_rings.GetPoint(self.ra_apex)
+
         except IndexError as e:
             print(f"ERROR_TOP: Invalid RAA ID {self.ra_apex} for surface_mesh_path '{surface_mesh_path}'. {e}")
             return
 
-        conn = init_connectivity_filter(mesh_pd, ExtractionModes.ALL_REGIONS, True).GetOutput()
+        conn = init_connectivity_filter(self.active_ra_epi_for_top_rings, ExtractionModes.ALL_REGIONS, True).GetOutput()
         if not conn or conn.GetNumberOfPoints() == 0:
             print(f"ERROR_TOP: Connectivity filter on '{surface_mesh_path}' (for RA) yielded empty result.")
 
@@ -863,9 +868,6 @@ class AtrialBoundaryGenerator:
         arr.SetName("RegionID")
         tags = vtk_to_numpy(arr)
         temp_raa_id_on_conn = find_closest_point(conn, ra_ap_pt_on_mesh_pd)
-        if not (0 <= temp_raa_id_on_conn < len(tags)):
-            print(
-                f"ERROR_TOP: RAA point not found on connected components of '{surface_mesh_path}' or ID out of bounds.")
 
         tag_val = int(tags[temp_raa_id_on_conn])
 
@@ -890,15 +892,15 @@ class AtrialBoundaryGenerator:
                     f"DEBUG_TOP: Removing existing 'Ids' from isolated RA part (TOP_EPI_ENDO) before local generation.")
             ra_poly_geom_filtered.GetPointData().RemoveArray("Ids")
 
-        ra_region = generate_ids(ra_poly_geom_filtered, "Ids", "Ids")
+        self.ra_isolated_region_for_top_epi_endo = generate_ids(ra_poly_geom_filtered, "Ids", "Ids")
 
-        if not ra_region or ra_region.GetNumberOfPoints() == 0:
+        if not self.ra_isolated_region_for_top_epi_endo or self.ra_isolated_region_for_top_epi_endo.GetNumberOfPoints() == 0:
             print(f"ERROR_TOP: RA region became empty after generate_ids for '{surface_mesh_path}'.")
             return
 
-        write_vtk(os.path.join(outdir, "RA.vtp"), ra_region, xml_format=True)
+        write_vtk(os.path.join(outdir, "RA.vtp"), self.ra_isolated_region_for_top_epi_endo, xml_format=True)
 
-        adj_id_on_ra_region = find_closest_point(ra_region, ra_ap_pt_on_mesh_pd)
+        adj_id_on_ra_region = find_closest_point(self.ra_isolated_region_for_top_epi_endo, ra_ap_pt_on_mesh_pd)
         apex_coord_for_detector_on_ra_region = None
         if adj_id_on_ra_region < 0:
             print(
@@ -907,9 +909,9 @@ class AtrialBoundaryGenerator:
                 "surface.")
             apex_coord_for_detector_on_ra_region = ra_ap_pt_on_mesh_pd
         else:
-            apex_coord_for_detector_on_ra_region = ra_region.GetPoint(adj_id_on_ra_region)
+            apex_coord_for_detector_on_ra_region = self.ra_isolated_region_for_top_epi_endo.GetPoint(adj_id_on_ra_region)
 
-        detector = RingDetector(ra_region, apex_coord_for_detector_on_ra_region, outdir)
+        detector = RingDetector(self.ra_isolated_region_for_top_epi_endo, apex_coord_for_detector_on_ra_region, outdir)
         detected_ra_ring_objects = detector.detect_rings(debug=self.debug)
 
         if adj_id_on_ra_region < 0 and self.debug:
@@ -919,7 +921,7 @@ class AtrialBoundaryGenerator:
         b_tag_numpy, ra_ring_centroids, updated_ra_ring_objects_list = detector.mark_ra_rings(
             adjusted_RAA_id=adj_id_on_ra_region,
             rings=detected_ra_ring_objects,
-            b_tag=np.zeros(ra_region.GetNumberOfPoints(), dtype=int),
+            b_tag=np.zeros(self.ra_isolated_region_for_top_epi_endo.GetNumberOfPoints(), dtype=int),
             centroids={},
             debug=self.debug
         )
@@ -928,7 +930,7 @@ class AtrialBoundaryGenerator:
 
         if self.ra_apex is not None:
             try:
-                if 0 <= self.ra_apex and self.ra_apex < mesh_pd.GetNumberOfPoints():
+                if 0 <= self.ra_apex < self.active_ra_epi_for_top_rings.GetNumberOfPoints():
                     centroids["RAA"] = ra_ap_pt_on_mesh_pd
                     if self.debug:
                         print(
@@ -942,8 +944,8 @@ class AtrialBoundaryGenerator:
 
         if self.ra_base is not None:
             try:
-                if 0 <= self.ra_base and self.ra_base < mesh_pd.GetNumberOfPoints():
-                    raa_base_coord_on_surface_mesh = mesh_pd.GetPoint(self.ra_base)
+                if 0 <= self.ra_base and self.ra_base < self.active_ra_epi_for_top_rings.GetNumberOfPoints():
+                    raa_base_coord_on_surface_mesh = self.active_ra_epi_for_top_rings.GetPoint(self.ra_base)
                     centroids["RAA_base"] = raa_base_coord_on_surface_mesh
 
                     if self.debug:
@@ -962,7 +964,7 @@ class AtrialBoundaryGenerator:
         elif self.debug:
             print(f"DEBUG_TOP: self.ra_base is None. 'RAA_base' coordinate not added.")
 
-        ds_ra = dsa.WrapDataObject(ra_region)
+        ds_ra = dsa.WrapDataObject(self.ra_isolated_region_for_top_epi_endo)
         ds_ra.PointData.append(b_tag_numpy, "boundary_tag")
         write_vtk(os.path.join(outdir, "RA_boundaries_tagged.vtp"), ds_ra.VTKObject, xml_format=True)
 
@@ -997,14 +999,14 @@ class AtrialBoundaryGenerator:
                 print(f"DEBUG_TOP: Using endocardial mesh path: {endo_path} for TOP_EPI/ENDO cuts.")
 
         detector.perform_tv_split_and_find_top_epi_endo(
-            model_epi=ra_region,
+            model_epi=self.ra_isolated_region_for_top_epi_endo,
             endo_mesh_path=endo_path,
             rings=updated_ra_ring_objects_list,
             debug=self.debug
         )
 
         df = pd.DataFrame.from_dict(centroids, orient="index", columns=["X", "Y", "Z"])
-        df.index.name = "RingName"  # Important for consistent CSV format
+        df.index.name = "RingName"
         write_csv(os.path.join(outdir, "rings_centroids.csv"), df)
 
         self.ring_info = centroids
