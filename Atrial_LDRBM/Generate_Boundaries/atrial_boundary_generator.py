@@ -43,6 +43,7 @@ class AtrialBoundaryGenerator:
     :param ra_base: Index for right atrial base.
     :param debug: Enables verbose output.
     """
+    ra_apex: int | None
 
     def __init__(self,
                  mesh_path: str,
@@ -220,7 +221,7 @@ class AtrialBoundaryGenerator:
     def _process_LA_region(
             self,
             input_mesh_polydata: vtk.vtkPolyData,
-            outdir: str,
+            output_dir: str,
             is_biatrial: bool
     ) -> dict:
         """
@@ -249,7 +250,7 @@ class AtrialBoundaryGenerator:
 
         except IndexError as e:
             print(
-                f"ERROR_ABG_LA: Invalid LAA ID {self.la_apex} for current input mesh. "
+                f"ERROR_LA: Invalid LAA ID {self.la_apex} for current input mesh. "
                 f"Cannot proceed. {e}"
             )
             return {}
@@ -258,6 +259,7 @@ class AtrialBoundaryGenerator:
         if self.la_base is not None:
             try:
                 num_points = input_mesh_polydata.GetNumberOfPoints()
+
                 if not (0 <= self.la_base and self.la_base < num_points):
                     raise IndexError(f"LAA_base ID {self.la_base} is out of bounds for current input mesh.")
 
@@ -370,7 +372,7 @@ class AtrialBoundaryGenerator:
         # === Ring detection on the LA region ===
         if self.la_isolated_region_polydata and la_ap_point_coord:
             # Write the LA-only mesh to disk
-            write_vtk(os.path.join(outdir, "LA.vtk"), self.la_isolated_region_polydata)
+            write_vtk(os.path.join(output_dir, "LA.vtk"), self.la_isolated_region_polydata)
 
             # Find the index of the closest point to the LA apex on the LA-only mesh
             adjusted_LAA = find_closest_point(self.la_isolated_region_polydata, la_ap_point_coord)
@@ -383,7 +385,7 @@ class AtrialBoundaryGenerator:
                 self.la_ring_detector = RingDetector(
                     self.la_isolated_region_polydata,
                     apex_coord_for_detector,
-                    outdir
+                    output_dir
                 )
 
                 rings_la = self.la_ring_detector.detect_rings(debug=self.debug)
@@ -402,7 +404,7 @@ class AtrialBoundaryGenerator:
                 ds_la.PointData.append(b_tag_la, "boundary_tag")
 
                 self.la_tagged_boundaries_polydata = ds_la.VTKObject
-                write_vtk(os.path.join(outdir, "LA_boundaries_tagged.vtk"), self.la_tagged_boundaries_polydata)
+                write_vtk(os.path.join(output_dir, "LA_boundaries_tagged.vtk"), self.la_tagged_boundaries_polydata)
 
                 # Copy centroids and ensure LAA coordinate is included
                 final_la_centroids = la_centroids.copy()
@@ -421,11 +423,13 @@ class AtrialBoundaryGenerator:
                                 print(f"DEBUG_LA: Fallback used for 'LAA' coordinate in CSV output.")
                         else:
                             if self.debug:
-                                print(f"WARN_LA: 'LAA' coordinate could not be determined for CSV (self.la_apex: {self.la_apex}).")
+                                print(
+                                    f"WARN_LA: 'LAA' coordinate could not be determined for CSV (self.la_apex: {self.la_apex}).")
 
                     except IndexError:
                         if self.debug:
-                            print(f"WARN_LA: Error fetching 'LAA' coordinate for CSV via fallback (self.la_apex: {self.la_apex}).")
+                            print(
+                                f"WARN_LA: Error fetching 'LAA' coordinate for CSV via fallback (self.la_apex: {self.la_apex}).")
 
                 # If a base ID was provided, attempt to include its coordinate
                 if self.la_base is not None:
@@ -455,7 +459,7 @@ class AtrialBoundaryGenerator:
 
     def _process_RA_region(self,
                            input_mesh_polydata: vtk.vtkPolyData,
-                           outdir: str,
+                           output_dir: str,
                            is_biatrial: bool) -> dict:
         """
         Processes the RA region and returns a centroid dictionary that now
@@ -463,6 +467,7 @@ class AtrialBoundaryGenerator:
         coordinates for the final CSV.
         """
         if self.ra_apex is None:
+            print("DEBUG: _process_RA_region skipped as self.ra_apex is None.")
             return {}
 
         # Prepare apex/base coordinates from cached polydata (if present)
@@ -470,15 +475,33 @@ class AtrialBoundaryGenerator:
         ra_bs_point_coord_for_csv = None
 
         if hasattr(self, "polydata") and self.polydata is not None:
-            num_pts = self.polydata.GetNumberOfPoints()
+            if self.ra_apex is not None:
+                try:
+                    num_points = self.polydata.GetNumberOfPoints()
 
-            # Fetch RAA apex coordinate if within bounds
-            if 0 <= self.ra_apex and self.ra_apex < num_pts:
-                ra_ap_point_coord_for_csv = self.polydata.GetPoint(self.ra_apex)
+                    # Fetch RAA apex coordinate if within bounds
+                    if not (0 <= self.ra_apex and self.ra_apex < num_points):
+                        raise IndexError(
+                            f"RAA ID {self.ra_apex} is out of bounds for current input mesh (size: {num_points}).")
 
-            # Fetch RAA base coordinate if within bounds
-            if 0 <= self.ra_base and self.ra_base < num_pts:
-                ra_bs_point_coord_for_csv = self.polydata.GetPoint(self.ra_base)
+                    ra_ap_point_coord_for_csv = self.polydata.GetPoint(self.ra_apex)
+                except IndexError as e:
+                    print(
+                        f"ERROR_RA: Invalid RAA ID {self.ra_apex} for current input mesh. Cannot proceed. {e}")
+                    return {}
+
+            if self.ra_base is not None:
+                try:
+                    num_points = self.polydata.GetNumberOfPoints()
+
+                    # Fetch RAA base coordinate if within bounds
+                    if not (0 <= self.ra_base and self.ra_base < num_points):
+                        raise IndexError(f"RAA_base ID {self.ra_base} is out of bounds for current input mesh.")
+
+                    ra_bs_point_coord_for_csv = self.polydata.GetPoint(self.ra_base)
+
+                except IndexError as e:
+                    print(f"WARN_RA: RAA_base ID {self.ra_base} invalid for current input. Not added to centroids. {e}")
 
         # Isolate the RA region (biatrial vs. RA-only)
         if is_biatrial:
@@ -552,7 +575,7 @@ class AtrialBoundaryGenerator:
         # Ring detection on the isolated RA region
         if self.ra_isolated_region_polydata and ra_ap_point_coord:
             # Write the isolated RA mesh to disk
-            write_vtk(os.path.join(outdir, "RA.vtk"), self.ra_isolated_region_polydata)
+            write_vtk(os.path.join(output_dir, "RA.vtk"), self.ra_isolated_region_polydata)
 
             # Find the index closest to the RA apex on the isolated mesh
             adjusted_RAA = find_closest_point(self.ra_isolated_region_polydata, ra_ap_point_coord)
@@ -565,7 +588,7 @@ class AtrialBoundaryGenerator:
                 detector_RA = RingDetector(
                     self.ra_isolated_region_polydata,
                     apex_coord_for_detector,
-                    outdir
+                    output_dir
                 )
 
                 rings_ra = detector_RA.detect_rings(debug=self.debug)
@@ -588,7 +611,7 @@ class AtrialBoundaryGenerator:
                 ds_ra = dsa.WrapDataObject(self.ra_isolated_region_polydata)
                 ds_ra.PointData.append(b_tag_ra, "boundary_tag")
                 self.ra_tagged_boundaries_polydata = ds_ra.VTKObject
-                write_vtk(os.path.join(outdir, "RA_boundaries_tagged.vtk"), self.ra_tagged_boundaries_polydata)
+                write_vtk(os.path.join(output_dir, "RA_boundaries_tagged.vtk"), self.ra_tagged_boundaries_polydata)
 
                 # Prepare final centroids dictionary
                 final_ra_centroids = ra_centroids.copy()
@@ -606,10 +629,12 @@ class AtrialBoundaryGenerator:
                                 print(f"DEBUG_RA: Fallback used for 'RAA' coordinate in CSV output.")
                         else:
                             if self.debug:
-                                print(f"WARN_RA: 'RAA' coordinate could not be determined for CSV (self.ra_apex: {self.ra_apex}).")
+                                print(
+                                    f"WARN_RA: 'RAA' coordinate could not be determined for CSV (self.ra_apex: {self.ra_apex}).")
                     except IndexError:
                         if self.debug:
-                            print(f"WARN_RA: Error fetching 'RAA' coordinate for CSV via fallback (self.ra_apex: {self.ra_apex}).")
+                            print(
+                                f"WARN_RA: Error fetching 'RAA' coordinate for CSV via fallback (self.ra_apex: {self.ra_apex}).")
 
                 # Add "RAA_base" coordinate if valid in the original mesh
                 if self.ra_base is not None:
@@ -623,30 +648,30 @@ class AtrialBoundaryGenerator:
                                       f"'RAA_base' not added to centroids for CSV.")
                     except IndexError:
                         if self.debug:
-                            print(f"WARN_ABG_RA: Error fetching 'RAA_base' coordinate for CSV (self.ra_base: {self.ra_base}).")
+                            print(
+                                f"WARN_ABG_RA: Error fetching 'RAA_base' coordinate for CSV (self.ra_base: {self.ra_base}).")
 
                 return final_ra_centroids
-            
+
             except Exception as e:
                 print(f"ERROR during RA ring detection/marking: {e}")
                 return {}
 
         return {}
 
-    def extract_rings(self, surface_mesh_path: str) -> None:
+    def extract_rings(self, surface_mesh_path: str, output_dir: str) -> None:
         """
         Orchestrates the ring extraction process by reading the mesh (via MeshReader),
         processing the LA and/or RA regions, and writing centroids to CSV.
         """
         if self.debug:
             print(f"Initiating standard ring extraction on: {surface_mesh_path}")
+            print(f"Using provided output directory: {output_dir}")
 
-        surface_base = os.path.splitext(surface_mesh_path)[0]
-        outdir = f"{surface_base}_surf"
-        os.makedirs(outdir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
 
         # Remove any existing 'ids_*' files in the output directory
-        for f_path in glob(os.path.join(outdir, 'ids_*')):
+        for f_path in glob(os.path.join(output_dir, 'ids_*')):
             if os.path.isfile(f_path):
                 os.remove(f_path)
 
@@ -673,14 +698,14 @@ class AtrialBoundaryGenerator:
             # Biatrial case: process both LA and RA from the same mesh
             la_centroids = self._process_LA_region(
                 self.active_surface_for_rings,
-                outdir,
+                output_dir,
                 is_biatrial=True
             )
             centroids.update(la_centroids)
 
             ra_centroids = self._process_RA_region(
                 self.active_surface_for_rings,
-                outdir,
+                output_dir,
                 is_biatrial=True
             )
             centroids.update(ra_centroids)
@@ -689,7 +714,7 @@ class AtrialBoundaryGenerator:
             # LA-only case: process LA region
             la_centroids = self._process_LA_region(
                 self.active_surface_for_rings,
-                outdir,
+                output_dir,
                 is_biatrial=False
             )
             centroids.update(la_centroids)
@@ -698,7 +723,7 @@ class AtrialBoundaryGenerator:
             # RA-only case: process RA region
             ra_centroids = self._process_RA_region(
                 self.active_surface_for_rings,
-                outdir,
+                output_dir,
                 is_biatrial=False
             )
             centroids.update(ra_centroids)
@@ -714,7 +739,7 @@ class AtrialBoundaryGenerator:
 
         # Build a DataFrame and write it to CSV
         df = pd.DataFrame(processed_centroids_for_df)
-        csv_path = os.path.join(outdir, "rings_centroids.csv")
+        csv_path = os.path.join(output_dir, "rings_centroids.csv")
         write_csv(csv_path, df)
 
         # Store the raw centroids for later use
@@ -804,19 +829,22 @@ class AtrialBoundaryGenerator:
     def load_element_tags(self, csv_filepath: str) -> None:
         self.element_tags = load_element_tags(csv_filepath)
 
-    def extract_rings_top_epi_endo(self, surface_mesh_path: str) -> None:
+    def extract_rings_top_epi_endo(self, surface_mesh_path: str, output_dir: str) -> None:
         """
         Specialized workflow (TOP_EPI/ENDO).  Now also guarantees that “RAA”
         and “RAA_base” coordinates—taken from the **original** reference mesh
         via `self.polydata`—are written to rings_centroids.csv, matching the
         behaviour of the legacy script.
         """
-        # -------- set-up & load ------------------------------------------------
-        surface_base = os.path.splitext(surface_mesh_path)[0]
-        outdir = f"{surface_base}_surf"
-        os.makedirs(outdir, exist_ok=True)
 
-        for f_path in glob(os.path.join(outdir, 'ids_*')):
+        if self.debug:
+            print(f"Initiating TOP_EPI/ENDO ring extraction on: {surface_mesh_path}")
+            print(f"Using provided output directory: {output_dir}")
+
+        os.makedirs(output_dir, exist_ok=True)
+        surface_base = os.path.splitext(os.path.basename(surface_mesh_path))[0]
+
+        for f_path in glob(os.path.join(output_dir, 'ids_*')):
             if os.path.isfile(f_path):
                 os.remove(f_path)
 
@@ -838,7 +866,7 @@ class AtrialBoundaryGenerator:
         if self.la_apex is not None:
             if self.debug:
                 print(f"DEBUG_TOP: LAA ID (self.la_apex) is set. Processing LA region from '{surface_mesh_path}'.")
-            la_cents = self._process_LA_region(self.active_ra_epi_for_top_rings, outdir, is_biatrial=True)
+            la_cents = self._process_LA_region(self.active_ra_epi_for_top_rings, output_dir, is_biatrial=True)
             centroids.update(la_cents)
 
         if self.ra_apex is None:
@@ -849,7 +877,8 @@ class AtrialBoundaryGenerator:
         try:
             if not self.ra_apex >= 0:
                 if not self.active_ra_epi_for_top_rings.GetNumberOfPoints():
-                    raise IndexError(f"RAA ID {self.ra_apex} is out of bounds for surface_mesh_path '{surface_mesh_path}'.")
+                    raise IndexError(
+                        f"RAA ID {self.ra_apex} is out of bounds for surface_mesh_path '{surface_mesh_path}'.")
 
             ra_ap_pt_on_mesh_pd = self.active_ra_epi_for_top_rings.GetPoint(self.ra_apex)
 
@@ -898,7 +927,7 @@ class AtrialBoundaryGenerator:
             print(f"ERROR_TOP: RA region became empty after generate_ids for '{surface_mesh_path}'.")
             return
 
-        write_vtk(os.path.join(outdir, "RA.vtp"), self.ra_isolated_region_for_top_epi_endo, xml_format=True)
+        write_vtk(os.path.join(output_dir, "RA.vtp"), self.ra_isolated_region_for_top_epi_endo, xml_format=True)
 
         adj_id_on_ra_region = find_closest_point(self.ra_isolated_region_for_top_epi_endo, ra_ap_pt_on_mesh_pd)
         apex_coord_for_detector_on_ra_region = None
@@ -909,9 +938,11 @@ class AtrialBoundaryGenerator:
                 "surface.")
             apex_coord_for_detector_on_ra_region = ra_ap_pt_on_mesh_pd
         else:
-            apex_coord_for_detector_on_ra_region = self.ra_isolated_region_for_top_epi_endo.GetPoint(adj_id_on_ra_region)
+            apex_coord_for_detector_on_ra_region = self.ra_isolated_region_for_top_epi_endo.GetPoint(
+                adj_id_on_ra_region)
 
-        detector = RingDetector(self.ra_isolated_region_for_top_epi_endo, apex_coord_for_detector_on_ra_region, outdir)
+        detector = RingDetector(self.ra_isolated_region_for_top_epi_endo, apex_coord_for_detector_on_ra_region,
+                                output_dir)
         detected_ra_ring_objects = detector.detect_rings(debug=self.debug)
 
         if adj_id_on_ra_region < 0 and self.debug:
@@ -966,7 +997,7 @@ class AtrialBoundaryGenerator:
 
         ds_ra = dsa.WrapDataObject(self.ra_isolated_region_for_top_epi_endo)
         ds_ra.PointData.append(b_tag_numpy, "boundary_tag")
-        write_vtk(os.path.join(outdir, "RA_boundaries_tagged.vtp"), ds_ra.VTKObject, xml_format=True)
+        write_vtk(os.path.join(output_dir, "RA_boundaries_tagged.vtp"), ds_ra.VTKObject, xml_format=True)
 
         original_input_base = self._get_base_mesh()
         # This method is contextually for RA in the pipeline for TOP_EPI_ENDO.
@@ -1007,7 +1038,7 @@ class AtrialBoundaryGenerator:
 
         df = pd.DataFrame.from_dict(centroids, orient="index", columns=["X", "Y", "Z"])
         df.index.name = "RingName"
-        write_csv(os.path.join(outdir, "rings_centroids.csv"), df)
+        write_csv(os.path.join(output_dir, "rings_centroids.csv"), df)
 
         self.ring_info = centroids
         if self.debug:

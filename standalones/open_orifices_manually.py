@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-MODIFIED version of open_orifices_manually.py
-- Removed call to old extract_rings.run()
-- Returns cut mesh path and apex_id
-"""
+
 import argparse
 import os
-from typing import Any, Tuple, List, Dict, Union
+import sys
+from typing import Any, Tuple, List, Union
 
 import pymeshfix
 import pyvista as pv
 import vtk
-import sys
 
 from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
@@ -23,22 +19,19 @@ from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region
 
 
-
-pv.set_plot_theme('dark')
+# Use dark theme for PyVista plots
+pv.set_plot_theme("dark")
 
 
 def parser() -> argparse.ArgumentParser:
-    # Keep parser as is
     parser = argparse.ArgumentParser(description='Cut veins manually')
     parser.add_argument('--mesh', type=str, default="", help='path to mesh')
     parser.add_argument('--atrium', type=str, default="", help='write LA or RA')
-    # Add other arguments if needed by the function logic itself
     parser.add_argument('--min_cutting_radius', type=float, default=7.5, help='radius to cut veins/valves in mm')
     parser.add_argument('--max_cutting_radius', type=float, default=17.5, help='radius to cut veins/valves in mm')
     parser.add_argument('--scale', type=float, default=1.0, help='scaling factor (if mesh units != mm)')
     parser.add_argument('--MRI', type=int, default=0, help='set to 1 if the input is an MRI segmentation')
     parser.add_argument('--debug', type=int, default=0, help='debug flag')
-    # LAA/RAA args are passed to the function but not used internally here for parsing
     return parser
 
 
@@ -53,6 +46,7 @@ def _clean_mesh(meshpath: str, atrium: str) -> Tuple[str, str]:
     if not os.path.exists(meshpath):
         raise FileNotFoundError(f"Mesh file {meshpath} not found.")
 
+    # Directory of the input mesh and base for cleaned filenames
     mesh_dir = os.path.dirname(meshpath)
     clean_base = os.path.join(mesh_dir, f"{atrium}_clean")
     clean_path_vtk = clean_base + ".vtk"
@@ -63,12 +57,13 @@ def _clean_mesh(meshpath: str, atrium: str) -> Tuple[str, str]:
     meshfix.repair()
 
     try:
+        # Save the repaired mesh as VTK
         meshfix.mesh.save(clean_path_vtk)
-        # Also save OBJ as it might be needed by other steps implicitly
+        # Also save an OBJ version for compatibility
         pv.save_meshio(clean_path_obj, meshfix.mesh, "obj")
-        print(f"  Cleaned mesh saved.")
     except Exception as e:
         raise RuntimeError(f"Error saving cleaned mesh: {e}")
+
     return mesh_dir, clean_path_vtk  # Return path to VTK
 
 
@@ -76,13 +71,17 @@ def _map_mesh(meshpath: str, clean_path: str) -> Any:
     """
     Map point data from the original mesh to the cleaned mesh.
     """
-    print(f"  Mapping data from {meshpath} to {clean_path}")
+    print(f"Mapping data from {meshpath} to {clean_path}")
+
     try:
+        # Read both original and cleaned meshes
         mesh_with_data = smart_reader(meshpath)
         mesh_clean = smart_reader(clean_path)
+
+        # Transfer all point data arrays from mesh_with_data to mesh_clean
         mapped_mesh = point_array_mapper(mesh_with_data, mesh_clean, "all")
-        print(f"  Data mapping complete.")
         return mapped_mesh
+
     except Exception as e:
         raise RuntimeError(f"Error during data mapping: {e}")
 
@@ -92,33 +91,39 @@ def _get_orifices(atrium: str) -> List[str]:
     Return the list of orifices for the given atrium.
     """
     if atrium == "LA":
-        orifices = ['mitral valve',
-                    'left inferior pulmonary vein',
-                    'left superior pulmonary vein',
-                    'right inferior pulmonary vein',
-                    'right superior pulmonary vein']
+        orifices = [
+            "mitral valve",
+            "left inferior pulmonary vein",
+            "left superior pulmonary vein",
+            "right inferior pulmonary vein",
+            "right superior pulmonary vein"
+        ]
 
     elif atrium == "RA" or atrium == "LA_RA":
-        orifices = ['tricuspid valve',
-                    'inferior vena cava',
-                    'superior vena cava',
-                    'coronary sinus']
+        orifices = [
+            "tricuspid valve",
+            "inferior vena cava",
+            "superior vena cava",
+            "coronary sinus"
+        ]
 
     else:
         raise ValueError(f"Unknown/Unsupported atrium type for orifices: {atrium}")
 
     return orifices
 
-def open_orifices_manually(meshpath: str,
-                           atrium: str,
-                           MRI: Union[int, bool],  # Keep args even if not used directly here
-                           scale: float = 1.0,
-                           size: float = 30,  # Keep args even if not used directly here
-                           min_cutting_radius: float = 7.5,
-                           max_cutting_radius: float = 17.5,
-                           LAA: Union[str, int] = "",  # Keep args even if not used directly here
-                           RAA: Union[str, int] = "",  # Keep args even if not used directly here
-                           debug: int = 0) -> Tuple[str, int]:  # MODIFIED: Return path and apex_id
+def open_orifices_manually(
+    meshpath: str,
+    atrium: str,
+    MRI: Union[int, bool],
+    scale: float = 1.0,
+    size: float = 30,  # Present for compatibility; not used directly here
+    min_cutting_radius: float = 7.5,
+    max_cutting_radius: float = 17.5,
+    LAA: Union[str, int] = "",
+    RAA: Union[str, int] = "",
+    debug: int = 0
+) -> Tuple[str, int]:
     """
     Open atrial orifices manually by cleaning the mesh, mapping data,
     letting user pick points, cutting holes, and identifying apex.
@@ -128,16 +133,18 @@ def open_orifices_manually(meshpath: str,
         Tuple[str, int]: Path to the cut VTK file, apex ID.
     """
     print(f"--- Starting Manual Orifice Opening for {atrium} ---")
-    # Clean the mesh
+
+    # Step 1: Clean the mesh and obtain the cleaned VTK file
     full_path, clean_path = _clean_mesh(meshpath, atrium)
 
-    # Map point data to the cleaned mesh
+    # Step 2: Map data from the original mesh onto the cleaned mesh
     mesh_mapped = _map_mesh(meshpath, clean_path)
-    current_mesh_vtk = mesh_mapped  # Start cutting from mapped mesh
+    current_mesh_vtk = mesh_mapped  # Start subsequent cuts from this mapped mesh
 
-    # Process each orifice: pick a point and cut the mesh with the appropriate radius
+    # Step 3: Process each orifice by user point picking and cutting
     orifices = _get_orifices(atrium)
     print("Processing orifices...")
+
     for r_idx, r_name in enumerate(orifices):
         print(f"  Processing orifice {r_idx + 1}/{len(orifices)}: {r_name}")
         try:
