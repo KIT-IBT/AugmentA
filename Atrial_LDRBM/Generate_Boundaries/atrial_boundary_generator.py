@@ -659,6 +659,14 @@ class AtrialBoundaryGenerator:
 
         return {}
 
+    def _process_atrial_region(self,
+                               input_mesh_polydata: vtk.vtkPolyData,
+                               output_dir: str,
+                               atrium_type: str,
+                               is_biatrial: bool) -> dict:
+
+        pass
+
     def extract_rings(self, surface_mesh_path: str, output_dir: str) -> None:
         """
         Orchestrates the ring extraction process by reading the mesh (via MeshReader),

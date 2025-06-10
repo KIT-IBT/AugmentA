@@ -28,10 +28,17 @@ class WorkflowPaths:
         self._active_stage = 'initial'
         self._base_paths = {'initial': self.initial_mesh.with_suffix('')}
 
-    def register_stage_completion(self, stage_name: str, base_path: str):
+    def _update_stage(self, stage_name: str, base_path: str):
+        """Private method to update the internal state of the pipeline."""
         self._active_stage = stage_name
         self._base_paths[stage_name] = Path(base_path).with_suffix('')
-        print(f"Stage '{stage_name}' completed. Active mesh base is now: {self._base_paths[stage_name]}")
+
+    def log_current_stage(self):
+        """Logs the currently active stage and mesh base path to the console."""
+        stage_name = self._active_stage
+        active_base_name = self._base_paths[stage_name].name
+        print(f"--- Stage Complete: '{stage_name}' ---")
+        print(f"    Active mesh is now: '{active_base_name}'")
 
     @property
     def active_mesh_base(self) -> Path:
