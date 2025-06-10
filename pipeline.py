@@ -543,8 +543,8 @@ def _run_fiber_generation(paths: WorkflowPaths, generator: AtrialBoundaryGenerat
                 f"-omsh={output_mesh_carp_txt_um} "
                 f"-ofmt=vtk")
 
-        subprocess.run(cmd1, shell=True, check=True)
-        subprocess.run(cmd2, shell=True, check=True)
+        os.system(cmd1)
+        os.system(cmd2)
 
     if args.atrium == "LA":
         print(f"INFO: LA path (non-SSM). Labeling and preparing fibers for: {path_for_labeling_obj}")
@@ -624,8 +624,8 @@ def _run_fiber_generation(paths: WorkflowPaths, generator: AtrialBoundaryGenerat
                        f"-omsh={output_mesh_carp_txt_um_LA} "
                        f"-ofmt=vtk")
 
-            subprocess.run(cmd1_la, shell=True, check=True)
-            subprocess.run(cmd2_la, shell=True, check=True)
+            os.system(cmd1)
+            os.system(cmd2)
 
     elif args.atrium == "RA":
         try:
