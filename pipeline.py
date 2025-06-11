@@ -200,13 +200,18 @@ def _setup(args) -> Tuple[WorkflowPaths, AtrialBoundaryGenerator]:
 
 def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args) -> int:
     """
-    Handles all surface preparation steps: epi/endo separation, orifice opening,
-    or manual apex picking. Updates the paths and generator objects accordingly.
-    Returns the apex_id for potential resampling.
+    Handle all surface preparation steps: epi/endo separation,
+    orifice opening, or manual apex picking. Updates paths and
+    generator accordingly.
+
+    :param paths: WorkflowPaths tracking file paths for each stage
+    :param generator: AtrialBoundaryGenerator for ring extraction
+    :param args: Command-line arguments object with flags and parameters
+    :return: Apex ID for potential resampling
     """
     apex_id_for_resampling = -1
 
-    # Check for an apex file first
+    # If an apex file is provided, load IDs from it
     if args.apex_file:
         print(f"Loading apex IDs from file: {args.apex_file}")
         apex_ids = _load_apex_ids_from_file(args.apex_file)
@@ -229,7 +234,7 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
         return apex_id_for_resampling
 
     # --- If no apex-file is provided, run the original logic ---
-    elif not args.apex_file:
+    elif not args.apex_file:  # Otherwise, perform closed-surface or orifice logic
         if args.closed_surface:
             generator.load_element_tags(csv_filepath=args.tag_csv)
             generator.separate_epi_endo(tagged_volume_mesh_path=str(paths.initial_mesh), atrium=args.atrium)
@@ -242,6 +247,7 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
                 raise RuntimeError("Orifice opening scripts not available")
 
             if args.open_orifices:
+                # Pick which opening function to use
                 orifice_func = open_orifices_with_curvature if args.use_curvature_to_open else open_orifices_manually
                 print(f"Calling {orifice_func.__name__} for mesh='{args.mesh}', atrium='{args.atrium}'...")
 
@@ -335,148 +341,228 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
     return apex_id_for_resampling
 
 
-def _run_ssm_fitting(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args, apex_id_for_resampling: int):
-    """Handles the entire SSM fitting, resampling, and fiber generation workflow."""
-    print(f"Using target base for SSM operations: '{paths.cut_mesh}'")
+def _ensure_ssm_base_landmarks_exist(args: Any) -> None:
+    """
+    Check for SSM base landmarks and generate them if missing.
 
-    # Generate landmarks for the SSM mean shape if they don't exist.
+    :param args: Arguments object with attributes:
+        - SSM_basename: Base path for the SSM model
+        - debug: Debug flag (optional)
+    :return: None
+    """
     ssm_base_landmarks_file = Path(f"{args.SSM_basename}_surf") / "landmarks.json"
+    if ssm_base_landmarks_file.is_file():
+        print(f"Found existing SSM base landmarks: {ssm_base_landmarks_file}")
+        return
 
-    if not ssm_base_landmarks_file.is_file():
-        print(f"SSM base landmarks not found ({ssm_base_landmarks_file}). Generating...")
-        ssm_basename_obj = Path(args.SSM_basename).with_suffix('.obj')
+    print("SSM base landmarks not found. Generating...")
+    ssm_basename_obj = _ensure_obj_available(args.SSM_basename,
+                                             original_extension=".vtk")
 
-        if not ssm_basename_obj.exists():
-            # Attempt to convert from VTK if OBJ is missing.
-            ssm_basename_vtk = ssm_basename_obj.with_suffix('.vtk')
+    try:
+        ssm_base_generator = AtrialBoundaryGenerator(mesh_path=str(ssm_basename_obj),
+                                                     la_apex=LAA_APEX_ID_FOR_SSM,
+                                                     ra_apex=RAA_APEX_ID_FOR_SSM,
+                                                     debug=getattr(args, "debug", False))
 
-            if ssm_basename_vtk.exists():
-                print(f"Converting {ssm_basename_vtk} to {ssm_basename_obj} for landmark generation.")
-                pv.save_meshio(str(ssm_basename_obj), pv.read(ssm_basename_vtk))
-            else:
-                raise ValueError(f"ERROR: SSM base mesh {ssm_basename_obj} (or .vtk) not found. Aborting...")
-
-        try:
-            # Generate landmarks for the base mesh
-            print(f"Instantiating temporary AtrialBoundaryGenerator for SSM base: {ssm_basename_obj}")
-            ssm_base_generator = AtrialBoundaryGenerator(mesh_path=str(ssm_basename_obj),
-                                                         la_apex=LAA_APEX_ID_FOR_SSM,
-                                                         ra_apex=RAA_APEX_ID_FOR_SSM,
-                                                         debug=args.debug)
-
-            ssm_base_generator.extract_rings(
-                surface_mesh_path=str(ssm_basename_obj),
-                output_dir=str(ssm_base_landmarks_file.parent)
-            )
-        except Exception as e:
-            raise ValueError(f"Error during ring extraction for SSM base '{ssm_basename_obj}': {e}")
+        ssm_base_generator.extract_rings(surface_mesh_path=str(ssm_basename_obj),
+                                         output_dir=str(ssm_base_landmarks_file.parent))
 
         get_landmarks(args.SSM_basename, 0, 1)
         print(f"SSM base landmarks generated in {ssm_base_landmarks_file.parent}/")
-    else:
-        print(f"Found existing SSM base landmarks: {ssm_base_landmarks_file}")
+    except Exception as e:
+        raise RuntimeError(f"Error during ring extraction for SSM base '{ssm_basename_obj}': {e}")
 
-    # Pre-align and generate landmarks for our target mesh
-    print(f"Pre-aligning target '{paths.cut_mesh}' to SSM base '{args.SSM_basename}'.")
-    prealign_meshes(str(paths.cut_mesh), args.SSM_basename, args.atrium, 0)
 
-    print(f"Generating landmarks for target '{paths.cut_mesh}'.")
-    get_landmarks(str(paths.cut_mesh), 1, 1)
+def _generate_target_mesh_landmarks(paths: WorkflowPaths, args: Any) -> None:
+    """
+    Pre-align and generate landmarks for the target mesh.
 
-    # Create and run the SSM fitting script
-    os.makedirs(str(paths.ssm_target_dir), exist_ok=True)
+    :param paths: WorkflowPaths tracking file paths for each stage
+    :param args:  Arguments object with attributes:
+                  - SSM_basename: Base name of the SSM model
+                  - atrium:       'LA', 'RA', or 'LA_RA'
+    :return:       None
+    """
+    # Step 1: Pre-align the cut mesh to the SSM base
     try:
-        with open('template/Registration_ICP_GP_template.txt', 'r') as f:
-            tmpl_str = f.read()
-    except FileNotFoundError as e:
-        raise FileNotFoundError(f"Required template file missing: {e.filename}") from e
+        print(f"Pre-aligning target '{paths.cut_mesh}' to SSM base '{args.SSM_basename}'.")
+        prealign_meshes(str(paths.cut_mesh), args.SSM_basename, args.atrium, 0)
+    except Exception as e:
+        raise RuntimeError(f"Pre-alignment failed for '{paths.cut_mesh}': {e}")
 
-    temp_obj = Template(tmpl_str)
-    ssm_fit_script_content = temp_obj.substitute(SSM_file=args.SSM_file,
-                                                 SSM_dir=f"{args.SSM_basename}_surf",
-                                                 target_dir=str(paths.ssm_target_dir))
+    # Step 2: Generate landmarks on the pre-aligned mesh
+    try:
+        print(f"Generating landmarks for target '{paths.cut_mesh}'.")
+        get_landmarks(str(paths.cut_mesh), prealigned=1, scale=1)
+    except Exception as e:
+        raise RuntimeError(f"Landmark generation failed for '{paths.cut_mesh}': {e}")
 
-    ssm_fit_script_path: Path = paths.ssm_target_dir / 'Registration_ICP_GP.txt'
-    with open(ssm_fit_script_path, 'w') as f:
-        f.write(ssm_fit_script_content)
-    print(f"SSM Fitting script written to '{ssm_fit_script_path}'.")
 
-    # Create the patient-specific SSM instance
-    coeffs_file_path = paths.ssm_target_dir / 'coefficients.txt'
-    if not coeffs_file_path.is_file():
-        raise FileNotFoundError(f"Coefficients file not found: {coeffs_file_path}. Run SSM first.")
+def _create_ssm_registration_script(paths: WorkflowPaths, args: Any) -> None:
+    """
+    Create the SSM fitting algorithm script from a template.
 
-    create_SSM_instance(f"{args.SSM_file}.h5",
-                        str(coeffs_file_path),
-                        str(paths.fit_mesh.with_suffix('.obj')))
+    :param paths: WorkflowPaths tracking file paths for each stage
+    :param args: Arguments object with attributes:
+        - SSM_file: Path to the SSM H5 file
+        - SSM_basename: Base name for the SSM model directory
+    :return: None
+    """
+    os.makedirs(str(paths.ssm_target_dir), exist_ok=True)
 
-    # The 'fit' stage is now complete. Update the state.
+    template_path = 'template/Registration_ICP_GP_template.txt'
+
+    # Read the template file
+    try:
+        with open(template_path, 'r') as f:
+            template_string = f.read()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Required template file missing: {template_path}")
+
+    # Substitute variables into the template
+    try:
+        template = Template(template_string)
+        script_content = template.substitute(
+            SSM_file=args.SSM_file,
+            SSM_dir=f"{args.SSM_basename}_surf",
+            target_dir=str(paths.ssm_target_dir)
+        )
+    except Exception as e:
+        raise RuntimeError(f"Template substitution failed: {e}")
+
+    # Write the filled-in script to disk
+    script_path = paths.ssm_target_dir / 'Registration_ICP_GP.txt'
+    try:
+        with open(script_path, 'w') as f:
+            f.write(script_content)
+        print(f"SSM Fitting script written to '{script_path}'.")
+    except Exception as e:
+        raise RuntimeError(f"Failed to write registration script '{script_path}': {e}")
+
+
+def _resample_ssm_output_if_needed(args: Any, paths: WorkflowPaths, apex_id_for_resampling: int) -> None:
+    """
+    If requested, resamples the newly fitted SSM mesh.
+
+    :param args:                   Arguments object with resampling flags and parameters
+    :param paths:                  WorkflowPaths tracking mesh file paths
+    :param apex_id_for_resampling: Apex ID to use for resampling
+    :return:                       None
+    """
+    if not getattr(args, 'resample_input', False):
+        return
+
+    try:
+        resample_surf_mesh(
+            meshname=str(paths.active_mesh_base),  # The active mesh is now the 'fit' mesh
+            target_mesh_resolution=args.target_mesh_resolution,
+            find_apex_with_curv=1,
+            scale=args.scale,
+            apex_id=apex_id_for_resampling,
+            atrium=args.atrium
+        )
+        paths._update_stage('resampled', base_path=str(paths.resampled_mesh))
+    except Exception as e:
+        raise RuntimeError(f"SSM output resampling failed for '{paths.active_mesh_base}': {e}")
+
+
+def _create_ssm_instance_from_coeffs(paths: WorkflowPaths, args: Any) -> None:
+    """
+    Creates a new mesh instance from the SSM using a coefficients file.
+
+    :param paths: WorkflowPaths tracking file paths for each stage
+    :param args: Arguments object with attributes:
+        - SSM_file: Base path to the SSM H5 file
+    :return: None
+    """
+    coeffs_file = paths.ssm_target_dir / "coefficients.txt"
+    if not coeffs_file.is_file():
+        raise FileNotFoundError(
+            f"Coefficients file not found: {coeffs_file}. Run the external SSM fitting process first.")
+
+    try:
+        create_SSM_instance(
+            f"{args.SSM_file}.h5",
+            str(coeffs_file),
+            str(paths.fit_mesh.with_suffix(".obj"))
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to create SSM instance from coefficients: {e}")
+
+
+def _run_final_labeling_and_fibers_for_ssm(args: Any, paths: WorkflowPaths, generator: AtrialBoundaryGenerator,
+                                           n_cpu: int) -> None:
+    """
+    Handle the final steps of labeling and fiber generation for the SSM output.
+
+    :param args:       Arguments object with flags and parameters
+    :param paths:      WorkflowPaths tracking file paths for each stage
+    :param generator:  AtrialBoundaryGenerator for ring extraction
+    :param n_cpu:      Number of CPU cores for fiber scripts
+    :return:           None
+    """
+    mesh_base = paths.active_mesh_base
+    laa_id, raa_id = _load_apex_ids(str(mesh_base))
+    generator.la_apex = laa_id
+    generator.ra_apex = raa_id
+    print(f"Generator apex IDs for final processing: LAA={generator.la_apex}, RAA={generator.ra_apex}")
+
+    if getattr(args, "resample_input", False):
+        source_ext = ".ply"
+    else:
+        source_ext = ".obj"
+    path_for_labeling_obj = _ensure_obj_available(str(mesh_base), source_ext)
+
+    try:
+        generator.extract_rings(surface_mesh_path=path_for_labeling_obj, output_dir=str(paths.surf_dir))
+        print(f"Final ring extraction on SSM result '{mesh_base.name}' complete.")
+    except Exception as e:
+        raise RuntimeError(f"Final ring extraction failed: {e}")
+
+    fiber_main = la_main if args.atrium == "LA" else ra_main
+    try:
+        fiber_main.run([
+            "--mesh", str(mesh_base),
+            "--np", str(n_cpu),
+            "--normals_outside", str(args.normals_outside),
+            "--ofmt", args.ofmt,
+            "--debug", str(args.debug),
+            "--overwrite-behaviour", "append"
+        ])
+    except Exception as e:
+        raise RuntimeError(f"Fiber generation script failed: {e}")
+
+
+def _run_ssm_fitting(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args: Any, apex_id_for_resampling: int,
+                     n_cpu: int) -> None:
+    """
+    Orchestrate the SSM fitting workflow by calling modular sub-steps.
+
+    :param paths: WorkflowPaths tracking file paths for each stage
+    :param generator: AtrialBoundaryGenerator used for ring extraction
+    :param args: Arguments object with flags and parameters
+    :param apex_id_for_resampling: Apex ID to use if resampling is required
+    :param n_cpu: Number of CPU cores for parallel tasks
+    :return: None
+    """
+
+    # Stage 1: Prepare landmarks
+    _ensure_ssm_base_landmarks_exist(args)
+    _generate_target_mesh_landmarks(paths, args)
+
+    # Stage 2: Create the registration script for the external fitting tool
+    _create_ssm_registration_script(paths, args)
+
+    # Stage 3: Instantiate mesh from the fitting coefficients
+    _create_ssm_instance_from_coeffs(paths, args)
     paths._update_stage('fit', base_path=str(paths.fit_mesh))
 
-    if args.resample_input:
-        try:
-            resample_surf_mesh(
-                meshname=str(paths.active_mesh_base),
-                target_mesh_resolution=args.target_mesh_resolution,
-                find_apex_with_curv=1,
-                scale=args.scale,
-                apex_id=apex_id_for_resampling,
-                atrium=args.atrium
-            )
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"Mesh file not found for resampling: {paths.active_mesh_base}") from e
-        except ValueError as e:
-            raise ValueError(f"Invalid parameters for mesh resampling: {e}") from e
-        except Exception as e:
-            raise RuntimeError(f"Mesh resampling failed for '{paths.active_mesh_base}': {e}")
+    # Stage 4: Resample the new instance if requested
+    _resample_ssm_output_if_needed(args, paths, apex_id_for_resampling)
 
-        # The 'resampled' stage is now complete. Update the state.
-        paths._update_stage('resampled', base_path=str(paths.resampled_mesh))
-
-        updated_laa_ssm, updated_raa_ssm = _load_apex_ids(str(paths.resampled_mesh))
-        if updated_laa_ssm is not None:
-            if args.atrium == "LA" or args.atrium == "LA_RA":
-                generator.la_apex = updated_laa_ssm
-        if updated_raa_ssm is not None:
-            if args.atrium == "RA" or args.atrium == "LA_RA":
-                generator.ra_apex = updated_raa_ssm
-        print(f"Generator apex IDs after SSM resampling: LAA={generator.la_apex}, RAA={generator.ra_apex}")
-
-    # Update generator apex IDs from the mesh_data.csv of the FIT mesh
-    laa_fit_csv, raa_fit_csv = _load_apex_ids(str(paths.fit_mesh))
-    original_gen_laa, original_gen_raa = generator.la_apex, generator.ra_apex
-    generator.la_apex = laa_fit_csv if args.atrium in ["LA", "LA_RA"] else None
-    generator.ra_apex = raa_fit_csv if args.atrium in ["RA", "LA_RA"] else None
-
-    source_ext_for_ssm_final_rings = ".ply" if args.resample_input else ".obj"
-    path_for_final_ssm_rings = _ensure_obj_available(
-        str(paths.active_mesh_base),
-        original_extension=source_ext_for_ssm_final_rings
-    )
-
-    try:
-        generator.extract_rings(surface_mesh_path=path_for_final_ssm_rings,
-                                output_dir=str(paths.surf_dir))
-
-        print(f"Final ring extraction on SSM result '{paths.active_mesh_base.name}' complete.")
-        print(f"DEBUG: LAA={generator.la_apex}, RAA={generator.ra_apex}")
-
-    except Exception as e:
-        raise RuntimeError(f"Final ring extraction failed after SSM workflow: {e}") from e
-
-    # Restore original apex IDs for the generator instance if needed elsewhere.
-    generator.la_apex, generator.ra_apex = original_gen_laa, original_gen_raa
-
-    # Run fiber generation
-    fiber_main = la_main if args.atrium == "LA" else ra_main
-    fiber_main.run(["--mesh", str(paths.active_mesh_base),
-                    "--np", str(n_cpu),
-                    "--normals_outside", str(args.normals_outside),
-                    "--ofmt", args.ofmt,
-                    "--debug", str(args.debug),
-                    "--overwrite-behaviour", "append"])
-
-    print(f"INFO: SSM path complete. Final active mesh is: {paths.active_mesh_base.name}")
+    # Stage 5: Run final labeling and fiber generation on the result
+    _run_final_labeling_and_fibers_for_ssm(args, paths, generator, n_cpu)
 
 
 def _resample_mesh_if_needed(args: Any, paths: WorkflowPaths):
@@ -517,7 +603,7 @@ def _resample_mesh_if_needed(args: Any, paths: WorkflowPaths):
     print(f'INFO: Resampling complete. Active mesh is now: {paths.active_mesh_base.name}')
 
 
-def _update_generator_with_apex_ids(paths: WorkflowPaths, generator: AtrialBoundaryGenerator)-> None:
+def _update_generator_with_apex_ids(paths: WorkflowPaths, generator: AtrialBoundaryGenerator) -> None:
     """
     Load the correct apex IDs for the active mesh and set them on the generator.
 
