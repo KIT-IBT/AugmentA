@@ -107,6 +107,11 @@ def parser():
                         type=int,
                         default=0,
                         help='set to 1 to debug step by step, 0 otherwise')
+    parser.add_argument('--apex-file',
+                        type=str,
+                        default=None,
+                        help='Path to a CSV file specifying apex IDs to bypass interactive picking. '
+                             'Format: a header row "atrium,id" followed by rows like "LAA,123".')
     return parser
 
 

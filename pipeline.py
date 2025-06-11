@@ -26,8 +26,8 @@ under the License.
 
 """
 
+# TODO: !!!Done but needs testing!!! Allow appendage point to be provided from a text file instead of manual picking.
 # TODO: Enable or disable steps by choice so that we resample first for X amount of meshes, then the user can pick the apex point.
-# TODO: Allow appendage point to be provided from a text file instead of manual picking.
 
 import os
 import sys
@@ -95,6 +95,34 @@ def _load_apex_ids(csv_base: str) -> Tuple[Optional[int], Optional[int]]:
         return None, None
     except (ValueError, KeyError, IndexError):
         return None, None
+
+
+def _load_apex_ids_from_file(filepath: str) -> Dict[str, int]:
+    """
+    Reads a CSV file to load appendage apex IDs. The CSV file must have 'atrium' and 'id' columns.
+    :param filepath: Path to the CSV file.
+    :return: A dictionary mapping atrium names ('LAA', 'RAA') to integer IDs.
+    """
+    if not isinstance(filepath, str) or not filepath:
+        raise ValueError("filepath must be a non-empty string.")
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(f"Apex ID file not found: {filepath}")
+
+    try:
+        df = pd.read_csv(filepath)
+        if "atrium" not in df.columns or "id" not in df.columns:
+            raise ValueError("CSV must contain 'atrium' and 'id' columns.")
+
+        # Set 'atrium' column as index and convert the 'id' column to a dictionary
+        apex_ids = df.set_index('atrium')['id'].to_dict()
+
+        # Ensure IDs are integers
+        for key, value in apex_ids.items():
+            apex_ids[key] = int(value)
+
+        return apex_ids
+    except Exception as e:
+        raise RuntimeError(f"Error parsing apex file {filepath}: {e}")
 
 
 def _save_apex_ids(csv_base: str, ids: Dict[str, int]) -> None:
@@ -178,105 +206,131 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
     """
     apex_id_for_resampling = -1
 
-    if args.closed_surface:
-        generator.load_element_tags(csv_filepath=args.tag_csv)
-        generator.separate_epi_endo(tagged_volume_mesh_path=str(paths.initial_mesh), atrium=args.atrium)
+    # Check for an apex file first
+    if args.apex_file:
+        print(f"Loading apex IDs from file: {args.apex_file}")
+        apex_ids = _load_apex_ids_from_file(args.apex_file)
 
-        # After this stage, the "active" mesh for subsequent steps is the epi mesh.
-        paths._update_stage('epi_separated', base_path=str(paths.closed_surface_epi_mesh))
+        if "LAA" in apex_ids:
+            generator.la_apex = apex_ids["LAA"]
+        if "RAA" in apex_ids:
+            generator.ra_apex = apex_ids["RAA"]
 
-    else:
-        if open_orifices_manually is None or open_orifices_with_curvature is None:
-            raise RuntimeError("Orifice opening scripts not available")
+        csv_data_to_save = {}
+        if generator.la_apex is not None:
+            csv_data_to_save["LAA_id"] = [generator.la_apex]
+        if generator.ra_apex is not None:
+            csv_data_to_save["RAA_id"] = [generator.ra_apex]
 
-        if args.open_orifices:
-            orifice_func = open_orifices_with_curvature if args.use_curvature_to_open else open_orifices_manually
-            print(f"Calling {orifice_func.__name__} for mesh='{args.mesh}', atrium='{args.atrium}'...")
+        if csv_data_to_save:
+            _save_apex_ids(str(paths.initial_mesh_base), csv_data_to_save)
+            print(f"Apex IDs from file saved to {paths.initial_mesh_base}_mesh_data.csv for consistency.")
 
-            # cut_path: path to the final cut and cleaned mesh
-            cut_path, apex_id = orifice_func(meshpath=str(paths.initial_mesh),
-                                             atrium=args.atrium,
-                                             MRI=args.MRI,
-                                             scale=args.scale,
-                                             min_cutting_radius=getattr(args, 'min_cutting_radius', 7.5),
-                                             max_cutting_radius=getattr(args, 'max_cutting_radius', 17.5),
-                                             debug=args.debug)
+        return apex_id_for_resampling
 
-            if cut_path is None or not Path(cut_path).exists():
-                raise FileNotFoundError(f"{orifice_func.__name__} failed: Invalid cut_path")
-            if apex_id is None or apex_id < 0:
-                raise ValueError(f"{orifice_func.__name__} failed: Invalid apex_id")
-            print(f"Mesh after orifice cutting: {cut_path}\nApex ID picked: {apex_id}")
+    # --- If no apex-file is provided, run the original logic ---
+    elif not args.apex_file:
+        if args.closed_surface:
+            generator.load_element_tags(csv_filepath=args.tag_csv)
+            generator.separate_epi_endo(tagged_volume_mesh_path=str(paths.initial_mesh), atrium=args.atrium)
 
-            # Carrying the apex_id for resampling
-            apex_id_for_resampling = apex_id
+            # After this stage, the "active" mesh for subsequent steps is the epi mesh.
+            paths._update_stage('epi_separated', base_path=str(paths.closed_surface_epi_mesh))
 
-            # Register the 'cut' stage as complete. The `paths` object now knows the active mesh is the one that was
-            # just created.
-            paths._update_stage('cut', base_path=str(Path(cut_path).with_suffix('')))
+        else:
+            if open_orifices_manually is None or open_orifices_with_curvature is None:
+                raise RuntimeError("Orifice opening scripts not available")
 
-            if args.atrium == "LA":
-                generator.la_apex = apex_id
-                print(f"Updating generator.la_apex from {generator.la_apex} to {apex_id}.")
-            elif args.atrium == "RA":
-                generator.ra_apex = apex_id
-                print(f"Updating generator.ra_apex from {generator.ra_apex} to {apex_id}.")
+            if args.open_orifices:
+                orifice_func = open_orifices_with_curvature if args.use_curvature_to_open else open_orifices_manually
+                print(f"Calling {orifice_func.__name__} for mesh='{args.mesh}', atrium='{args.atrium}'...")
 
-            try:
-                generator.extract_rings(
-                    surface_mesh_path=str(paths.active_mesh_base.with_suffix('.vtk')),
-                    output_dir=str(paths.surf_dir)
-                )
-            except Exception as e:
-                raise RuntimeError(
-                    f"Error in extract_rings('{paths.active_mesh_base.with_suffix('.vtk')}'): {e}") from e
+                # cut_path: path to the final cut and cleaned mesh
+                cut_path, apex_id = orifice_func(meshpath=str(paths.initial_mesh),
+                                                 atrium=args.atrium,
+                                                 MRI=args.MRI,
+                                                 scale=args.scale,
+                                                 min_cutting_radius=getattr(args, 'min_cutting_radius', 7.5),
+                                                 max_cutting_radius=getattr(args, 'max_cutting_radius', 17.5),
+                                                 debug=args.debug)
 
-            print(f"INFO: Ring extraction complete. Outputs saved in: {paths.surf_dir}")
+                if cut_path is None or not Path(cut_path).exists():
+                    raise FileNotFoundError(f"{orifice_func.__name__} failed: Invalid cut_path")
+                if apex_id is None or apex_id < 0:
+                    raise ValueError(f"{orifice_func.__name__} failed: Invalid apex_id")
+                print(f"Mesh after orifice cutting: {cut_path}\nApex ID picked: {apex_id}")
 
-        else:  # not args.open_orifices:
-            if args.find_appendage and not args.resample_input:
-                polydata = apply_vtk_geom_filter(smart_reader(str(paths.initial_mesh)))
-                if polydata is None:
-                    raise FileNotFoundError(f"Could not read mesh: {paths.initial_mesh}")
-                if polydata.GetNumberOfPoints() == 0:
-                    raise ValueError(f"Mesh is empty (no points): {paths.initial_mesh}")
+                # Carrying the apex_id for resampling
+                apex_id_for_resampling = apex_id
 
-                pv_mesh = pv.PolyData(polydata)
-                # Ensure points are double for cKDTree
-                points_for_tree = pv_mesh.points.astype(np.double)
-                tree = cKDTree(points_for_tree)
-
-                picked_apex_data_for_csv: Dict[str, Any] = {}
-                initial_apex = pick_point(pv_mesh, "appendage apex")
-                if initial_apex is None:
-                    raise RuntimeError("Initial 'appendage apex' picking cancelled or failed")
-
-                _, initial_apex_id = tree.query(initial_apex)
-                print(f"Initial 'appendage apex' picked: ID={initial_apex_id}")
+                # Register the 'cut' stage as complete. The `paths` object now knows the active mesh is the one that was
+                # just created.
+                paths._update_stage('cut', base_path=str(Path(cut_path).with_suffix('')))
 
                 if args.atrium == "LA":
-                    generator.la_apex = initial_apex_id
-                    picked_apex_data_for_csv["LAA_id"] = [initial_apex_id]
+                    generator.la_apex = apex_id
+                    print(f"Updating generator.la_apex from {generator.la_apex} to {apex_id}.")
                 elif args.atrium == "RA":
-                    generator.ra_apex = initial_apex_id
-                    picked_apex_data_for_csv["RAA_id"] = [initial_apex_id]
-                elif args.atrium == "LA_RA":
-                    generator.la_apex = initial_apex_id
-                    picked_apex_data_for_csv["LAA_id"] = [initial_apex_id]
-                    raa_apex = pick_point_with_preselection(pv_mesh, "RA appendage apex", initial_apex)
+                    generator.ra_apex = apex_id
+                    print(f"Updating generator.ra_apex from {generator.ra_apex} to {apex_id}.")
+
+                try:
+                    generator.extract_rings(
+                        surface_mesh_path=str(paths.active_mesh_base.with_suffix('.vtk')),
+                        output_dir=str(paths.surf_dir)
+                    )
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Error in extract_rings('{paths.active_mesh_base.with_suffix('.vtk')}'): {e}") from e
+
+                print(f"INFO: Ring extraction complete. Outputs saved in: {paths.surf_dir}")
+
+            else:  # not args.open_orifices:
+                print("No apex file provided. Starting interactive point picking...")
+
+                if args.find_appendage and not args.resample_input:
+                    polydata = apply_vtk_geom_filter(smart_reader(str(paths.initial_mesh)))
+                    if polydata is None:
+                        raise FileNotFoundError(f"Could not read mesh: {paths.initial_mesh}")
+                    if polydata.GetNumberOfPoints() == 0:
+                        raise ValueError(f"Mesh is empty (no points): {paths.initial_mesh}")
 
                     pv_mesh = pv.PolyData(polydata)
+                    # Ensure points are double for cKDTree
                     points_for_tree = pv_mesh.points.astype(np.double)
                     tree = cKDTree(points_for_tree)
-                    _, raa_apex_id = tree.query(raa_apex)
-                    generator.ra_apex = raa_apex_id
-                    picked_apex_data_for_csv["RAA_id"] = [raa_apex_id]
 
-                else:
-                    raise ValueError(f"Unknown atrium value '{args.atrium}'. Aborting...")
+                    picked_apex_data_for_csv: Dict[str, Any] = {}
+                    initial_apex = pick_point(pv_mesh, "appendage apex")
+                    if initial_apex is None:
+                        raise RuntimeError("Initial 'appendage apex' picking cancelled or failed")
 
-                _save_apex_ids(str(paths.initial_mesh_base), picked_apex_data_for_csv)
-                print(f"Apex IDs saved to {paths.initial_mesh_base}_mesh_data.csv")
+                    _, initial_apex_id = tree.query(initial_apex)
+                    print(f"Initial 'appendage apex' picked: ID={initial_apex_id}")
+
+                    if args.atrium == "LA":
+                        generator.la_apex = initial_apex_id
+                        picked_apex_data_for_csv["LAA_id"] = [initial_apex_id]
+                    elif args.atrium == "RA":
+                        generator.ra_apex = initial_apex_id
+                        picked_apex_data_for_csv["RAA_id"] = [initial_apex_id]
+                    elif args.atrium == "LA_RA":
+                        generator.la_apex = initial_apex_id
+                        picked_apex_data_for_csv["LAA_id"] = [initial_apex_id]
+                        raa_apex = pick_point_with_preselection(pv_mesh, "RA appendage apex", initial_apex)
+
+                        pv_mesh = pv.PolyData(polydata)
+                        points_for_tree = pv_mesh.points.astype(np.double)
+                        tree = cKDTree(points_for_tree)
+                        _, raa_apex_id = tree.query(raa_apex)
+                        generator.ra_apex = raa_apex_id
+                        picked_apex_data_for_csv["RAA_id"] = [raa_apex_id]
+
+                    else:
+                        raise ValueError(f"Unknown atrium value '{args.atrium}'. Aborting...")
+
+                    _save_apex_ids(str(paths.initial_mesh_base), picked_apex_data_for_csv)
+                    print(f"Apex IDs saved to {paths.initial_mesh_base}_mesh_data.csv")
 
     return apex_id_for_resampling
 
