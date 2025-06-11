@@ -8,9 +8,11 @@ from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
 from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
+    get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, initialize_plane_with_points, initialize_plane
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, \
+    initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
@@ -118,7 +120,11 @@ class RingDetector:
 
     def detect_rings(self, debug: bool = False) -> list[Ring]:
         """
-        Detects rings from the input surface by extracting the boundary edges andthen finding connected components.
+        Detect rings from the input surface by extracting boundary edges
+        and finding connected components.
+
+        :param debug: If True, save each raw ring as a debug VTK file
+        :return:      List of Ring objects for each detected ring
         """
         # Extract the boundary edges of the surface
         self.boundary_edges = get_feature_edges(
@@ -137,10 +143,12 @@ class RingDetector:
         # Process each connected component (potential ring)
         detected_rings: List[Ring] = []
         for region_index in range(num_regions):
-            ring_obj = self._process_detected_ring_region(connect_filter, region_index, debug)
-
-            if ring_obj:
-                detected_rings.append(ring_obj)
+            try:
+                ring_obj = self._process_detected_ring_region(connect_filter, region_index, debug)
+                if ring_obj:
+                    detected_rings.append(ring_obj)
+            except Exception as e:
+                print(f"Error processing ring region {region_index}: {e}")
 
             connect_filter.DeleteSpecifiedRegion(region_index)
             connect_filter.Update()
@@ -151,36 +159,45 @@ class RingDetector:
         """
         Processes a single connected component from the connectivity filter, cleaning and converting it to a Ring object.
         """
-        # Tell the connect filter to focus only on the i-th region
-        connect_filter.AddSpecifiedRegion(region_index)
+        try:
+            # Tell the connect filter to focus only on the i-th region
+            connect_filter.AddSpecifiedRegion(region_index)
 
-        # Executes the filter for the specified region
-        connect_filter.Update()
+            # Executes the filter for the specified region
+            connect_filter.Update()
 
-        # Gets the actual geometric data (points and lines) for this single ring
-        region_ug = connect_filter.GetOutput()
+            # Gets the actual geometric data (points and lines) for this single ring
+            region_ug = connect_filter.GetOutput()
 
-        # Converts vtkUnstructuredGrid output from the connectivity filter into a vtkPolyData
-        region_pd = apply_vtk_geom_filter(region_ug)
-        region_pd = clean_polydata(region_pd)
+            # Converts vtkUnstructuredGrid output from the connectivity filter into a vtkPolyData
+            region_pd = apply_vtk_geom_filter(region_ug)
+            region_pd = clean_polydata(region_pd)
 
-        if debug:
-            # Save a debug version of the ring for inspection
-            debug_path = os.path.join(self.outdir, f'ring_{region_index}.vtk')
-            Mesh(region_pd).save(debug_path)
+            if region_pd is None or region_pd.GetNumberOfPoints() == 0:
+                if debug:
+                    print(f"Region {region_index} is empty after cleaning.")
+                return None
 
-        ring_poly_copy = vtk.vtkPolyData()
-        ring_poly_copy.DeepCopy(region_pd)
+            if debug:
+                # Save a debug version of the ring for inspection
+                debug_path = os.path.join(self.outdir, f'ring_{region_index}.vtk')
+                Mesh(region_pd).save(debug_path)
 
-        # Compute the center of mass and distance from the apex for classification
-        center = get_center_of_mass(region_pd, set_use_scalars_as_weights=False)
-        #distance = np.sqrt(np.sum((np.array(self.apex) - np.array(center)) ** 2, axis=0))
-        distance = np.linalg.norm(np.array(self.apex) - np.array(center))
-        num_pts = region_pd.GetNumberOfPoints()
+            ring_poly_copy = vtk.vtkPolyData()
+            ring_poly_copy.DeepCopy(region_pd)
 
-        ring_obj = Ring(region_index, "", num_pts, center, distance, ring_poly_copy)
+            # Compute the center of mass and distance from the apex for classification
+            center = get_center_of_mass(region_pd, set_use_scalars_as_weights=False)
+            distance = np.linalg.norm(np.array(self.apex) - np.array(center))
+            num_pts = region_pd.GetNumberOfPoints()
 
-        return ring_obj
+            ring_obj = Ring(region_index, "", num_pts, center, distance, ring_poly_copy)
+            return ring_obj
+
+        except Exception as e:
+            if debug:
+                print(f"Error processing region {region_index}: {e}")
+            return None
 
     @staticmethod
     def _cluster_rings(
