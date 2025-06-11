@@ -116,6 +116,11 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
         resampled (bool): Flag indicating if resampled surfaces should be used.
         debug (bool): If True, prints detailed debug information.
     """
+    if not isinstance(vol_mesh_path, str) or not vol_mesh_path:
+        raise ValueError("vol_mesh_path must be a non-empty string.")
+    if not isinstance(atrium, str) or not atrium:
+        raise ValueError("atrium must be a non-empty string.")
+
     if debug:
         print(f"Generating surface IDs for {atrium} using volumetric mesh: {vol_mesh_path}")
 
@@ -139,12 +144,9 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
             print(f"Loaded volumetric mesh with {volumetric_mesh.GetNumberOfPoints()} points; KDTree built.")
 
     except FileNotFoundError:
-        print(f"Error: Volumetric mesh file not found at {vol_mesh_path}. Aborting.")
-        raise
-
+        raise FileNotFoundError(f"Volumetric mesh file not found at {vol_mesh_path}.")
     except Exception as e:
-        print(f"Error loading volumetric mesh or building KDTree: {e}")
-        raise
+        raise RuntimeError(f"Failed to load volumetric mesh or build KDTree: {e}")
 
     outdir = _prepare_output_directory(vol_mesh_path, atrium)
 
@@ -165,11 +167,9 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
 
     except FileNotFoundError:
         print(f"Warning: Epicardial surface file not found at {epi_surf_path}. Skipping epicardium processing.")
-
     except Exception as e:
         print(f"Warning: Error processing epicardial surface {epi_surf_path}: {e}")
 
-    # -------------------- Process Endocardium --------------------
     # The endocardial surface file is expected to be named like '<base_name>_endo.obj'
     endo_surf_path = f"{base_name}_endo.obj"
     try:
@@ -184,7 +184,6 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
         # Remove any points already mapped to the epicardium to avoid overlaps
         if epi_indices.size > 0:
             endo_indices_filtered = np.setdiff1d(endo_indices_raw, epi_indices, assume_unique=True)
-
         else:
             endo_indices_filtered = endo_indices_raw
 
@@ -196,17 +195,19 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
         print(f"Warning: Error processing endocardial surface {endo_surf_path}: {e}")
 
     try:
-
         shutil.copyfile(vol_mesh_path, os.path.join(outdir, f"{atrium}.vtk"))
+
         res_suffix = "_res" if resampled else ""
         surf_proc_dir = f"{base_name}_epi{res_suffix}_surf"
         centroids_src_path = os.path.join(surf_proc_dir, "rings_centroids.csv")
         centroids_dst_path = os.path.join(outdir, "rings_centroids.csv")
 
         shutil.copyfile(centroids_src_path, centroids_dst_path)
-
     except Exception as e:
         print(f"Warning: Error copying base files (volume mesh / centroids): {e}")
 
     # map the ring VTX files
-    _map_ring_vtx_files(surf_proc_dir, outdir, epicardial_polydata, volumetric_kdtree, debug=debug)
+    if epicardial_polydata is not None:
+        _map_ring_vtx_files(surf_proc_dir, outdir, epicardial_polydata, volumetric_kdtree, debug=debug)
+    elif debug:
+        print("Skipping ring VTX file mapping: missing epicardial_polydata or volumetric_kdtree.")

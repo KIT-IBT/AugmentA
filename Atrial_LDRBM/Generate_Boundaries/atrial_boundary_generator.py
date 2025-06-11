@@ -1,10 +1,9 @@
 import os
 import subprocess
-import shutil
 from glob import glob
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, List
 
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
@@ -12,9 +11,8 @@ from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
 from Atrial_LDRBM.Generate_Boundaries.epi_endo_separator import separate_epi_endo
+from Atrial_LDRBM.Generate_Boundaries.tag_loader import TagLoader
 from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import generate_surf_id
-from Atrial_LDRBM.Generate_Boundaries.tag_loader import load_element_tags
-from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import generate_surf_id as gen_surf_id_func
 from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 from Atrial_LDRBM.Generate_Boundaries.ring_detector import RingDetector
 
@@ -820,7 +818,7 @@ class AtrialBoundaryGenerator:
             print(f"Initiating surface ID generation for {atrium} using volume mesh: {volumetric_mesh_path}")
 
         try:
-            gen_surf_id_func(vol_mesh_path=volumetric_mesh_path,
+            generate_surf_id(vol_mesh_path=volumetric_mesh_path,
                              atrium=atrium,
                              resampled=resampled,
                              debug=self.debug)
@@ -831,7 +829,8 @@ class AtrialBoundaryGenerator:
             print(f"ERROR during surface ID generation for {atrium}: {e}")
 
     def load_element_tags(self, csv_filepath: str) -> None:
-        self.element_tags = load_element_tags(csv_filepath)
+        loader = TagLoader(csv_filepath=csv_filepath)
+        self.element_tags = loader.load()
 
     def extract_rings_top_epi_endo(self, surface_mesh_path: str, output_dir: str) -> None:
         """
