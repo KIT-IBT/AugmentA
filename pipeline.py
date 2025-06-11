@@ -479,258 +479,303 @@ def _run_ssm_fitting(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
     print(f"INFO: SSM path complete. Final active mesh is: {paths.active_mesh_base.name}")
 
 
-def _run_fiber_generation(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args):
-    """Handles non-SSM fiber generation, including resampling and volumetric processing."""
-    if args.resample_input and args.find_appendage:
-        print(f"INFO: Resampling mesh: '{paths.active_mesh_base.name}'")
+def _resample_mesh_if_needed(args: Any, paths: WorkflowPaths):
+    """
+    If requested, resamples the mesh and updates the pipeline path.
 
-        # Determine the correct file extension of the mesh we are resampling
-        source_ext = paths.active_mesh_base.suffix
-        # If base path has no extension, check common ones
-        if not source_ext:
-            if Path(str(paths.active_mesh_base) + '.vtk').exists():
-                source_ext = '.vtk'
-            elif Path(str(paths.active_mesh_base) + '.obj').exists():
-                source_ext = '.obj'
-            else:
-                source_ext = paths.initial_mesh_ext  # Fallback to original
+    :param args: Workflow arguments containing resample flags and parameters
+    :param paths: WorkflowPaths object tracking mesh file paths
+    :return: None
+    """
+    if not (args.resample_input and args.find_appendage):
+        print('INFO: No resampling requested for this workflow.')
+        return
 
-        _ensure_obj_available(str(paths.active_mesh_base), original_extension=source_ext)
+    mesh_base = paths.active_mesh_base
+    print(f"INFO: Resampling mesh: '{mesh_base.name}'")
 
-        try:
-            resample_surf_mesh(meshname=str(paths.active_mesh_base),
-                               target_mesh_resolution=args.target_mesh_resolution,
-                               find_apex_with_curv=0,
-                               scale=args.scale,
-                               apex_id=-1,  # Always find new apex in this workflow
-                               atrium=args.atrium)
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"Mesh file not found for resampling: {paths.active_mesh_base}") from e
-        except ValueError as e:
-            raise ValueError(f"Invalid parameters for mesh resampling: {e}") from e
-        except Exception as e:
-            raise RuntimeError(f"Mesh resampling failed for '{paths.active_mesh_base}': {e}")
+    # Ensure an OBJ exists for meshtool, converting from the original extension if needed
+    source_ext = mesh_base.suffix or paths.initial_mesh_ext
+    _ensure_obj_available(str(mesh_base), original_extension=source_ext)
 
-        # The 'resampled' stage is now complete. Update the state.
+    # Perform the resampling operation
+    try:
+        resample_surf_mesh(meshname=str(paths.active_mesh_base),
+                           target_mesh_resolution=args.target_mesh_resolution,
+                           find_apex_with_curv=0,
+                           scale=args.scale,
+                           apex_id=-1,
+                           atrium=args.atrium)
+    except Exception as e:
+        raise RuntimeError(f"Mesh resampling failed for '{paths.active_mesh_base}': {e}")
+
+    try:
         paths._update_stage(stage_name='resampled', base_path=str(paths.resampled_mesh))
-        print(f'INFO: Resampling complete. Active mesh is now: {paths.active_mesh_base.name}')
+    except Exception as e:
+        raise RuntimeError(f"Failed to update workflow path after resampling: {e}")
 
-        # Update apex IDs from the output of the resampling script.
-        laa_from_resampled_csv, raa_from_resampled_csv = _load_apex_ids(str(paths.resampled_mesh))
-        if laa_from_resampled_csv is not None:
-            if args.atrium == "LA" or args.atrium == "LA_RA":
-                generator.la_apex = laa_from_resampled_csv
-        if raa_from_resampled_csv is not None:
-            if args.atrium == "RA" or args.atrium == "LA_RA":
-                generator.ra_apex = raa_from_resampled_csv
-        print(
-            f'INFO: Generator apex IDs updated from resampled data: LAA={generator.la_apex}, RAA={generator.ra_apex}')
-    else:
-        print(f'INFO: No resampling of original mesh in this specific non-SSM branch.')
+    print(f'INFO: Resampling complete. Active mesh is now: {paths.active_mesh_base.name}')
 
-    # Update apex IDs from CSV if it exists, for the current active mesh
-    laa_from_pm_csv, raa_from_pm_csv = _load_apex_ids(str(paths.active_mesh_base))
-    if laa_from_pm_csv is not None:
-        generator.la_apex = laa_from_pm_csv
-    if raa_from_pm_csv is not None:
-        generator.ra_apex = raa_from_pm_csv
-    print(
-        f"INFO: Final labeling on '{paths.active_mesh_base.name}': LAA={generator.la_apex}, RAA={generator.ra_apex}")
 
-    # Finalize ring extraction on the current active mesh (which may be initial, cut, or resampled)
+def _update_generator_with_apex_ids(paths: WorkflowPaths, generator: AtrialBoundaryGenerator)-> None:
+    """
+    Load the correct apex IDs for the active mesh and set them on the generator.
+
+    :param paths: WorkflowPaths tracking file paths for each pipeline stage
+    :param generator: AtrialBoundaryGenerator instance to update with apex IDs
+    :return: None
+    """
+    laa_id, raa_id = _load_apex_ids(str(paths.active_mesh_base))
+
+    if laa_id is not None:
+        generator.la_apex = laa_id
+    if raa_id is not None:
+        generator.ra_apex = raa_id
+
+    print(f"INFO: Final apex IDs for '{paths.active_mesh_base.name}': LAA={generator.la_apex}, RAA={generator.ra_apex}")
+
+
+def _execute_labeling_and_fiber_generation(args: Any, paths: WorkflowPaths, generator: AtrialBoundaryGenerator,
+                                           n_cpu: int) -> None:
+    """
+    Run the final ring extraction and execute the external fiber scripts.
+
+    :param args: Command-line arguments or config object
+    :param paths: WorkflowPaths tracking input/output mesh paths
+    :param generator: AtrialBoundaryGenerator for ring extraction
+    :param n_cpu: Number of CPU cores for fiber scripts
+    :return: None
+    """
+    # Ensure the mesh is in OBJ format for labeling
     path_for_labeling_obj = _ensure_obj_available(str(paths.active_mesh_base), paths.active_mesh_base.suffix)
     print(f"INFO: Ensuring OBJ for final labeling exists at: {path_for_labeling_obj}")
 
-    if args.atrium == "LA_RA":
-        try:
-            generator.extract_rings(surface_mesh_path=path_for_labeling_obj,
-                                    output_dir=str(paths.surf_dir))
-            print(f"INFO: Ring extraction for LA_RA on {path_for_labeling_obj} complete.")
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"Mesh file not found for LA_RA ring extraction: {path_for_labeling_obj}") from e
-        except PermissionError as e:
-            raise PermissionError(f"Cannot write LA_RA rings to: {paths.surf_dir}") from e
-        except Exception as e:
-            raise RuntimeError(f"LA_RA ring extraction failed: {e}") from e
+    try:
+        if args.atrium == "LA_RA":
+            try:
+                # Ring extraction for combined LA and RA
+                generator.extract_rings(surface_mesh_path=path_for_labeling_obj, output_dir=str(paths.surf_dir))
+                print(f"INFO: Ring extraction for LA_RA on {path_for_labeling_obj} complete.")
+            except FileNotFoundError as e:
+                raise FileNotFoundError(
+                    f"Mesh file not found for LA_RA ring extraction: {path_for_labeling_obj}") from e
+            except PermissionError as e:
+                raise PermissionError(f"Cannot write LA_RA rings to: {paths.surf_dir}") from e
+            except Exception as e:
+                raise RuntimeError(f"LA_RA ring extraction failed: {e}") from e
 
-        # Run fiber generation for both atria
-        print(f"INFO: Running LA fibers for LA_RA on mesh: {str(paths.active_mesh_base)}")
-        args.atrium = "LA"
-        la_main.run(
-            ["--mesh", str(paths.active_mesh_base),
-             "--np", str(n_cpu),
-             "--normals_outside", str(args.normals_outside),
-             "--ofmt", args.ofmt,
-             "--debug", str(args.debug),
-             "--overwrite-behaviour",
-             "append"]
-        )
-
-        print(f"INFO: Running RA fibers for LA_RA on mesh: {str(paths.active_mesh_base)}")
-        args.atrium = "RA"
-        ra_main.run(
-            ["--mesh", str(paths.active_mesh_base),
-             "--np", str(n_cpu),
-             "--normals_outside", str(args.normals_outside),
-             "--ofmt", args.ofmt,
-             "--debug", str(args.debug),
-             "--overwrite-behaviour",
-             "append"]
-        )
-
-        # Scale and convert the final LA_RA output
-        args.atrium = "LA_RA"
-        scale_val = 1000 * float(args.scale)
-        input_mesh_carp_txt = str(paths.final_bilayer_mesh('').with_suffix(''))  # Get base path without extension
-        output_mesh_carp_txt_um = f"{input_mesh_carp_txt}_um"
-        cmd1 = (f"meshtool convert "
-                f"-imsh={input_mesh_carp_txt} "
-                f"-ifmt=carp_txt "
-                f"-omsh={output_mesh_carp_txt_um} "
-                f"-ofmt=carp_txt "
-                f"-scale={scale_val}")
-
-        cmd2 = (f"meshtool convert "
-                f"-imsh={output_mesh_carp_txt_um} "
-                f"-ifmt=carp_txt "
-                f"-omsh={output_mesh_carp_txt_um} "
-                f"-ofmt=vtk")
-
-        os.system(cmd1)
-        os.system(cmd2)
-
-    if args.atrium == "LA":
-        print(f"INFO: LA path (non-SSM). Labeling and preparing fibers for: {path_for_labeling_obj}")
-        print(f"INFO: Using LAA: {generator.la_apex} for labeling.")
-
-        try:
-            generator.extract_rings(surface_mesh_path=path_for_labeling_obj,
-                                    output_dir=str(paths.surf_dir))
-            print(f"INFO: Ring extraction for LA_RA on {path_for_labeling_obj} complete.")
-        except FileNotFoundError as e:
-            raise FileNotFoundError(f"Mesh file not found for LA_RA ring extraction: {path_for_labeling_obj}") from e
-        except PermissionError as e:
-            raise PermissionError(f"Cannot write LA_RA rings to: {paths.surf_dir}") from e
-        except Exception as e:
-            raise RuntimeError(f"LA_RA ring extraction failed: {e}") from e
-
-        if args.closed_surface:
-            combined_wall_path = paths.initial_mesh_base.with_name(
-                f"{paths.initial_mesh_base.name}_{args.atrium}.vtk")
-            generator.generate_mesh(input_surface_path=str(combined_wall_path))
-
-            volumetric_mesh_path_vtk = str(
-                paths.closed_surface_vol_mesh.with_suffix('.vtk'))  # Output of generate_mesh
-
-            print(f"INFO: Surface ID generation for LA volumetric mesh: {volumetric_mesh_path_vtk}")
-            generator.generate_surf_id(
-                volumetric_mesh_path=volumetric_mesh_path_vtk,
-                atrium=args.atrium,
-                resampled=args.resample_input
-            )
-
-            # The active mesh for fiber generation is now the volumetric one.
-            paths._update_stage(stage_name='volumetric', base_path=str(paths.closed_surface_vol_mesh))
-
-            # This logic for mapping IDs from a resampled surf dir to the new vol surf dir is preserved.
-            resampled_suffix_for_map = "_res" if args.resample_input else ""
-            old_surf_dir = paths.active_mesh_base.with_name(
-                f"{paths.closed_surface_epi_mesh.name}{resampled_suffix_for_map}_surf")
-            new_surf_dir = paths.surf_dir  # The surf_dir for the volumetric mesh
-
+            # Run fiber generation for both atria
+            print(f"INFO: Running LA fibers for LA_RA on mesh: {str(paths.active_mesh_base)}")
+            args.atrium = "LA"
             la_main.run(
                 ["--mesh", str(paths.active_mesh_base),
                  "--np", str(n_cpu),
-                 "--normals_outside", str(0),
-                 "--mesh_type", "vol",
+                 "--normals_outside", str(args.normals_outside),
                  "--ofmt", args.ofmt,
                  "--debug", str(args.debug),
                  "--overwrite-behaviour",
                  "append"]
             )
+
+            print(f"INFO: Running RA fibers for LA_RA on mesh: {str(paths.active_mesh_base)}")
+            args.atrium = "RA"
+            ra_main.run(
+                ["--mesh", str(paths.active_mesh_base),
+                 "--np", str(n_cpu),
+                 "--normals_outside", str(args.normals_outside),
+                 "--ofmt", args.ofmt,
+                 "--debug", str(args.debug),
+                 "--overwrite-behaviour",
+                 "append"]
+            )
+
+            # Scale and convert the final LA_RA output
+            args.atrium = "LA_RA"
+            scale_val = 1000 * float(args.scale)
+            input_mesh_carp_txt = str(paths.final_bilayer_mesh('').with_suffix(''))  # Get base path without extension
+            output_mesh_carp_txt_um = f"{input_mesh_carp_txt}_um"
+            cmd1 = (f"meshtool convert "
+                    f"-imsh={input_mesh_carp_txt} "
+                    f"-ifmt=carp_txt "
+                    f"-omsh={output_mesh_carp_txt_um} "
+                    f"-ofmt=carp_txt "
+                    f"-scale={scale_val}")
+
+            cmd2 = (f"meshtool convert "
+                    f"-imsh={output_mesh_carp_txt_um} "
+                    f"-ifmt=carp_txt "
+                    f"-omsh={output_mesh_carp_txt_um} "
+                    f"-ofmt=vtk")
+
+            os.system(cmd1)
+            os.system(cmd2)
+
+        elif args.atrium == "LA":
+            print(f"INFO: LA path (non-SSM). Labeling and preparing fibers for: {path_for_labeling_obj}")
+            print(f"INFO: Using LAA: {generator.la_apex} for labeling.")
+
+            try:
+                generator.extract_rings(surface_mesh_path=path_for_labeling_obj,
+                                        output_dir=str(paths.surf_dir))
+                print(f"INFO: Ring extraction for LA_RA on {path_for_labeling_obj} complete.")
+            except FileNotFoundError as e:
+                raise FileNotFoundError(
+                    f"Mesh file not found for LA_RA ring extraction: {path_for_labeling_obj}") from e
+            except PermissionError as e:
+                raise PermissionError(f"Cannot write LA_RA rings to: {paths.surf_dir}") from e
+            except Exception as e:
+                raise RuntimeError(f"LA_RA ring extraction failed: {e}") from e
+
+            if args.closed_surface:
+                # Generate volumetric mesh from combined wall
+                combined_wall_path = paths.initial_mesh_base.with_name(
+                    f"{paths.initial_mesh_base.name}_{args.atrium}.vtk")
+                generator.generate_mesh(input_surface_path=str(combined_wall_path))
+
+                volumetric_mesh_path_vtk = str(
+                    paths.closed_surface_vol_mesh.with_suffix('.vtk'))  # Output of generate_mesh
+
+                print(f"INFO: Surface ID generation for LA volumetric mesh: {volumetric_mesh_path_vtk}")
+                generator.generate_surf_id(
+                    volumetric_mesh_path=volumetric_mesh_path_vtk,
+                    atrium=args.atrium,
+                    resampled=args.resample_input
+                )
+
+                # The active mesh for fiber generation is now the volumetric one.
+                paths._update_stage(stage_name='volumetric', base_path=str(paths.closed_surface_vol_mesh))
+
+                # This logic for mapping IDs from a resampled surf dir to the new vol surf dir is preserved.
+                resampled_suffix_for_map = "_res" if args.resample_input else ""
+                old_surf_dir = paths.active_mesh_base.with_name(
+                    f"{paths.closed_surface_epi_mesh.name}{resampled_suffix_for_map}_surf")
+                new_surf_dir = paths.surf_dir  # The surf_dir for the volumetric mesh
+
+                la_main.run(
+                    ["--mesh", str(paths.active_mesh_base),
+                     "--np", str(n_cpu),
+                     "--normals_outside", str(0),
+                     "--mesh_type", "vol",
+                     "--ofmt", args.ofmt,
+                     "--debug", str(args.debug),
+                     "--overwrite-behaviour",
+                     "append"]
+                )
+
+            else:
+                la_main.run(
+                    ["--mesh", str(paths.active_mesh_base),
+                     "--np", str(n_cpu),
+                     "--normals_outside", str(args.normals_outside),
+                     "--ofmt", args.ofmt,
+                     "--debug", str(args.debug),
+                     "--overwrite-behaviour",
+                     "append"]
+                )
+
+                scale_val_la = 1000 * float(args.scale)
+                input_mesh_carp_txt_LA = str(paths.final_bilayer_mesh('').with_suffix(''))
+                output_mesh_carp_txt_um_LA = f"{input_mesh_carp_txt_LA}_um"
+
+                cmd1_la = (f"meshtool convert "
+                           f"-imsh={input_mesh_carp_txt_LA} "
+                           f"-ifmt=carp_txt "
+                           f"-omsh={output_mesh_carp_txt_um_LA} "
+                           f"-ofmt=carp_txt "
+                           f"-scale={scale_val_la}")
+
+                cmd2_la = (f"meshtool convert "
+                           f"-imsh={output_mesh_carp_txt_um_LA} "
+                           f"-ifmt=carp_txt "
+                           f"-omsh={output_mesh_carp_txt_um_LA} "
+                           f"-ofmt=vtk")
+
+                os.system(cmd1_la)
+                os.system(cmd2_la)
+
+        elif args.atrium == "RA":
+            try:
+                if args.closed_surface:
+                    generator.extract_rings_top_epi_endo(
+                        surface_mesh_path=str(paths.active_mesh_base),
+                        output_dir=str(paths.surf_dir)
+                    )
+                else:
+                    generator.extract_rings(
+                        surface_mesh_path=str(paths.active_mesh_base),
+                        output_dir=str(paths.surf_dir)
+                    )
+            except Exception as e:
+                raise RuntimeError(f"RA ring extraction failed: {e}") from e
+
+            if args.closed_surface:
+                combined_wall_path = paths.initial_mesh_base.with_name(
+                    f"{paths.initial_mesh_base.name}_{args.atrium}.vtk")
+                generator.generate_mesh(input_surface_path=str(combined_wall_path))
+
+                volumetric_mesh_path_vtk = str(paths.closed_surface_vol_mesh.with_suffix('.vtk'))
+                generator.generate_surf_id(
+                    volumetric_mesh_path=volumetric_mesh_path_vtk,
+                    atrium=args.atrium,
+                    resampled=False  # `resampled` is always False for RA in original code
+                )
+
+                paths._update_stage(stage_name='volumetric', base_path=str(paths.closed_surface_vol_mesh))
+
+                ra_main.run(
+                    ["--mesh", str(paths.active_mesh_base),
+                     "--np", str(n_cpu),
+                     "--normals_outside", "0",
+                     "--mesh_type", "vol",
+                     "--ofmt", args.ofmt,
+                     "--debug", str(args.debug),
+                     "--overwrite-behaviour", "append"]
+                )
+            else:  # RA, not closed_surface
+                ra_main.run(
+                    ["--mesh", str(paths.active_mesh_base),
+                     "--np", str(n_cpu),
+                     "--normals_outside", str(args.normals_outside),
+                     "--ofmt", args.ofmt,
+                     "--debug", str(args.debug),
+                     "--overwrite-behaviour", "append"]
+                )
 
         else:
-            la_main.run(
-                ["--mesh", str(paths.active_mesh_base),
-                 "--np", str(n_cpu),
-                 "--normals_outside", str(args.normals_outside),
-                 "--ofmt", args.ofmt,
-                 "--debug", str(args.debug),
-                 "--overwrite-behaviour",
-                 "append"]
-            )
+            raise ValueError(f"Unknown atrium type: {args.atrium}")
 
-            scale_val_la = 1000 * float(args.scale)
-            input_mesh_carp_txt_LA = str(paths.final_bilayer_mesh('').with_suffix(''))
-            output_mesh_carp_txt_um_LA = f"{input_mesh_carp_txt_LA}_um"
-
-            cmd1_la = (f"meshtool convert "
-                       f"-imsh={input_mesh_carp_txt_LA} "
-                       f"-ifmt=carp_txt "
-                       f"-omsh={output_mesh_carp_txt_um_LA} "
-                       f"-ofmt=carp_txt "
-                       f"-scale={scale_val_la}")
-
-            cmd2_la = (f"meshtool convert "
-                       f"-imsh={output_mesh_carp_txt_um_LA} "
-                       f"-ifmt=carp_txt "
-                       f"-omsh={output_mesh_carp_txt_um_LA} "
-                       f"-ofmt=vtk")
-
-            os.system(cmd1_la)
-            os.system(cmd2_la)
-
-    elif args.atrium == "RA":
-        try:
-            if args.closed_surface:
-                generator.extract_rings_top_epi_endo(
-                    surface_mesh_path=str(paths.active_mesh_base),
-                    output_dir=str(paths.surf_dir)
-                )
-            else:
-                generator.extract_rings(
-                    surface_mesh_path=str(paths.active_mesh_base),
-                    output_dir=str(paths.surf_dir)
-                )
-        except Exception as e:
-            raise RuntimeError(f"RA ring extraction failed: {e}") from e
-
-        if args.closed_surface:
-            combined_wall_path = paths.initial_mesh_base.with_name(
-                f"{paths.initial_mesh_base.name}_{args.atrium}.vtk")
-            generator.generate_mesh(input_surface_path=str(combined_wall_path))
-
-            volumetric_mesh_path_vtk = str(paths.closed_surface_vol_mesh.with_suffix('.vtk'))
-            generator.generate_surf_id(
-                volumetric_mesh_path=volumetric_mesh_path_vtk,
-                atrium=args.atrium,
-                resampled=False  # `resampled` is always False for RA in original code
-            )
-
-            paths._update_stage(stage_name='volumetric', base_path=str(paths.closed_surface_vol_mesh))
-
-            ra_main.run(
-                ["--mesh", str(paths.active_mesh_base),
-                 "--np", str(n_cpu),
-                 "--normals_outside", "0",
-                 "--mesh_type", "vol",
-                 "--ofmt", args.ofmt,
-                 "--debug", str(args.debug),
-                 "--overwrite-behaviour", "append"]
-            )
-        else:  # RA, not closed_surface
-            ra_main.run(
-                ["--mesh", str(paths.active_mesh_base),
-                 "--np", str(n_cpu),
-                 "--normals_outside", str(args.normals_outside),
-                 "--ofmt", args.ofmt,
-                 "--debug", str(args.debug),
-                 "--overwrite-behaviour", "append"]
-            )
+    except Exception as e:
+        raise RuntimeError(f"Labeling and fiber generation failed: {e}") from e
 
 
-def _plot_debug_results(paths: WorkflowPaths, args):
-    """Handles the final debug plotting of the resulting mesh with fibers."""
+def _run_fiber_generation(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args: Any, n_cpu: int) -> None:
+    """
+    Orchestrates the non-SSM fiber generation workflow by calling modular sub-steps.
+
+    :param paths: WorkflowPaths object tracking mesh file paths for each stage
+    :param generator: AtrialBoundaryGenerator instance for ring extraction and labeling
+    :param args: Command-line arguments or config with flags and parameters
+    :param n_cpu: Number of CPU cores to use for parallel fiber generation
+    :return: None
+    """
+    # Step 1: Resample the surface if requested by the user.
+    _resample_mesh_if_needed(args, paths)
+
+    # Step 2: Load the apex IDs for the current mesh (which may have been resampled).
+    _update_generator_with_apex_ids(paths, generator)
+
+    # Step 3: Run the final labeling, ring extraction, and external fiber scripts.
+    _execute_labeling_and_fiber_generation(args, paths, generator, n_cpu)
+
+
+def _plot_debug_results(paths: WorkflowPaths, args) -> None:
+    """
+    Handle final debug plotting of the resulting mesh with fibers.
+
+    :param paths: WorkflowPaths tracking file paths for each stage
+    :param args:  Command-line arguments including flags and formats
+    :return:      None
+    """
     # Determine if the final active mesh was a volumetric one.
     is_volumetric_plot = "_vol" in paths.active_mesh_base.name
 
@@ -827,7 +872,7 @@ def AugmentA(args):
             paths.log_current_stage()
         elif not args.SSM_fitting:
             print("\n--- Running Fiber Generation ---")
-            _run_fiber_generation(paths, generator, args)
+            _run_fiber_generation(paths, generator, args, n_cpu)
             paths.log_current_stage()
 
         if args.debug:
@@ -839,5 +884,3 @@ def AugmentA(args):
     except Exception as e:
         print(f"\nFATAL ERROR: Pipeline failed — {e}", file=sys.stderr)
         sys.exit(1)
-
-
