@@ -31,7 +31,6 @@ under the License.
 
 import os
 import sys
-import subprocess
 from string import Template
 from typing import Dict, Tuple, Any, Optional
 from pathlib import Path
@@ -624,8 +623,8 @@ def _run_fiber_generation(paths: WorkflowPaths, generator: AtrialBoundaryGenerat
                        f"-omsh={output_mesh_carp_txt_um_LA} "
                        f"-ofmt=vtk")
 
-            os.system(cmd1)
-            os.system(cmd2)
+            os.system(cmd1_la)
+            os.system(cmd2_la)
 
     elif args.atrium == "RA":
         try:
