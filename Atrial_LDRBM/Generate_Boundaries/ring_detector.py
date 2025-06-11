@@ -649,7 +649,7 @@ class RingDetector:
                                                                     debug=debug)
 
         if debug:
-            write_vtk(os.path.join(self.outdir, "top_endo_epi.vtk"), self.tv_identification_top_cut_loop)
+            Mesh(self.tv_identification_top_cut_loop).save(os.path.join(self.outdir, "top_endo_epi.vtk"))
 
         # 3. Remove genuine SVC / IVC points -------------------------------
         svc_pts = set(vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")))
@@ -705,7 +705,6 @@ class RingDetector:
 
         return False
 
-    # -------------------- Extract the “top” loop (bug-replicating variant) ---------
     def _extract_top_cut(self,
                          surface_over_tv_f: vtk.vtkPolyData,
                          ivc_coords_for_comparison: List[List[float]],
@@ -758,7 +757,7 @@ class RingDetector:
         if debug:
             write_vtk_file_path = os.path.join(self.outdir,
                                                f"gamma_top_{top_region}.vtk")
-            write_vtk(write_vtk_file_path, top_cut)
+            Mesh(top_cut).save(write_vtk_file_path)
 
         return top_cut
 

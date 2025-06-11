@@ -1,5 +1,6 @@
 import os
 import subprocess
+import shutil
 from glob import glob
 import numpy as np
 import pandas as pd
@@ -10,17 +11,19 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
-from Atrial_LDRBM.Generate_Boundaries.epi_endo_separator import separate_epi_endo
-from Atrial_LDRBM.Generate_Boundaries.tag_loader import TagLoader
-from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import generate_surf_id
-from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
-from Atrial_LDRBM.Generate_Boundaries.ring_detector import RingDetector
-
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
 from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids, apply_vtk_geom_filter
+from vtk_opencarp_helper_methods.vtk_methods.reader import vtx_reader
+from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
+
+from Atrial_LDRBM.Generate_Boundaries.epi_endo_separator import EpiEndoSeparator
+from Atrial_LDRBM.Generate_Boundaries.tag_loader import TagLoader
+from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import SurfaceIdMapper
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
+from Atrial_LDRBM.Generate_Boundaries.ring_detector import RingDetector
 
 
 class AtrialBoundaryGenerator:
@@ -100,27 +103,13 @@ class AtrialBoundaryGenerator:
         self.ra_ring_detector_top_epi_endo: RingDetector = None
 
     def _get_base_mesh(self) -> str:
-        """Returns the base mesh filename (without extension)."""
+        """
+        Return the base mesh filename without its extension.
+
+        :return: Base path of the mesh file (no extension)
+        """
         base, _ = os.path.splitext(self.mesh_path)
         return base
-
-    def _prepare_output_directory(self, suffix: str = "_surf") -> str:
-        """
-        Prepares the output directory by creating it if needed and removing any stale ID files.
-        """
-        base = self._get_base_mesh()
-        outdir = f"{base}{suffix}"
-
-        os.makedirs(outdir, exist_ok=True)
-
-        for file_path in glob(os.path.join(outdir, 'ids_*')):
-            os.remove(file_path)
-
-        return outdir
-
-    def _format_id(self, idx: int) -> str:
-        """Converts an index to a string (or returns empty if None)."""
-        return str(idx) if idx is not None else ""
 
     def _run_meshtool_volume_generation(self, input_obj_path: str, output_base_path: str) -> None:
         """
@@ -469,25 +458,24 @@ class AtrialBoundaryGenerator:
         ra_ap_point_coord_for_csv = None
         ra_bs_point_coord_for_csv = None
 
-        if hasattr(self, "polydata") and self.polydata is not None:
-            if self.ra_apex is not None:
-                try:
-                    num_points = self.polydata.GetNumberOfPoints()
+        if self.ra_apex is not None:
+            try:
+                num_points = input_mesh_polydata.GetNumberOfPoints()
 
-                    # Fetch RAA apex coordinate if within bounds
-                    if not (0 <= self.ra_apex and self.ra_apex < num_points):
-                        raise IndexError(
-                            f"RAA ID {self.ra_apex} is out of bounds for current input mesh (size: {num_points}).")
+                # Fetch RAA apex coordinate if within bounds
+                if not (0 <= self.ra_apex and self.ra_apex < num_points):
+                    raise IndexError(
+                        f"RAA ID {self.ra_apex} is out of bounds for current input mesh (size: {num_points}).")
 
-                    ra_ap_point_coord_for_csv = self.polydata.GetPoint(self.ra_apex)
-                except IndexError as e:
-                    print(
-                        f"ERROR_RA: Invalid RAA ID {self.ra_apex} for current input mesh. Cannot proceed. {e}")
-                    return {}
+                ra_ap_point_coord_for_csv = self.polydata.GetPoint(self.ra_apex)
+            except IndexError as e:
+                print(
+                    f"ERROR_RA: Invalid RAA ID {self.ra_apex} for current input mesh. Cannot proceed. {e}")
+                return {}
 
             if self.ra_base is not None:
                 try:
-                    num_points = self.polydata.GetNumberOfPoints()
+                    num_points = input_mesh_polydata.GetNumberOfPoints()
 
                     # Fetch RAA base coordinate if within bounds
                     if not (0 <= self.ra_base and self.ra_base < num_points):
@@ -749,84 +737,127 @@ class AtrialBoundaryGenerator:
 
     def separate_epi_endo(self, tagged_volume_mesh_path: str, atrium: str) -> None:
         """
-        Delegates epi/endo separation using the epi_endo_separator module.
-        Requires element tags loaded via load_element_tags() beforehand.
-
-        Args:
-            tagged_volume_mesh_path (str): Path to the tagged volume mesh.
-            atrium (str): 'LA' or 'RA'.
+        Uses the EpiEndoSeparator class to separate surfaces from a volume mesh.
+        This orchestrator method handles file loading and saving.
         """
-        # Ensure element tags are loaded before proceeding
         if not self.element_tags:
-            raise RuntimeError(
-                "Element tags missing in AtrialBoundaryGenerator. "
-                "Call load_element_tags() before separate_epi_endo()."
-            )
+            raise RuntimeError("Element tags must be loaded before calling separate_epi_endo.")
+        if not isinstance(tagged_volume_mesh_path, str) or not tagged_volume_mesh_path:
+            raise ValueError("tagged_volume_mesh_path must be a non-empty string.")
+        if not isinstance(atrium, str) or not atrium:
+            raise ValueError("atrium must be a non-empty string.")
 
         try:
-            separate_epi_endo(
-                mesh_path=tagged_volume_mesh_path,
-                atrium=atrium,
-                element_tags=self.element_tags
-            )
+            # 1. Create the separator object with the tags and atrium it needs
+            separator = EpiEndoSeparator(element_tags=self.element_tags, atrium=atrium)
 
-            # Extract base name (without extension) from the input path
-            base_vol_path_no_ext, _ = os.path.splitext(tagged_volume_mesh_path)
-            original_base_name = base_vol_path_no_ext
+            # 2. Load the volumetric mesh from its path into a Mesh object
+            volume_mesh = Mesh.from_file(tagged_volume_mesh_path)
 
-            # If the filename ends with "_vol", strip that suffix
-            if base_vol_path_no_ext.endswith("_vol"):
-                original_base_name = base_vol_path_no_ext[:-4]
+            # 3. Call the separate method, which returns a dictionary of new Mesh objects
+            separated_meshes = separator.separate(volume_mesh)
 
-            # Construct expected output file paths
+            # 4. The generator is now responsible for saving the results
+            base, _ = os.path.splitext(tagged_volume_mesh_path)
+            original_base_name = base[:-4] if base.endswith('_vol') else base
+
+            # Define output paths and save each mesh
+            self.combined_wall_path = f"{original_base_name}_{atrium}.vtk"
             self.epi_surface_path = f"{original_base_name}_{atrium}_epi.vtk"
             self.endo_surface_path = f"{original_base_name}_{atrium}_endo.vtk"
-            self.combined_wall_path = f"{original_base_name}_{atrium}.vtk"
 
-            # Load the epicardial surface if it exists
-            if os.path.exists(self.epi_surface_path):
-                self.epi_surface_polydata = Mesh.from_file(self.epi_surface_path).get_polydata()
-            else:
-                self.epi_surface_polydata = None
-                if self.debug:
-                    print(f"Warning: Epi surface file not found after separation: {self.epi_surface_path}")
+            separated_meshes["combined"].save(self.combined_wall_path)
+            separated_meshes["epi"].save(self.epi_surface_path)
+            separated_meshes["endo"].save(self.endo_surface_path)
 
-            # Load the endocardial surface if it exists
-            if os.path.exists(self.endo_surface_path):
-                self.endo_surface_polydata = Mesh.from_file(self.endo_surface_path).get_polydata()
-            else:
-                self.endo_surface_polydata = None
-                if self.debug: print(f"Warning: Endo surface file not found after separation: {self.endo_surface_path}")
-
-            # Load the combined wall surface if it exists
-            if os.path.exists(self.combined_wall_path):
-                self.combined_wall_polydata = Mesh.from_file(self.combined_wall_path).get_polydata()
-            else:
-                self.combined_wall_polydata = None
-                if self.debug: print(
-                    f"Warning: Combined wall file not found after separation: {self.combined_wall_path}")
+            # Store the resulting polydata if other methods need them
+            self.combined_wall_polydata = separated_meshes["combined"].get_polydata()
+            self.epi_surface_polydata = separated_meshes["epi"].get_polydata()
+            self.endo_surface_polydata = separated_meshes["endo"].get_polydata()
 
         except Exception as e:
-            print(f"ERROR during epi/endo separation call for {atrium} on {tagged_volume_mesh_path}: {e}")
+            print(f"ERROR during epi/endo separation for {atrium} on {tagged_volume_mesh_path}: {e}")
             raise
 
     def generate_surf_id(self, volumetric_mesh_path: str, atrium: str, resampled: bool = False) -> None:
         """
-        Delegates surface ID generation to the surface_id_generator module.
+        Orchestrates the surface ID generation process. It loads all necessary meshes,
+        uses the SurfaceIdMapper to perform the core logic, and saves all outputs.
         """
         if self.debug:
-            print(f"Initiating surface ID generation for {atrium} using volume mesh: {volumetric_mesh_path}")
+            print(f"--- Initiating Surface ID Generation for {atrium} ---")
 
         try:
-            generate_surf_id(vol_mesh_path=volumetric_mesh_path,
-                             atrium=atrium,
-                             resampled=resampled,
-                             debug=self.debug)
-            if self.debug:
-                print(f"Surface ID generation call completed for {atrium}.")
+            # Load meshes and initialize the mapper
+            base_vol_path, _ = os.path.splitext(volumetric_mesh_path)
+            base_name = base_vol_path[:-4] if base_vol_path.endswith('_vol') else base_vol_path
 
+            volume_mesh = Mesh.from_file(volumetric_mesh_path)
+            epi_mesh = Mesh.from_file(f"{base_name}_{atrium}_epi.obj")
+            endo_mesh = Mesh.from_file(f"{base_name}_{atrium}_endo.obj")
+
+            mapper = SurfaceIdMapper(volume_mesh)
+
+            # Prepare output directory
+            outdir = f"{base_name}_vol_surf"
+            os.makedirs(outdir, exist_ok=True)
+
+            # Map surfaces and save VTX files
+            epi_indices = mapper.map_surface(epi_mesh)
+            write_to_vtx(os.path.join(outdir, "ids_EPI.vtx"), epi_indices)
+
+            endo_indices_raw = mapper.map_surface(endo_mesh)
+            # Remove points already claimed by the epicardium
+            endo_indices_filtered = np.setdiff1d(endo_indices_raw, epi_indices, assume_unique=True)
+            write_to_vtx(os.path.join(outdir, "ids_ENDO.vtx"), endo_indices_filtered)
+
+            # Copy required files from the previous surface processing step
+            shutil.copyfile(volumetric_mesh_path, os.path.join(outdir, f"{atrium}.vtk"))
+            res_suffix = "_res" if resampled else ""
+            surf_proc_dir = f"{base_name}_{atrium}_epi{res_suffix}_surf"
+            centroids_src = os.path.join(surf_proc_dir, "rings_centroids.csv")
+            centroids_dst = os.path.join(outdir, "rings_centroids.csv")
+            shutil.copyfile(centroids_src, centroids_dst)
+
+            # Handle the complex ring VTX file mapping (logic moved from the old _map_ring_vtx_files)
+            self._map_and_save_ring_ids(surf_proc_dir, outdir, epi_mesh, mapper)
+
+            if self.debug:
+                print(f"--- Surface ID Generation for {atrium} complete ---")
+
+        except FileNotFoundError as e:
+            print(f"ERROR: A required mesh file was not found during surface ID generation. {e}")
+            raise
         except Exception as e:
             print(f"ERROR during surface ID generation for {atrium}: {e}")
+            raise
+
+    def _map_and_save_ring_ids(self, surf_proc_dir: str, outdir: str, epi_mesh: Mesh, mapper: SurfaceIdMapper):
+        """A helper method to handle the complex mapping of ring VTX files."""
+        if not epi_mesh.get_polydata().GetPointData().GetArray("Ids"):
+            generate_ids(epi_mesh.get_polydata(), "Ids", "Ids")
+
+        epi_ids_array = vtk_to_numpy(epi_mesh.get_polydata().GetPointData().GetArray("Ids"))
+        epi_points_data = epi_mesh.get_polydata().GetPoints()
+        epi_id_to_coord = {int(epi_ids_array[i]): epi_points_data.GetPoint(i) for i in range(len(epi_ids_array))}
+
+        vtx_pattern = os.path.join(surf_proc_dir, 'ids_*.vtx')
+        for file_path in glob(vtx_pattern):
+            file_name = os.path.basename(file_path)
+            if file_name in {'ids_EPI.vtx', 'ids_ENDO.vtx'}:
+                continue
+
+            source_point_ids = vtx_reader(file_path)
+            if not source_point_ids.any():
+                continue
+
+            coords_to_map = [epi_id_to_coord[pid] for pid in source_point_ids if pid in epi_id_to_coord]
+            if not coords_to_map:
+                continue
+
+            # Use the kdtree from the already-initialized mapper
+            _, mapped_indices = mapper.kdtree.query(np.array(coords_to_map))
+            write_to_vtx(os.path.join(outdir, file_name), mapped_indices)
 
     def load_element_tags(self, csv_filepath: str) -> None:
         loader = TagLoader(csv_filepath=csv_filepath)
