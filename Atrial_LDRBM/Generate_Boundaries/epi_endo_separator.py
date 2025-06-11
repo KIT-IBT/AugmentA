@@ -7,7 +7,7 @@ from typing import Dict, Any  # Added Any for type hinting VTK objects
 from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
-from Atrial_LDRBM.Generate_Boundaries.file_manager import write_vtk, write_obj
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 
 
 def _prepare_output_directory(mesh_path: str, suffix: str = "_vol_surf") -> str:
@@ -106,11 +106,12 @@ def separate_epi_endo(mesh_path: str, atrium: str, element_tags: Dict[str, str])
                 # Write outputs using the ORIGINAL base name structure
                 output_path_vtk = f"{original_base_name}_{atrium}{suffix}.vtk"  # e.g., mesh_RA_epi.vtk
                 output_path_obj = f"{original_base_name}_{atrium}{suffix}.obj"  # e.g., mesh_RA_epi.obj
-                print(f"    Writing {surface_name}: {output_path_vtk}, {output_path_obj}")
-                write_vtk(output_path_vtk, filtered_surface)
-                write_obj(output_path_obj, filtered_surface)
+                print(f"Writing {surface_name}: {output_path_vtk}, {output_path_obj}")
+                mesh_to_save = Mesh(filtered_surface)
+                mesh_to_save.save(output_path_vtk)
+                mesh_to_save.save(output_path_obj)
             else:
-                print(f"    Warning: {surface_name} surface extraction yielded no geometry after geometry filter.")
+                print(f"Warning: {surface_name} surface extraction yielded no geometry after geometry filter.")
 
         except Exception as e:
             print(f"  Error during {surface_name} surface processing: {e}")

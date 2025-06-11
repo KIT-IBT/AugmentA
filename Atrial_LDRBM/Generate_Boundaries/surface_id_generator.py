@@ -2,16 +2,15 @@ import os
 import shutil
 import numpy as np
 from glob import glob
-
 import vtk
 from scipy.spatial import cKDTree
 
-from Atrial_LDRBM.Generate_Boundaries.mesh import MeshReader
-from Atrial_LDRBM.Generate_Boundaries.file_manager import write_vtx_file
-
+from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.reader import vtx_reader  # To read VTX files with ring IDs
-from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids  # To add/generate point IDs if needed
+from vtk_opencarp_helper_methods.vtk_methods.reader import vtx_reader
+from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids
+
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 
 
 def _prepare_output_directory(vol_mesh_path: str, atrium: str) -> str:
@@ -39,10 +38,8 @@ def _prepare_output_directory(vol_mesh_path: str, atrium: str) -> str:
 def _map_ring_vtx_files(surf_proc_dir: str, outdir: str,
                         epicardial_polydata: vtk.vtkPolyData,
                         volumetric_kdtree: cKDTree, debug: bool = False):
-
     if not epicardial_polydata.GetPointData() or not epicardial_polydata.GetPointData().GetArray("Ids"):
         epicardial_polydata = generate_ids(epicardial_polydata, "Ids", "CellIds")
-
 
     # Create a mapping from each epicardial point's id to its 3D coordinates
     epi_id_to_coord = {}
@@ -103,9 +100,8 @@ def _map_ring_vtx_files(surf_proc_dir: str, outdir: str,
 
         # Write the mapped volumetric indices to a new VTX file in the output directory.
         output_vtx_path = os.path.join(outdir, file_name)
-        write_vtx_file(output_vtx_path, mapped_indices)
+        write_to_vtx(output_vtx_path, mapped_indices)
         num_mapped += 1
-
 
 
 def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, debug: bool = False) -> None:
@@ -130,15 +126,8 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
     else:
         base_name = base_vol_path
 
-    volumetric_mesh = None
-    volumetric_kdtree = None
     try:
-        # Use the MeshReader class to load the volumetric mesh.
-        vol_loader = MeshReader(vol_mesh_path)
-        volumetric_mesh = vol_loader.get_polydata()
-
-        if not vol_loader._validate_vtk_data(volumetric_mesh, check_points=True):
-            raise ValueError("Volumetric mesh is empty or invalid.")
+        volumetric_mesh = Mesh.from_file(vol_mesh_path).get_polydata()
 
         # Extract coordinates for each point in the volumetric mesh.
         volumetric_coords = vtk_to_numpy(volumetric_mesh.GetPoints().GetData())
@@ -159,15 +148,11 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
 
     outdir = _prepare_output_directory(vol_mesh_path, atrium)
 
-
     epi_surf_path = f"{base_name}_epi.obj"
     epi_indices = np.array([])
     epicardial_polydata = None
     try:
-        epi_loader = MeshReader(epi_surf_path)
-        epicardial_polydata = epi_loader.get_polydata()
-        if not epi_loader._validate_vtk_data(epicardial_polydata, check_points=True):
-            raise ValueError("Epicardial surface mesh is empty or invalid.")
+        epicardial_polydata = Mesh.from_file(epi_surf_path).get_polydata()
 
         # Get coordinates of epicardial points for KDTree mapping.
         epi_pts_coords = vtk_to_numpy(epicardial_polydata.GetPoints().GetData())
@@ -176,7 +161,7 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
         _, epi_indices = volumetric_kdtree.query(epi_pts_coords)
 
         # Write the mapped volumetric indices to a VTX file.
-        write_vtx_file(os.path.join(outdir, "ids_EPI.vtx"), epi_indices)
+        write_to_vtx(os.path.join(outdir, "ids_EPI.vtx"), epi_indices)
 
     except FileNotFoundError:
         print(f"Warning: Epicardial surface file not found at {epi_surf_path}. Skipping epicardium processing.")
@@ -188,11 +173,7 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
     # The endocardial surface file is expected to be named like '<base_name>_endo.obj'
     endo_surf_path = f"{base_name}_endo.obj"
     try:
-        endo_loader = MeshReader(endo_surf_path)
-        endocardial_polydata = endo_loader.get_polydata()
-
-        if not endo_loader._validate_vtk_data(endocardial_polydata, check_points=True):
-            raise ValueError("Endocardial surface mesh is empty or invalid.")
+        endocardial_polydata = Mesh.from_file(endo_surf_path).get_polydata()
 
         # Get coordinates from the endocardial surface
         endo_pts_coords = vtk_to_numpy(endocardial_polydata.GetPoints().GetData())
@@ -207,8 +188,7 @@ def generate_surf_id(vol_mesh_path: str, atrium: str, resampled: bool = False, d
         else:
             endo_indices_filtered = endo_indices_raw
 
-
-        write_vtx_file(os.path.join(outdir, "ids_ENDO.vtx"), endo_indices_filtered)
+        write_to_vtx(os.path.join(outdir, "ids_ENDO.vtx"), endo_indices_filtered)
 
     except FileNotFoundError:
         print(f"Warning: Endocardial surface file not found at {endo_surf_path}. Skipping endocardium processing.")

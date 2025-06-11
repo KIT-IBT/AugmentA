@@ -7,18 +7,15 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
-    get_center_of_mass, get_feature_edges, get_elements_above_plane
+from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
+from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, \
-    initialize_plane_with_points, initialize_plane
+from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, initialize_plane_with_points, initialize_plane
 from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
 from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
 
-from Atrial_LDRBM.Generate_Boundaries.file_manager import write_vtk, write_vtx_file
-from Atrial_LDRBM.Generate_Boundaries.mesh import MeshReader
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 
 
 class Ring:
@@ -170,7 +167,7 @@ class RingDetector:
         if debug:
             # Save a debug version of the ring for inspection
             debug_path = os.path.join(self.outdir, f'ring_{region_index}.vtk')
-            write_vtk(debug_path, region_pd)
+            Mesh(region_pd).save(debug_path)
 
         ring_poly_copy = vtk.vtkPolyData()
         ring_poly_copy.DeepCopy(region_pd)
@@ -283,12 +280,12 @@ class RingDetector:
                 RPV_ids.extend(id_vec.tolist())
 
             file_path = os.path.join(self.outdir, f"ids_{ring_name}.vtx")
-            write_vtx_file(file_path, id_vec)
+            write_to_vtx(file_path, id_vec)
             centroids[ring_name] = ring_obj.center
 
-        write_vtx_file(os.path.join(self.outdir, "ids_LAA.vtx"), LAA_id)
-        write_vtx_file(os.path.join(self.outdir, "ids_LPV.vtx"), LPV_ids)
-        write_vtx_file(os.path.join(self.outdir, "ids_RPV.vtx"), RPV_ids)
+        write_to_vtx(os.path.join(self.outdir, "ids_LAA.vtx"), LAA_id)
+        write_to_vtx(os.path.join(self.outdir, "ids_LPV.vtx"), LPV_ids)
+        write_to_vtx(os.path.join(self.outdir, "ids_RPV.vtx"), RPV_ids)
 
         return b_tag, centroids
 
@@ -354,10 +351,10 @@ class RingDetector:
             if name in tag_map:
                 ids = vtk_to_numpy(ring.vtk_polydata.GetPointData().GetArray("Ids"))
                 b_tag[ids] = tag_map[name]
-                write_vtx_file(os.path.join(self.outdir, f"ids_{name}.vtx"), ids)
+                write_to_vtx(os.path.join(self.outdir, f"ids_{name}.vtx"), ids)
                 centroids[name] = ring.center
 
-        write_vtx_file(os.path.join(self.outdir, "ids_RAA.vtx"), adjusted_RAA_id)
+        write_to_vtx(os.path.join(self.outdir, "ids_RAA.vtx"), adjusted_RAA_id)
 
         return b_tag, centroids, rings
 
@@ -406,8 +403,8 @@ class RingDetector:
         mv_ant = set(bnd_ids).intersection(mv_ids)
         mv_post = mv_ids - mv_ant
 
-        write_vtx_file(os.path.join(self.outdir, "ids_MV_ant.vtx"), list(mv_ant))
-        write_vtx_file(os.path.join(self.outdir, "ids_MV_post.vtx"), list(mv_post))
+        write_to_vtx(os.path.join(self.outdir, "ids_MV_ant.vtx"), list(mv_ant))
+        write_to_vtx(os.path.join(self.outdir, "ids_MV_post.vtx"), list(mv_post))
 
         # Find boundary‐graph vertices for MV and PV means
         lpv_bb = find_closest_point(self.uac_boundary_edges, lpv_mean)
@@ -465,7 +462,7 @@ class RingDetector:
         _, idxs = tree.query(coords)
         path_ids = set(bnd_ids[idxs]) - all_ids
 
-        write_vtx_file(os.path.join(self.outdir, filename), list(path_ids))
+        write_to_vtx(os.path.join(self.outdir, filename), list(path_ids))
 
     @staticmethod
     def _cutting_plane_to_identify_RSPV(LPV_indices: list[int],
@@ -529,14 +526,14 @@ class RingDetector:
         plane_f = initialize_plane(norm1, tv_center)
         tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv_polydata, plane_f))
         ids_f = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
-        write_vtx_file(os.path.join(self.outdir, "ids_TV_F.vtx"), ids_f)
+        write_to_vtx(os.path.join(self.outdir, "ids_TV_F.vtx"), ids_f)
 
         norm2 = -norm1
         plane_s = initialize_plane(norm2, tv_center)
         tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv_polydata, plane_s,
                                                               extract_boundary_cells_on=True))
         ids_s = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
-        write_vtx_file(os.path.join(self.outdir, "ids_TV_S.vtx"), ids_s)
+        write_to_vtx(os.path.join(self.outdir, "ids_TV_S.vtx"), ids_s)
 
         if debug:
             print(f"Split TV: {len(ids_f)} free‐wall pts, {len(ids_s)} septal‐wall pts.")
@@ -677,7 +674,7 @@ class RingDetector:
         mv_id = top_ids[0]  # first point on MV (same trick as original code)
         top_endo_ids = self._get_top_endo_ids(mv_id, self.tv_identification_final_thresholded_mesh)
 
-        write_vtx_file(os.path.join(self.outdir, "ids_TOP_ENDO.vtx"), top_endo_ids)
+        write_to_vtx(os.path.join(self.outdir, "ids_TOP_ENDO.vtx"), top_endo_ids)
 
     @staticmethod
     def _is_top_endo_epi_cut(ivc_ring_coords: List[List[float]],
@@ -886,7 +883,7 @@ class RingDetector:
         mv_id = pts_ids[0]
         final_ids = self._get_top_endo_ids(mv_id, threshed, debug=debug)
 
-        write_vtx_file(os.path.join(self.outdir, vtx_filename), final_ids)
+        write_to_vtx(os.path.join(self.outdir, vtx_filename), final_ids)
         return final_ids
 
     # -------------------- Public EPI / ENDO workflow (bug-replicating) -----
@@ -932,7 +929,7 @@ class RingDetector:
             debug=debug
         )
 
-        self.endo_mesh_for_top_epi_endo = MeshReader(endo_mesh_path).get_polydata()
+        self.endo_mesh_for_top_epi_endo = Mesh.from_file(endo_mesh_path).get_polydata()
         if not self.endo_mesh_for_top_epi_endo.GetPointData().GetArray("Ids"):
             endo = generate_ids(self.endo_mesh_for_top_epi_endo, "Ids", "Ids")
 

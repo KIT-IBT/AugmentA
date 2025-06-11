@@ -14,9 +14,8 @@ from sklearn.cluster import KMeans
 from Atrial_LDRBM.Generate_Boundaries.epi_endo_separator import separate_epi_endo
 from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import generate_surf_id
 from Atrial_LDRBM.Generate_Boundaries.tag_loader import load_element_tags
-from Atrial_LDRBM.Generate_Boundaries.file_manager import write_vtk, write_obj, write_csv, write_vtx_file
 from Atrial_LDRBM.Generate_Boundaries.surface_id_generator import generate_surf_id as gen_surf_id_func
-from Atrial_LDRBM.Generate_Boundaries.mesh import MeshReader
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 from Atrial_LDRBM.Generate_Boundaries.ring_detector import RingDetector
 
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
@@ -43,7 +42,6 @@ class AtrialBoundaryGenerator:
     :param ra_base: Index for right atrial base.
     :param debug: Enables verbose output.
     """
-    ra_apex: int | None
 
     def __init__(self,
                  mesh_path: str,
@@ -66,8 +64,8 @@ class AtrialBoundaryGenerator:
 
         if os.path.exists(self.mesh_path):
             try:
-                reader = MeshReader(self.mesh_path)
-                self.polydata = reader.get_polydata()
+                mesh_obj = Mesh.from_file(self.mesh_path)
+                self.polydata = mesh_obj.get_polydata()
 
                 if self.debug:
                     if self.polydata is None or self.polydata.GetNumberOfPoints() == 0:
@@ -191,13 +189,12 @@ class AtrialBoundaryGenerator:
 
         elif os.path.exists(input_surface_path):
             try:
-                reader = MeshReader(input_surface_path)
-                polydata = reader.get_polydata()
+                polydata = Mesh.from_file(input_surface_path).get_polydata()
 
                 if not polydata or polydata.GetNumberOfPoints() == 0:
                     raise ValueError("MeshReader returned empty polydata.")
 
-                write_obj(input_obj_path, polydata)
+                Mesh(polydata).save(input_obj_path)
 
                 if self.debug:
                     print(f"Successfully converted to {input_obj_path}")
@@ -372,7 +369,7 @@ class AtrialBoundaryGenerator:
         # === Ring detection on the LA region ===
         if self.la_isolated_region_polydata and la_ap_point_coord:
             # Write the LA-only mesh to disk
-            write_vtk(os.path.join(output_dir, "LA.vtk"), self.la_isolated_region_polydata)
+            Mesh(self.la_isolated_region_polydata).save(os.path.join(output_dir, "LA.vtk"))
 
             # Find the index of the closest point to the LA apex on the LA-only mesh
             adjusted_LAA = find_closest_point(self.la_isolated_region_polydata, la_ap_point_coord)
@@ -404,7 +401,7 @@ class AtrialBoundaryGenerator:
                 ds_la.PointData.append(b_tag_la, "boundary_tag")
 
                 self.la_tagged_boundaries_polydata = ds_la.VTKObject
-                write_vtk(os.path.join(output_dir, "LA_boundaries_tagged.vtk"), self.la_tagged_boundaries_polydata)
+                Mesh(self.la_tagged_boundaries_polydata).save(os.path.join(output_dir, "LA_boundaries_tagged.vtk"))
 
                 # Copy centroids and ensure LAA coordinate is included
                 final_la_centroids = la_centroids.copy()
@@ -575,7 +572,7 @@ class AtrialBoundaryGenerator:
         # Ring detection on the isolated RA region
         if self.ra_isolated_region_polydata and ra_ap_point_coord:
             # Write the isolated RA mesh to disk
-            write_vtk(os.path.join(output_dir, "RA.vtk"), self.ra_isolated_region_polydata)
+            Mesh(self.ra_isolated_region_polydata).save(os.path.join(output_dir, "RA.vtk"))
 
             # Find the index closest to the RA apex on the isolated mesh
             adjusted_RAA = find_closest_point(self.ra_isolated_region_polydata, ra_ap_point_coord)
@@ -611,7 +608,7 @@ class AtrialBoundaryGenerator:
                 ds_ra = dsa.WrapDataObject(self.ra_isolated_region_polydata)
                 ds_ra.PointData.append(b_tag_ra, "boundary_tag")
                 self.ra_tagged_boundaries_polydata = ds_ra.VTKObject
-                write_vtk(os.path.join(output_dir, "RA_boundaries_tagged.vtk"), self.ra_tagged_boundaries_polydata)
+                Mesh(self.ra_tagged_boundaries_polydata).save(os.path.join(output_dir, "RA_boundaries_tagged.vtk"))
 
                 # Prepare final centroids dictionary
                 final_ra_centroids = ra_centroids.copy()
@@ -685,8 +682,7 @@ class AtrialBoundaryGenerator:
 
         # Read the surface mesh file and ensure it has an "Ids" array on its points
         try:
-            mesh_obj = MeshReader(surface_mesh_path)
-            self.active_surface_for_rings = mesh_obj.get_polydata()
+            self.active_surface_for_rings = Mesh.from_file(surface_mesh_path).get_polydata()
 
             # If the mesh has no point data or no "Ids" array, generate one
             pt_data = self.active_surface_for_rings.GetPointData()
@@ -748,7 +744,7 @@ class AtrialBoundaryGenerator:
         # Build a DataFrame and write it to CSV
         df = pd.DataFrame(processed_centroids_for_df)
         csv_path = os.path.join(output_dir, "rings_centroids.csv")
-        write_csv(csv_path, df)
+        df.to_csv(csv_path, float_format="%.2f", index=False)
 
         # Store the raw centroids for later use
         self.ring_info = centroids
@@ -791,7 +787,7 @@ class AtrialBoundaryGenerator:
 
             # Load the epicardial surface if it exists
             if os.path.exists(self.epi_surface_path):
-                self.epi_surface_polydata = MeshReader(self.epi_surface_path).get_polydata()
+                self.epi_surface_polydata = Mesh.from_file(self.epi_surface_path).get_polydata()
             else:
                 self.epi_surface_polydata = None
                 if self.debug:
@@ -799,14 +795,14 @@ class AtrialBoundaryGenerator:
 
             # Load the endocardial surface if it exists
             if os.path.exists(self.endo_surface_path):
-                self.endo_surface_polydata = MeshReader(self.endo_surface_path).get_polydata()
+                self.endo_surface_polydata = Mesh.from_file(self.endo_surface_path).get_polydata()
             else:
                 self.endo_surface_polydata = None
                 if self.debug: print(f"Warning: Endo surface file not found after separation: {self.endo_surface_path}")
 
             # Load the combined wall surface if it exists
             if os.path.exists(self.combined_wall_path):
-                self.combined_wall_polydata = MeshReader(self.combined_wall_path).get_polydata()
+                self.combined_wall_polydata = Mesh.from_file(self.combined_wall_path).get_polydata()
             else:
                 self.combined_wall_polydata = None
                 if self.debug: print(
@@ -856,9 +852,7 @@ class AtrialBoundaryGenerator:
             if os.path.isfile(f_path):
                 os.remove(f_path)
 
-        reader = MeshReader(surface_mesh_path)
-
-        self.active_ra_epi_for_top_rings = reader.get_polydata()
+        self.active_ra_epi_for_top_rings = Mesh.from_file(surface_mesh_path).get_polydata()
 
         if not self.active_ra_epi_for_top_rings or self.active_ra_epi_for_top_rings.GetNumberOfPoints() == 0:
             print(f"ERROR_TOP: Mesh loaded from '{surface_mesh_path}' is empty or invalid. Aborting TOP_EPI_ENDO.")
@@ -935,7 +929,7 @@ class AtrialBoundaryGenerator:
             print(f"ERROR_TOP: RA region became empty after generate_ids for '{surface_mesh_path}'.")
             return
 
-        write_vtk(os.path.join(output_dir, "RA.vtp"), self.ra_isolated_region_for_top_epi_endo, xml_format=True)
+        Mesh(self.ra_isolated_region_for_top_epi_endo).save(os.path.join(output_dir, "RA.vtp"), xml_format=True)
 
         adj_id_on_ra_region = find_closest_point(self.ra_isolated_region_for_top_epi_endo, ra_ap_pt_on_mesh_pd)
         apex_coord_for_detector_on_ra_region = None
@@ -1005,7 +999,7 @@ class AtrialBoundaryGenerator:
 
         ds_ra = dsa.WrapDataObject(self.ra_isolated_region_for_top_epi_endo)
         ds_ra.PointData.append(b_tag_numpy, "boundary_tag")
-        write_vtk(os.path.join(output_dir, "RA_boundaries_tagged.vtp"), ds_ra.VTKObject, xml_format=True)
+        Mesh(ds_ra.VTKObject).save(os.path.join(output_dir, "RA_boundaries_tagged.vtp"), xml_format=True)
 
         original_input_base = self._get_base_mesh()
         # This method is contextually for RA in the pipeline for TOP_EPI_ENDO.
@@ -1046,7 +1040,7 @@ class AtrialBoundaryGenerator:
 
         df = pd.DataFrame.from_dict(centroids, orient="index", columns=["X", "Y", "Z"])
         df.index.name = "RingName"
-        write_csv(os.path.join(output_dir, "rings_centroids.csv"), df)
+        df.to_csv(os.path.join(output_dir, "rings_centroids.csv"), float_format="%.2f", index=True)
 
         self.ring_info = centroids
         if self.debug:
