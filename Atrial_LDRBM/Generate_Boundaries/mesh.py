@@ -5,105 +5,69 @@ from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filte
 from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_obj_writer
 
 
-class BaseMesh:
+class Mesh:
     """
-    Base class for mesh operations. This class encapsulates a VTK polydata and provides methods for reading,
-    writing, and converting the mesh.
+    Encapsulates a VTK polydata object and provides methods for I/O and basic operations.
     """
-    def __init__(self, mesh_path: str = None, polydata: vtk.vtkPolyData = None):
+    def __init__(self, polydata: vtk.vtkPolyData):
         """
-        Initializes the BaseMesh instance.
+        Initialize the Mesh wrapper.
 
-        @param mesh_path: Path to the mesh file.
-        @param polydata: A VTK polydata object.
-        @return: None.
+        :param polydata: A vtk.vtkPolyData object to encapsulate.
+        :return: None
         """
-        self.mesh_path = mesh_path
+        if not isinstance(polydata, vtk.vtkPolyData):
+            raise TypeError("Input must be a vtk.vtkPolyData object.")
         self.polydata = polydata
 
-        if self.mesh_path and not self.polydata:
-            self.read(self.mesh_path)
-
-    def read(self, mesh_path: str = None) -> vtk.vtkPolyData:
+    @classmethod
+    def from_file(cls, mesh_path: str):
         """
-        Reads a mesh from file using smart_reader and applies a geometry filter.
+        Create a Mesh instance by reading and filtering a mesh file.
 
-        @param mesh_path: Optional file path to read the mesh from. If not provided, uses self.mesh_path.
-        @return: The VTK polydata after applying the geometry filter.
+        :param mesh_path: Path to the mesh file.
+        :return: Mesh instance containing the loaded polydata.
         """
-        if mesh_path:
-            self.mesh_path = mesh_path
-        if not self.mesh_path:
-            raise ValueError("No mesh path specified for reading.")
+        if not isinstance(mesh_path, str) or not mesh_path:
+            raise ValueError("mesh_path must be a non-empty string.")
+        if not os.path.isfile(mesh_path):
+            raise FileNotFoundError(f"Mesh file not found: {mesh_path}")
 
-        self.polydata = smart_reader(self.mesh_path)
+        raw_data = smart_reader(mesh_path)
+        polydata = apply_vtk_geom_filter(raw_data)
 
-        # Apply a geometry filter to ensure the mesh is in a consistent format.
-        self.polydata = apply_vtk_geom_filter(self.polydata)
+        if polydata is None or polydata.GetNumberOfPoints() == 0:
+            raise ValueError(f"Mesh loaded from {mesh_path} is empty or invalid.")
 
-        return self.polydata
+        return cls(polydata)
 
-    def write(self, file_path: str, format: str = "vtk") -> None:
+    def save(self, file_path: str, xml_format: bool = False):
         """
-        Writes the mesh to a file in the specified format.
+        Save the mesh to a file, inferring format from the extension (.vtk, .vtp, .obj).
 
-        @param file_path: Destination file path for the mesh.
-        @param format: Format to write the mesh in ("vtk" or "obj").
-        @return: None.
+        :param file_path: Path to save the mesh file.
+        :param xml_format: Force XML format for .vtp output if True.
+        :return: None
         """
-        if self.polydata is None:
-            raise ValueError("No mesh loaded to write.")
+        if self.polydata is None or self.polydata.GetNumberOfPoints() == 0:
+            raise ValueError("Cannot save an empty mesh.")
+        if not isinstance(file_path, str) or not file_path:
+            raise ValueError("file_path must be a non-empty string.")
 
-        if format.lower() == "vtk":
-            vtk_polydata_writer(file_path, self.polydata)
-        elif format.lower() == "obj":
+        ext = os.path.splitext(file_path)[1].lower()
+
+        if ext in ['.vtk', '.vtp']:
+            is_vtp = ext == '.vtp'
+            vtk_polydata_writer(file_path, self.polydata, store_xml=is_vtp or xml_format)
+        elif ext == '.obj':
             vtk_obj_writer(file_path, self.polydata)
         else:
-            raise ValueError("Unsupported format: choose 'vtk' or 'obj'")
-
-    def convert(self, output_format: str) -> None:
-        """
-        Converts the mesh to the specified format by writing it out.
-
-        @param output_format: The desired output format (e.g., "vtk" or "obj").
-        @return: None.
-        """
-        # Derive the base filename (without extension).
-        base, _ = os.path.splitext(self.mesh_path)
-        file_path = f"{base}.{output_format.lower()}"
-        self.write(file_path, format=output_format)
+            raise ValueError(f"Unsupported file format '{ext}'. Use .vtk, .vtp, or .obj.")
 
     def get_polydata(self) -> vtk.vtkPolyData:
         """
-        Returns the underlying VTK polydata.
+        Return the underlying VTK polydata object.
 
-        @return: The VTK polydata object representing the mesh.
+        :return: vtk.vtkPolyData encapsulated by this Mesh.
         """
         return self.polydata
-
-
-class MeshReader(BaseMesh):
-    """
-    A class specifically for reading meshes from file.
-    """
-
-    def __init__(self, mesh_path: str):
-        """
-        Initializes a MeshReader instance and reads the mesh.
-
-        @param mesh_path: Path to the mesh file.
-        @return: None.
-        """
-        super().__init__(mesh_path=mesh_path)
-
-
-class MeshWriter(BaseMesh):
-
-    def write_mesh(self, file_path: str, format: str = "vtk") -> None:
-        self.write(file_path, format=format)
-
-
-class MeshConverter(BaseMesh):
-    def convert_mesh(self, output_format: str) -> None:
-        self.convert(output_format)
-

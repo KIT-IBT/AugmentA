@@ -1,21 +1,23 @@
 import os
+from typing import Tuple, List, Any
 
 import numpy as np
 import vtk
+from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
-from vtk.numpy_interface import dataset_adapter as dsa
 
-from Atrial_LDRBM.Generate_Boundaries.file_manager import write_vtk, write_vtx_file
-from Atrial_LDRBM.Generate_Boundaries.mesh import MeshReader
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
 from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
     get_center_of_mass, get_feature_edges, get_elements_above_plane
 from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
 from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes, \
     initialize_plane_with_points, initialize_plane
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold
+from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
+
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 
 
 class Ring:
@@ -75,11 +77,30 @@ class RingDetector:
         self.outdir = outdir
         os.makedirs(self.outdir, exist_ok=True)
 
-    def _validate_vtk_data(self, vtk_object, check_points=True, check_cells=False, check_ids=False) -> bool:
-        """
-        Verifies that a VTK object is valid and optionally checks for the existence
-        of points, cells, and the 'Ids' array in its point data.
-        """
+        self.boundary_edges: vtk.vtkPolyData = None
+        self.uac_cut_surface: vtk.vtkPolyData = None
+        self.uac_boundary_edges: vtk.vtkPolyData = None
+
+        self.tv_identification_surface_above_plane: vtk.vtkPolyData = None
+        self.tv_identification_top_cut_loop: vtk.vtkPolyData = None
+        self.tv_identification_final_thresholded_mesh: vtk.vtkPolyData = None
+
+        self.endo_mesh_for_top_epi_endo: vtk.vtkPolyData = None
+        self.epi_surface_above_plane_top_epi_endo: vtk.vtkPolyData = None
+        self.epi_top_loop_top_epi_endo: vtk.vtkPolyData = None
+        self.epi_final_thresholded_mesh_top_epi_endo: vtk.vtkPolyData = None
+        self.endo_surface_above_plane_top_epi_endo: vtk.vtkPolyData = None
+        self.endo_top_loop_top_epi_endo: vtk.vtkPolyData = None
+        self.endo_final_thresholded_mesh_top_epi_endo: vtk.vtkPolyData = None
+
+    @staticmethod
+    def _validate_vtk_data(
+            vtk_object,
+            check_points: bool = True,
+            check_cells: bool = False,
+            check_ids: bool = False
+    ) -> bool:
+        """True if the VTK object contains the requested information."""
         if not vtk_object:
             return False
 
@@ -87,613 +108,452 @@ class RingDetector:
             return False
 
         if check_cells:
-            cells_are_empty = hasattr(vtk_object, 'GetNumberOfCells') and vtk_object.GetNumberOfCells() == 0
-            if cells_are_empty:
+            if hasattr(vtk_object, "GetNumberOfCells") and vtk_object.GetNumberOfCells() == 0:
                 return False
 
-        if check_ids and (not vtk_object.GetPointData() or not vtk_object.GetPointData().GetArray("Ids")):
-            return False
+        if check_ids:
+            pd = vtk_object.GetPointData()
+            if pd is None or pd.GetArray("Ids") is None or pd.GetArray("Ids").GetNumberOfTuples() == 0:
+                return False
 
         return True
 
-    # Ring Detection Workflow
     def detect_rings(self, debug: bool = False) -> list[Ring]:
         """
-        Detects rings from the input surface by extracting the boundary edges andthen finding connected components.
+        Detect rings from the input surface by extracting boundary edges
+        and finding connected components.
+
+        :param debug: If True, save each raw ring as a debug VTK file
+        :return:      List of Ring objects for each detected ring
         """
         # Extract the boundary edges of the surface
-        boundary_edges = get_feature_edges(self.surface,
-                                           boundary_edges_on=True,
-                                           feature_edges_on=False,
-                                           manifold_edges_on=False,
-                                           non_manifold_edges_on=False)
+        self.boundary_edges = get_feature_edges(
+            self.surface,
+            boundary_edges_on=True,
+            feature_edges_on=False,
+            manifold_edges_on=False,
+            non_manifold_edges_on=False
+        )
 
-        # Validate the boundary edges output to ensure there are lines/cells.
-        if not self._validate_vtk_data(boundary_edges, check_cells=True):
-            if debug:
-                print("Warning: No boundary edge segments found on the surface.")
-            return []
-
-        # Ensure that the boundary edges have the original point IDs
-        if not self._validate_vtk_data(boundary_edges, check_ids=True):
-            if debug:
-                print("Warning: Boundary edges missing 'Ids'. Attempting to generate...")
-
-            boundary_edges = generate_ids(boundary_edges, "Ids", "CellIds")
-
-            if not self._validate_vtk_data(boundary_edges, check_ids=True):
-                print("  Error: Failed to obtain 'Ids' on boundary edges; aborting ring detection.")
-                return []
-
-        if debug:
-            print(f"Found {boundary_edges.GetNumberOfLines()} boundary segments.")
-            print("Extracting connected components to form individual rings.")
-
-        # Use connectivity filtering to separate the boundary edges into connected components.
-        connect_filter = init_connectivity_filter(boundary_edges, ExtractionModes.ALL_REGIONS)
+        # Use connectivity filtering to separate the boundary edges into connected components
+        connect_filter = init_connectivity_filter(self.boundary_edges, ExtractionModes.ALL_REGIONS)
         num_regions = connect_filter.GetNumberOfExtractedRegions()
         connect_filter.SetExtractionModeToSpecifiedRegions()
 
         # Process each connected component (potential ring)
-        detected_rings = []
+        detected_rings: List[Ring] = []
         for region_index in range(num_regions):
-            ring_obj = self._process_detected_ring_region(connect_filter, region_index, debug)
+            try:
+                ring_obj = self._process_detected_ring_region(connect_filter, region_index, debug)
+                if ring_obj:
+                    detected_rings.append(ring_obj)
+            except Exception as e:
+                print(f"Error processing ring region {region_index}: {e}")
 
-            if ring_obj:
-                detected_rings.append(ring_obj)
+            connect_filter.DeleteSpecifiedRegion(region_index)
+            connect_filter.Update()
 
-        if debug:
-            print(f"Detected {len(detected_rings)} rings.")
         return detected_rings
 
     def _process_detected_ring_region(self, connect_filter, region_index, debug=False) -> Ring | None:
         """
         Processes a single connected component from the connectivity filter, cleaning and converting it to a Ring object.
         """
-        connect_filter.AddSpecifiedRegion(region_index)
-        connect_filter.Update()
-        region_ug = connect_filter.GetOutput()
+        try:
+            # Tell the connect filter to focus only on the i-th region
+            connect_filter.AddSpecifiedRegion(region_index)
 
-        # Clean unused points
-        region_pd = apply_vtk_geom_filter(region_ug)
-        region_pd = clean_polydata(region_pd)
+            # Executes the filter for the specified region
+            connect_filter.Update()
 
-        # Validate that the processed region contains points and has the required 'Ids'
-        if not self._validate_vtk_data(region_pd, check_points=True, check_ids=True):
+            # Gets the actual geometric data (points and lines) for this single ring
+            region_ug = connect_filter.GetOutput()
+
+            # Converts vtkUnstructuredGrid output from the connectivity filter into a vtkPolyData
+            region_pd = apply_vtk_geom_filter(region_ug)
+            region_pd = clean_polydata(region_pd)
+
+            if region_pd is None or region_pd.GetNumberOfPoints() == 0:
+                if debug:
+                    print(f"Region {region_index} is empty after cleaning.")
+                return None
+
             if debug:
-                print(f"Warning: Region {region_index} is empty or missing 'Ids'. Skipping.")
+                # Save a debug version of the ring for inspection
+                debug_path = os.path.join(self.outdir, f'ring_{region_index}.vtk')
+                Mesh(region_pd).save(debug_path)
 
-            connect_filter.DeleteSpecifiedRegion(region_index)
+            ring_poly_copy = vtk.vtkPolyData()
+            ring_poly_copy.DeepCopy(region_pd)
+
+            # Compute the center of mass and distance from the apex for classification
+            center = get_center_of_mass(region_pd, set_use_scalars_as_weights=False)
+            distance = np.linalg.norm(np.array(self.apex) - np.array(center))
+            num_pts = region_pd.GetNumberOfPoints()
+
+            ring_obj = Ring(region_index, "", num_pts, center, distance, ring_poly_copy)
+            return ring_obj
+
+        except Exception as e:
+            if debug:
+                print(f"Error processing region {region_index}: {e}")
             return None
 
-        if debug:
-            # Save a debug version of the ring for inspection
-            debug_path = os.path.join(self.outdir, f'debug_ring_{region_index}.vtk')
-            write_vtk(debug_path, region_pd)
-
-        ring_poly_copy = vtk.vtkPolyData()
-        ring_poly_copy.DeepCopy(region_pd)
-
-        # Compute the center of mass and distance from the apex for classification
-        center = get_center_of_mass(region_pd, set_use_scalars_as_weights=False)
-        distance = np.sqrt(np.sum((np.array(self.apex) - np.array(center)) ** 2))
-        num_pts = region_pd.GetNumberOfPoints()
-
-        # Create the Ring object with the computed properties
-        ring_obj = Ring(region_index, "", num_pts, center, distance, ring_poly_copy)
-
-        connect_filter.DeleteSpecifiedRegion(region_index)
-        connect_filter.Update()
-        return ring_obj
-
-    # -------------------- Ring Classification and Marking --------------------
-    def _cluster_rings(self, rings: list[Ring], n_clusters: int = 2, debug: bool = False) -> tuple[
-        list, list, np.ndarray | None]:
+    @staticmethod
+    def _cluster_rings(
+            rings: list[Ring],
+            n_clusters: int = 2
+    ) -> tuple[list[int], list[int], list[int], int]:
         """
         Clusters non-MV rings using KMeans to separate anatomical groups.
         """
-        # Calculating pv indices
-        non_mv_indices = [idx for idx, r in enumerate(rings) if r.name != "MV"]
+        # Calculating Pulmonary Vein indices
+        pvs = [idx for idx, r in enumerate(rings) if r.name != "MV"]
 
-        if not non_mv_indices:
-            if debug:
-                print("_cluster_rings: No rings available for clustering (all may be MV).")
-            return [], [], None
-
-        non_mv_centers = [rings[idx].center for idx in non_mv_indices]
-        actual_clusters = min(n_clusters, len(non_mv_centers))
-
-        if actual_clusters < 1:
-            return [], [], None
-
-        if actual_clusters == 1:
-            if debug:
-                print(f"_cluster_rings: Only one ring available; assigning it to group 1.")
-            return non_mv_indices, [], np.array([0] * len(non_mv_centers))
-
-        try:
-            estimator = KMeans(n_clusters=actual_clusters, n_init='auto', random_state=0)
-            labels = estimator.fit_predict(non_mv_centers)
-
-        except Exception as e:
-            print(f"Error during clustering: {e}")
-            return [], [], None
+        estimator = KMeans(n_clusters=n_clusters)
+        non_mv_centers = [rings[idx].center for idx in pvs]
+        labels = estimator.fit_predict(non_mv_centers)
 
         # Determine which cluster has the ring closest to the apex
-        ap_dists = [rings[idx].ap_dist for idx in non_mv_indices]
-        closest_idx = np.argmin(ap_dists)
-        label_closest = labels[closest_idx]
+        ap_dists = [rings[idx].ap_dist for idx in pvs]
+        min_ap_dist = np.argmin(ap_dists)
+        label_LPV = labels[min_ap_dist]
 
-        group1 = [non_mv_indices[i] for i, lab in enumerate(labels) if lab == label_closest]
-        group2 = [non_mv_indices[i] for i, lab in enumerate(labels) if lab != label_closest]
+        # split into left vs right
+        LPVs = [pvs[i] for i, lab in enumerate(labels) if lab == label_LPV]
+        RPVs = [pvs[i] for i, lab in enumerate(labels) if lab != label_LPV]
 
-        if debug:
-            print(f"_cluster_rings: Group1 (size {len(group1)}), Group2 (size {len(group2)})")
-        return group1, group2, labels
+        return pvs, LPVs, RPVs, min_ap_dist
 
-    def _name_pv_subgroup(self, group_indices: list, group_name_prefix: str,
-                          rings: list[Ring], apex_dist_is_superior: bool,
-                          ref_superior_idx: int | None = None, debug: bool = False):
+    @staticmethod
+    def _name_pv_subgroup(group_indices: list[int],
+                          group_name_prefix: str,
+                          rings: list[Ring],
+                          local_seed_idx: int) -> None:
         """
         Helper method to assign anatomical names (superior/inferior) to a subgroup of PV rings.
         The group_name_prefix is either "L" for left or "R" for right.
         """
-        if not group_indices:
-            return
-        if len(group_indices) == 1:
-            rings[group_indices[
-                0]].name = f"{group_name_prefix}SPV" if apex_dist_is_superior else f"{group_name_prefix}IPV"
-            if debug:
-                print(f"Named single {group_name_prefix} ring: {rings[group_indices[0]].name}")
-            return
-
+        # Get centers of rings in the current group_indices
+        estimator = KMeans(n_clusters=2)
         subgroup_centers = [rings[idx].center for idx in group_indices]
+        labels = estimator.fit_predict(subgroup_centers)
 
-        try:
-            estimator = KMeans(n_clusters=2, n_init='auto', random_state=0)
-            labels = estimator.fit_predict(subgroup_centers)
-        except Exception as e:
-            if debug:
-                print(f"Warning: Clustering failed for {group_name_prefix} subgroup: {e}")
-            return
+        seed_label = labels[local_seed_idx]
+        SPV_idxs = [group_indices[i] for i, lab in enumerate(labels) if lab == seed_label]
+        IPV_idxs = [group_indices[i] for i, lab in enumerate(labels) if lab != seed_label]
 
-        superior_label = -1
-        if ref_superior_idx is not None and ref_superior_idx in group_indices:
-            try:
-                local_ref_idx = group_indices.index(ref_superior_idx)
-                superior_label = labels[local_ref_idx]
-                if debug:
-                    print(f"Using reference index {ref_superior_idx} for Superior label {superior_label}.")
-            except ValueError:
-                if debug:
-                    print(f"Warning: Reference index {ref_superior_idx} not found in group. Falling back.")
-                ref_superior_idx = None
+        for idx in SPV_idxs:
+            rings[idx].name = f"{group_name_prefix}SPV"
+        for idx in IPV_idxs:
+            rings[idx].name = f"{group_name_prefix}IPV"
 
-        if superior_label == -1:
-            subgroup_apex_dists = [rings[idx].ap_dist for idx in group_indices]
-            local_idx = np.argmin(subgroup_apex_dists) if apex_dist_is_superior else np.argmax(subgroup_apex_dists)
-            superior_label = labels[local_idx]
-            if debug:
-                print(f"Using apex distance to set Superior label {superior_label} for {group_name_prefix}PVs.")
-
-        for local_idx, original_idx in enumerate(group_indices):
-            is_superior = (labels[local_idx] == superior_label)
-            rings[original_idx].name = f"{group_name_prefix}SPV" if is_superior else f"{group_name_prefix}IPV"
-            if debug:
-                print(f"Named ring at index {original_idx}: {rings[original_idx].name}")
-
-    def mark_la_rings(self, adjusted_LAA_id: int, rings: list[Ring], b_tag: np.ndarray,
-                      centroids: dict, LA_region: vtk.vtkPolyData, debug: bool = False) -> tuple[np.ndarray, dict]:
+    def mark_la_rings(self,
+                      LAA_id: int,
+                      rings: list[Ring],
+                      b_tag: np.ndarray,
+                      centroids: dict,
+                      LA_region: vtk.vtkPolyData,
+                      debug: bool = False) \
+            -> tuple[np.ndarray, dict]:
         """
         Marks the left atrial rings (MV and PVs) by assigning anatomical names, updating
         boundary tags in the b_tag array, and recording centroids.
         """
-        if not rings:
-            return b_tag, centroids
 
-        # Identify the MV ring by choosing the ring with the most points
-        mv_ring_index = np.argmax([r.np for r in rings])
-        rings[mv_ring_index].name = "MV"
-        if debug:
-            print(f"Identified MV: Ring {mv_ring_index} (Size: {rings[mv_ring_index].np})")
+        # Identify the Mitral Valve ring by choosing the ring with the most points
+        mv_idx = np.argmax([r.np for r in rings])
+        rings[mv_idx].name = "MV"
 
         # Cluster non-MV rings into left and right groups.
-        LPV_indices, RPV_indices, _ = self._cluster_rings(rings, n_clusters=2, debug=debug)
+        pvs, LPVs, RPVs, min_ap_dist = self._cluster_rings(rings)
 
-        RSPV_idx = None
-        if LPV_indices and RPV_indices:
-            RSPV_idx = self._cutting_plane_to_identify_RSPV(LPV_indices, RPV_indices, rings, debug=debug)
+        LSPV_id = LPVs.index(pvs[min_ap_dist])
+        self._cutting_plane_to_identify_UAC(LPVs, RPVs, rings, LA_region)
 
-        self._name_pv_subgroup(LPV_indices, "L", rings, apex_dist_is_superior=True, debug=debug)
-        self._name_pv_subgroup(RPV_indices, "R", rings, apex_dist_is_superior=False, ref_superior_idx=RSPV_idx,
-                               debug=debug)
+        global_rspv = self._cutting_plane_to_identify_RSPV(LPVs, RPVs, rings)
+        RSPV_id = RPVs.index(global_rspv)
 
-        LPV_point_ids = []
-        RPV_point_ids = []
-        final_centroids = centroids.copy()
+        self._name_pv_subgroup(LPVs, "L", rings, local_seed_idx=LSPV_id)
+        self._name_pv_subgroup(RPVs, "R", rings, local_seed_idx=RSPV_id)
+
+        LPV_ids: list[int] = []
+        RPV_ids: list[int] = []
         tag_map = {"MV": 1, "LIPV": 2, "LSPV": 3, "RIPV": 4, "RSPV": 5}
 
-        # Assign boundary tags and write ring ID files
         for ring_obj in rings:
-            if not ring_obj.name or ring_obj.name not in tag_map:
+            ring_name = ring_obj.name
+            id_vec = vtk_to_numpy(ring_obj.vtk_polydata.GetPointData().GetArray("Ids"))
+
+            tag = tag_map.get(ring_name)
+            if tag is None:
                 continue
 
-            if not self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True, check_ids=True):
-                if debug:
-                    print(f"Skipping ring {ring_obj.id} ('{ring_obj.name}') due to invalid data.")
-                continue
+            b_tag[id_vec] = tag
 
-            point_ids = vtk_to_numpy(ring_obj.vtk_polydata.GetPointData().GetArray("Ids"))
-            if point_ids.size == 0:
-                continue
+            if ring_name in ("LIPV", "LSPV"):
+                LPV_ids.extend(id_vec.tolist())
+            elif ring_name in ("RIPV", "RSPV"):
+                RPV_ids.extend(id_vec.tolist())
 
-            tag_value = tag_map[ring_obj.name]
-            try:
-                b_tag[point_ids] = tag_value
-            except IndexError:
-                print(f"Error: Point IDs for ring {ring_obj.name} out of bounds. Skipping tagging.")
-                continue
+            file_path = os.path.join(self.outdir, f"ids_{ring_name}.vtx")
+            write_to_vtx(file_path, id_vec)
+            centroids[ring_name] = ring_obj.center
 
-            write_vtx_file(os.path.join(self.outdir, f'ids_{ring_obj.name}.vtx'), point_ids)
-            final_centroids[ring_obj.name] = ring_obj.center
-            if ring_obj.name.startswith("L"):
-                LPV_point_ids.extend(list(point_ids))
-            if ring_obj.name.startswith("R"):
-                RPV_point_ids.extend(list(point_ids))
+        write_to_vtx(os.path.join(self.outdir, "ids_LAA.vtx"), LAA_id)
+        write_to_vtx(os.path.join(self.outdir, "ids_LPV.vtx"), LPV_ids)
+        write_to_vtx(os.path.join(self.outdir, "ids_RPV.vtx"), RPV_ids)
 
-        # Perform additional UAC analysis on the left atrial region.
-        self._cutting_plane_to_identify_UAC(LPV_indices, RPV_indices, rings, LA_region, debug=debug)
-        write_vtx_file(os.path.join(self.outdir, 'ids_LAA.vtx'), adjusted_LAA_id)
-        if LPV_point_ids:
-            write_vtx_file(os.path.join(self.outdir, 'ids_LPV.vtx'), LPV_point_ids)
-        if RPV_point_ids:
-            write_vtx_file(os.path.join(self.outdir, 'ids_RPV.vtx'), RPV_point_ids)
+        return b_tag, centroids
 
-        if debug:
-            print("LA ring marking complete.")
-        return b_tag, final_centroids
-
-    def mark_ra_rings(self, adjusted_RAA_id: int, rings: list[Ring], b_tag: np.ndarray,
-                      centroids: dict, debug: bool = False) -> tuple[np.ndarray, dict, list[Ring]]:
+    def mark_ra_rings(
+            self,
+            adjusted_RAA_id: int,
+            rings: list[Ring],
+            b_tag: np.ndarray,
+            centroids: dict,
+            debug: bool = False
+    ) -> tuple[np.ndarray, dict, list[Ring]]:
         """
         Marks the right atrial rings (TV, SVC, IVC, CS) by assigning anatomical names,
         updating the b_tag array with boundary tags, and recording centroids.
         """
-        if not rings:
-            return b_tag, centroids, rings
 
-        # Identify the TV ring by choosing the closer of the two largest rings.
-        tv_ring = None
-        if len(rings) >= 2:
-            largest_two = sorted(rings, key=lambda r: r.np, reverse=True)[:2]
+        # Identify the TV ring by choosing the closer of the two largest rings
+        lengths = [r.np for r in rings]
+        sorted_idx = np.argsort(lengths)
+        largest_two = sorted_idx[-2:]
+        i0, i1 = largest_two[0], largest_two[1]
 
-            if largest_two[0].ap_dist < largest_two[1].ap_dist:
-                tv_ring = largest_two[0]
-            else:
-                tv_ring = largest_two[1]
+        if rings[i0].ap_dist < rings[i1].ap_dist:
+            tv_index = i0
+        else:
+            tv_index = i1
+        rings[tv_index].name = "TV"
 
-        elif len(rings) == 1:
-            tv_ring = rings[0]
+        # Other ring indices
+        other_indices = [i for i in range(len(rings)) if i != tv_index]
 
-        if not tv_ring:
-            return b_tag, centroids, rings
+        # Cluster other centers
+        centers = [rings[i].center for i in other_indices]
+        estimator = KMeans(n_clusters=2)
+        labels = estimator.fit_predict(centers)
 
-        tv_ring.name = "TV"
-        if debug:
-            print(f"  Identified TV: Ring {tv_ring.id} (Size: {tv_ring.np}, Dist: {tv_ring.ap_dist:.2f})")
+        # Seed SVC by apex distance
+        ap_dists = [rings[i].ap_dist for i in other_indices]
+        svc_seed = np.argmin(ap_dists)
+        svc_label = labels[svc_seed]
 
-        # Cluster remaining rings to identify SVC, IVC, and CS.
-        other_indices = [i for i, r in enumerate(rings) if r.name != "TV"]
-        if other_indices:
-            SVC_indices, IVC_CS_indices, _ = self._cluster_rings(rings, n_clusters=2, debug=debug)
-            if SVC_indices:
-                svc_idx = max({idx: rings[idx].np for idx in SVC_indices}, key=lambda k: rings[k].np)
-                rings[svc_idx].name = "SVC"
-                if debug:
-                    print(f"  Identified SVC: Ring {svc_idx} (Size: {rings[svc_idx].np})")
+        svc_cands = [other_indices[j] for j, lab in enumerate(labels) if lab == svc_label]
+        svc_index = svc_cands[0]
+        rings[svc_index].name = "SVC"
 
-            if IVC_CS_indices:
-                ivc_idx = max({idx: rings[idx].np for idx in IVC_CS_indices}, key=lambda k: rings[k].np)
-                rings[ivc_idx].name = "IVC"
+        # Identify IVC (IVC = largest of the other cluster)
+        ivc_cs_indices = [other_indices[j] for j, lab in enumerate(labels) if lab != svc_label]
+        ivc_counts = [rings[i].np for i in ivc_cs_indices]
+        ivc_pos = int(np.argmax(ivc_counts))
+        ivc_index = ivc_cs_indices[ivc_pos]
+        rings[ivc_index].name = "IVC"
 
-                if debug:
-                    print(f"  Identified IVC: Ring {ivc_idx} (Size: {rings[ivc_idx].np})")
-                cs_indices = [idx for idx in IVC_CS_indices if idx != ivc_idx]
+        # If third ring remains, name it CS
+        if len(other_indices) > 2:
+            remaining = [i for i in other_indices if i not in {svc_index, ivc_index}]
+            cs_index = remaining[0]
+            rings[cs_index].name = "CS"
 
-                if cs_indices:
-                    rings[cs_indices[0]].name = "CS"
-
-                    if debug:
-                        print(f"  Identified CS: Ring {cs_indices[0]} (Size: {rings[cs_indices[0]].np})")
-
-                        if len(cs_indices) > 1:
-                            print(f"    Warning: Multiple CS candidates {cs_indices}, assigned first.")
-
-        final_centroids = centroids.copy()
+        # Boundary tags, per‐ring .vtx, centroids
         tag_map = {"TV": 6, "SVC": 7, "IVC": 8, "CS": 9}
-        for ring_obj in rings:
-            if not ring_obj.name or ring_obj.name not in tag_map:
-                continue
+        for ring in rings:
+            name = ring.name  # for tiny performance gain
+            if name in tag_map:
+                ids = vtk_to_numpy(ring.vtk_polydata.GetPointData().GetArray("Ids"))
+                b_tag[ids] = tag_map[name]
+                write_to_vtx(os.path.join(self.outdir, f"ids_{name}.vtx"), ids)
+                centroids[name] = ring.center
 
-            if not self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True, check_ids=True):
-                if debug:
-                    print(f"  Skipping RA ring {ring_obj.id} ('{ring_obj.name}') due to invalid data.")
-                continue
+        write_to_vtx(os.path.join(self.outdir, "ids_RAA.vtx"), adjusted_RAA_id)
 
-            point_ids = vtk_to_numpy(ring_obj.vtk_polydata.GetPointData().GetArray("Ids"))
+        return b_tag, centroids, rings
 
-            if point_ids.size == 0:
-                continue
+    def _cutting_plane_to_identify_UAC(
+            self,
+            LPV_indices: list[int],
+            RPV_indices: list[int],
+            rings: list[Ring],
+            LA_region: vtk.vtkPolyData
+    ) -> None:
 
-            try:
-                b_tag[point_ids] = tag_map[ring_obj.name]
-            except IndexError:
-                print(f"  Error: Point IDs for ring {ring_obj.name} out of bounds. Skipping tagging.")
-                continue
+        # ring‐center means
+        lpv_centers = [rings[i].center for i in LPV_indices]
+        lpv_mean = np.mean(lpv_centers, axis=0)
 
-            write_vtx_file(os.path.join(self.outdir, f'ids_{ring_obj.name}.vtx'), point_ids)
-            final_centroids[ring_obj.name] = ring_obj.center
+        rpv_centers = [rings[i].center for i in RPV_indices]
+        rpv_mean = np.mean(rpv_centers, axis=0)
 
-        write_vtx_file(os.path.join(self.outdir, 'ids_RAA.vtx'), adjusted_RAA_id)
-        if debug:
-            print("RA ring marking complete.")
-        return b_tag, final_centroids, rings
+        mv_index = np.argmax([r.np for r in rings])
+        mv_mean = rings[mv_index].center
 
-    # -------------------- UAC Path and RSPV Identification --------------------
-    def _cutting_plane_to_identify_UAC(self, LPVs_indices: list, RPVs_indices: list,
-                                       rings: list[Ring], LA_region: vtk.vtkPolyData, debug: bool = False):
+        plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
+
+        # Extract surface above plane and get its boundary edges
+        above = get_elements_above_plane(LA_region, plane)
+        self.uac_cut_surface = apply_vtk_geom_filter(above)
+        self.uac_boundary_edges = get_feature_edges(self.uac_cut_surface,
+                                                    boundary_edges_on=True,
+                                                    feature_edges_on=False,
+                                                    manifold_edges_on=False,
+                                                    non_manifold_edges_on=False)
+
+        bnd_pts = vtk_to_numpy(self.uac_boundary_edges.GetPoints().GetData())
+        bnd_ids = vtk_to_numpy(self.uac_boundary_edges.GetPointData().GetArray("Ids"))
+        tree = cKDTree(bnd_pts)
+
+        # Collect all ring point IDs
+        all_ring_ids_set = set()
+        for ring in rings:
+            ids = vtk_to_numpy(ring.vtk_polydata.GetPointData().GetArray("Ids"))
+            all_ring_ids_set.update(ids)
+
+        # MV anterior/posterior
+        mv_ring_obj = next(r for r in rings if r.name == "MV")
+        mv_ids = set(vtk_to_numpy(mv_ring_obj.vtk_polydata.GetPointData().GetArray("Ids")))
+        mv_ant = set(bnd_ids).intersection(mv_ids)
+        mv_post = mv_ids - mv_ant
+
+        write_to_vtx(os.path.join(self.outdir, "ids_MV_ant.vtx"), list(mv_ant))
+        write_to_vtx(os.path.join(self.outdir, "ids_MV_post.vtx"), list(mv_post))
+
+        # Find boundary‐graph vertices for MV and PV means
+        lpv_bb = find_closest_point(self.uac_boundary_edges, lpv_mean)
+        rpv_bb = find_closest_point(self.uac_boundary_edges, rpv_mean)
+
+        mv_poly = mv_ring_obj.vtk_polydata
+        lpv_mv_idx = find_closest_point(mv_poly, lpv_mean)
+        rpv_mv_idx = find_closest_point(mv_poly, rpv_mean)
+        lpv_mv = find_closest_point(self.uac_boundary_edges, mv_poly.GetPoint(lpv_mv_idx))
+        rpv_mv = find_closest_point(self.uac_boundary_edges, mv_poly.GetPoint(rpv_mv_idx))
+
+        self._write_uac_path(self.uac_boundary_edges,
+                             tree,
+                             bnd_ids,
+                             all_ring_ids_set,
+                             lpv_bb,
+                             lpv_mv,
+                             "ids_MV_LPV.vtx")
+
+        self._write_uac_path(self.uac_boundary_edges,
+                             tree,
+                             bnd_ids,
+                             all_ring_ids_set,
+                             rpv_bb,
+                             rpv_mv,
+                             "ids_MV_RPV.vtx")
+
+        self._write_uac_path(self.uac_boundary_edges,
+                             tree,
+                             bnd_ids,
+                             all_ring_ids_set,
+                             lpv_bb,
+                             rpv_bb,
+                             "ids_RPV_LPV.vtx")
+
+    def _write_uac_path(self,
+                        boundary: vtk.vtkPolyData,
+                        tree: cKDTree,
+                        bnd_ids: np.ndarray,
+                        all_ids: set[int],
+                        start_idx: int,
+                        end_idx: int,
+                        filename: str) -> None:
         """
-        Identifies MV anterior/posterior boundaries and calculates UAC geodesic paths
-        by applying a cutting plane, then using Dijkstra's algorithm on the boundary network.
+        Run a Dijkstra geodesic path on `boundary` from start_idx to end_idx,
+        map points back to boundary IDs, exclude any in all_ids, and write to disk.
         """
-        # Ensure groups exist; if not, we cannot compute UAC paths.
-        if not LPVs_indices or not RPVs_indices:
-            return
-
-        try:
-            # Calculate the mean centers for LPV and RPV groups.
-            LPVs_c = np.array([rings[i].center for i in LPVs_indices])
-            lpv_mean = np.mean(LPVs_c, axis=0)
-            RPVs_c = np.array([rings[i].center for i in RPVs_indices])
-            rpv_mean = np.mean(RPVs_c, axis=0)
-            # Find the MV ring's center from the ring with name "MV"
-            mv_mean = next(r.center for r in rings if r.name == "MV")
-            # Create a cutting plane using MV center and the average PV centers.
-            plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
-        except Exception as e:
-            if debug:
-                print(f"Error calculating UAC plane: {e}")
-            return
-
-        # Extract the geometry from LA_region that lies above the cutting plane.
-        surface_above_plane = get_elements_above_plane(LA_region, plane)
-        surface_pd = apply_vtk_geom_filter(surface_above_plane)
-        # Extract boundary edges from the resulting geometry.
-        boundary_edges = get_feature_edges(
-            surface_pd,
-            boundary_edges_on=True,
-            feature_edges_on=False,
-            manifold_edges_on=False,
-            non_manifold_edges_on=False
-        )
-        if not self._validate_vtk_data(boundary_edges, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Could not extract valid boundary edges for UAC path calculation.")
-            return
-
-        # Build a KDTree for boundary points to facilitate geodesic path mapping.
-        boundary_points = vtk_to_numpy(boundary_edges.GetPoints().GetData())
-        tree = cKDTree(boundary_points)
-        ids_on_boundary = vtk_to_numpy(boundary_edges.GetPointData().GetArray("Ids"))
-
-        # For filtering paths later, get all 'Ids' from all rings.
-        MV_ids_all = set(
-            vtk_to_numpy(next(r.vtk_polydata.GetPointData().GetArray("Ids") for r in rings if r.name == "MV")))
-        MV_ant = set(ids_on_boundary).intersection(MV_ids_all)
-        MV_post = MV_ids_all - MV_ant
-        if MV_ant:
-            write_vtx_file(os.path.join(self.outdir, 'ids_MV_ant.vtx'), list(MV_ant))
-        if MV_post:
-            write_vtx_file(os.path.join(self.outdir, 'ids_MV_post.vtx'), list(MV_post))
-        if debug:
-            print(f"  MV_ant: {len(MV_ant)} points, MV_post: {len(MV_post)} points.")
-
-        if debug:
-            print("  Calculating UAC geodesic paths using Dijkstra's algorithm...")
-        # Find start and end vertices on the boundary edges for the paths.
-        lpv_bb_idx = find_closest_point(boundary_edges, lpv_mean)
-        rpv_bb_idx = find_closest_point(boundary_edges, rpv_mean)
-        # Use the MV ring polydata to project the LPV and RPV means onto MV.
-        mv_poly = next(r.vtk_polydata for r in rings if r.name == "MV")
-        lpv_mv_proj_idx = find_closest_point(mv_poly, lpv_mean)
-        rpv_mv_proj_idx = find_closest_point(mv_poly, rpv_mean)
-        if lpv_mv_proj_idx < 0 or rpv_mv_proj_idx < 0:
-            if debug:
-                print("  Warning: Failed to project PV points onto MV ring for UAC calculation.")
-            return
-        # Get the coordinates from the MV ring for these projections.
-        lpv_mv_idx = find_closest_point(boundary_edges, mv_poly.GetPoint(lpv_mv_proj_idx))
-        rpv_mv_idx = find_closest_point(boundary_edges, mv_poly.GetPoint(rpv_mv_proj_idx))
-        if lpv_bb_idx < 0 or rpv_bb_idx < 0 or lpv_mv_idx < 0 or rpv_mv_idx < 0:
-            if debug:
-                print("  Warning: Invalid start/end indices for Dijkstra's algorithm.")
-            return
-
-        # Gather all ring IDs to later filter out any paths that are part of existing rings.
-        all_ring_ids = set()
-        for r in rings:
-            if r.name and self._validate_vtk_data(r.vtk_polydata, check_ids=True):
-                try:
-                    all_ring_ids.update(vtk_to_numpy(r.vtk_polydata.GetPointData().GetArray("Ids")))
-                except Exception:
-                    pass
-
-        # Initialize Dijkstra's algorithm on the boundary edges network.
         dijkstra = vtk.vtkDijkstraGraphGeodesicPath()
-        dijkstra.SetInputData(boundary_edges)
+        dijkstra.SetInputData(boundary)
+        dijkstra.SetStartVertex(start_idx)
+        dijkstra.SetEndVertex(end_idx)
+        dijkstra.Update()
 
-        def _compute_and_write_geodesic_path(start_idx, end_idx, out_name):
-            """Helper function to compute a geodesic path and write its point IDs to file."""
-            if debug:
-                print(f"    Computing geodesic path for {out_name}...")
-            dijkstra.SetStartVertex(start_idx)
-            dijkstra.SetEndVertex(end_idx)
-            dijkstra.Update()
-            path_poly = dijkstra.GetOutput()
-            if self._validate_vtk_data(path_poly, check_points=True):
-                path_coords = vtk_to_numpy(path_poly.GetPoints().GetData())
+        coords = vtk_to_numpy(dijkstra.GetOutput().GetPoints().GetData())
+        _, idxs = tree.query(coords)
+        path_ids = set(bnd_ids[idxs]) - all_ids
 
-                try:
-                    _, path_indices = tree.query(path_coords)
-                    path_ids_raw = set(ids_on_boundary[path_indices])
-                    path_ids_filtered = list(path_ids_raw - all_ring_ids)
-                    if path_ids_filtered:
-                        write_vtx_file(os.path.join(self.outdir, out_name), path_ids_filtered)
-                        if debug:
-                            print(f"Wrote {out_name} with {len(path_ids_filtered)} points.")
-                    else:
-                        if debug:
-                            print(f"Warning: {out_name} path resulted in zero points after filtering.")
+        write_to_vtx(os.path.join(self.outdir, filename), list(path_ids))
 
-                except Exception as e:
-                    if debug:
-                        print(f"Error during KDTree query for {out_name}: {e}")
-            else:
-                if debug:
-                    print(f"Warning: Failed to compute {out_name} path or path is empty.")
-
-        # Calculate and write three UAC geodesic paths.
-        _compute_and_write_geodesic_path(lpv_bb_idx, lpv_mv_idx, 'ids_MV_LPV.vtx')
-        _compute_and_write_geodesic_path(rpv_bb_idx, rpv_mv_idx, 'ids_MV_RPV.vtx')
-        _compute_and_write_geodesic_path(lpv_bb_idx, rpv_bb_idx, 'ids_RPV_LPV.vtx')
-
-        if debug:
-            print("  UAC path calculation finished.")
-
-    def _cutting_plane_to_identify_RSPV(self, LPVs_indices: list, RPVs_indices: list,
-                                        rings: list[Ring], debug: bool = False) -> int | None:
+    @staticmethod
+    def _cutting_plane_to_identify_RSPV(LPV_indices: list[int],
+                                        RPV_indices: list[int],
+                                        rings: list[Ring],
+                                        debug: bool = False) -> int:
         """
         Uses a cutting plane on RPV candidate rings to identify the RSPV.
 
         Returns:
             The ring ID of the identified RSPV, or None on failure.
         """
-        if not LPVs_indices or not RPVs_indices:
-            return None
-        mv_rings = [r for r in rings if r.name == "MV"]
-        if not mv_rings:
-            return None
-        mv_mean = mv_rings[0].center
+        lpv_centers = [rings[i].center for i in LPV_indices]
+        lpv_mean = np.mean(lpv_centers, axis=0)
 
-        try:
-            LPVs_c = np.array([rings[i].center for i in LPVs_indices])
-            lpv_mean = np.mean(LPVs_c, axis=0)
-            RPVs_c = np.array([rings[i].center for i in RPVs_indices])
-            rpv_mean = np.mean(RPVs_c, axis=0)
-            plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
-        except Exception:
-            return None
+        rpv_centers = [rings[i].center for i in RPV_indices]
+        rpv_mean = np.mean(rpv_centers, axis=0)
 
+        mv_index = int(np.argmax([r.np for r in rings]))
+        mv_mean = rings[mv_index].center
+
+        plane = initialize_plane_with_points(mv_mean, rpv_mean, lpv_mean, mv_mean)
+
+        # append all RPV ring meshes, tagging each point with ring.id
         append_filter = vtk.vtkAppendPolyData()
-        valid_rpvs_appended = False
-        original_ids = set()
-        for i in RPVs_indices:
-            ring_obj = rings[i]
 
-            if self._validate_vtk_data(ring_obj.vtk_polydata, check_points=True):
-                temp_poly = vtk.vtkPolyData()
-                temp_poly.DeepCopy(ring_obj.vtk_polydata)
-                tag_data = numpy_to_vtk(np.full((ring_obj.np,), ring_obj.id, dtype=int), deep=True,
-                                        array_type=vtk.VTK_INT)
-                tag_data.SetName("temp_ring_id")
-                temp_poly.GetPointData().AddArray(tag_data)
-                append_filter.AddInputData(temp_poly)
-                original_ids.add(ring_obj.id)
-                valid_rpvs_appended = True
-            else:
-                if debug:
-                    print(f"Warning: Skipping RPV ring {ring_obj.id} due to invalid data.")
+        for idx in RPV_indices:
+            ring = rings[idx]
+            temp = vtk.vtkPolyData()
+            temp.DeepCopy(ring.vtk_polydata)
 
-        if not valid_rpvs_appended:
-            return None
+            # Create a VTK integer array where each point in the ring gets the value `ring.id`
+            ids_array = numpy_to_vtk(np.full(ring.np, ring.id, dtype=int), deep=True, array_type=vtk.VTK_INT)
+            ids_array.SetName("id")
+            temp.GetPointData().SetScalars(ids_array)
+
+            append_filter.AddInputData(temp)
 
         append_filter.Update()
 
-        extracted_mesh = get_elements_above_plane(append_filter.GetOutput(), plane)
-        if self._validate_vtk_data(extracted_mesh, check_points=True) and extracted_mesh.GetPointData().GetArray(
-                "temp_ring_id"):
-            extracted_ids = vtk_to_numpy(extracted_mesh.GetPointData().GetArray("temp_ring_id"))
-            if extracted_ids.size > 0:
-                potential_rspv = int(extracted_ids[0])
-                if potential_rspv in original_ids:
-                    if debug:
-                        print(f"RSPV identified: Ring {potential_rspv}")
-                    return potential_rspv
-                else:
-                    if debug:
-                        print(f"Warning: Extracted ID {potential_rspv} not in original RPV set.")
-                    return None
-            else:
-                if debug:
-                    print("Warning: RSPV extraction yielded no valid IDs.")
-                return None
-        else:
-            if debug:
-                print("Warning: RSPV extraction failed or returned no points/IDs.")
-            return None
+        # Extract points above the plane
+        extracted = get_elements_above_plane(append_filter.GetOutput(), plane)
+
+        # Grab the first “id” value as the RSPV ring id
+        id_vtk = extracted.GetPointData().GetArray("id")
+        ids = vtk_to_numpy(id_vtk)
+        return int(ids[0])
 
     # -------------------- TV Splitting --------------------
-    def _split_tv(self, tv_polydata: vtk.vtkPolyData, tv_center: tuple,
-                  ivc_center: tuple, svc_center: tuple, debug: bool = False):
+    def _split_tv(self,
+                  tv_polydata: vtk.vtkPolyData,
+                  tv_center: tuple[float, float, float],
+                  ivc_center: tuple[float, float, float],
+                  svc_center: tuple[float, float, float],
+                  debug: bool = False) -> None:
         """
         Splits the tricuspid valve (TV) ring into two regions: free wall (TV_F)
         and septal wall (TV_S). Writes separate VTX files for each.
         """
-        if not self._validate_vtk_data(tv_polydata, check_points=True, check_ids=True):
-            if debug:
-                print("Warning (_split_tv): Invalid TV polydata or missing IDs.")
-            return
-        if not all([tv_center, ivc_center, svc_center]):
-            if debug:
-                print("Warning (_split_tv): Missing center points.")
-            return
+        norm1 = -get_normalized_cross_product(tv_center, svc_center, ivc_center)
+        plane_f = initialize_plane(norm1, tv_center)
+        tv_f = apply_vtk_geom_filter(get_elements_above_plane(tv_polydata, plane_f))
+        ids_f = vtk_to_numpy(tv_f.GetPointData().GetArray("Ids"))
+        write_to_vtx(os.path.join(self.outdir, "ids_TV_F.vtx"), ids_f)
 
-        try:
-            # Calculate the normal for the free wall using the cross product
-            norm_free = -get_normalized_cross_product(tv_center, svc_center, ivc_center)
-            tv_f_plane = initialize_plane(norm_free, tv_center)
-        except Exception as e:
-            if debug:
-                print(f"Error calculating TV_F plane: {e}")
-            return
+        norm2 = -norm1
+        plane_s = initialize_plane(norm2, tv_center)
+        tv_s = apply_vtk_geom_filter(get_elements_above_plane(tv_polydata, plane_s,
+                                                              extract_boundary_cells_on=True))
+        ids_s = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
+        write_to_vtx(os.path.join(self.outdir, "ids_TV_S.vtx"), ids_s)
 
-        # Extract TV_F region using the cutting plane
-        tv_f_ug = get_elements_above_plane(tv_polydata, tv_f_plane)
-        tv_f_pd = apply_vtk_geom_filter(tv_f_ug)
-        if self._validate_vtk_data(tv_f_pd, check_points=True, check_ids=True):
-            tv_f_ids = vtk_to_numpy(tv_f_pd.GetPointData().GetArray("Ids"))
-            if tv_f_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, 'ids_TV_F.vtx'), tv_f_ids)
-                if debug:
-                    print(f"Wrote ids_TV_F.vtx ({len(tv_f_ids)} points)")
-        else:
-            if debug:
-                print("Warning: TV_F splitting failed or produced empty results.")
-
-        # Invert the free wall normal to get the septal wall normal
-        norm_septal = -norm_free
-        tv_s_plane = initialize_plane(norm_septal, tv_center)
-        tv_s_ug = get_elements_above_plane(tv_polydata, tv_s_plane, extract_boundary_cells_on=True)
-        tv_s_pd = apply_vtk_geom_filter(tv_s_ug)
-        if self._validate_vtk_data(tv_s_pd, check_points=True, check_ids=True):
-            tv_s_ids = vtk_to_numpy(tv_s_pd.GetPointData().GetArray("Ids"))
-            if tv_s_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, 'ids_TV_S.vtx'), tv_s_ids)
-                if debug:
-                    print(f"Wrote ids_TV_S.vtx ({len(tv_s_ids)} points)")
-        else:
-            if debug:
-                print("Warning: TV_S splitting failed or produced empty results.")
+        if debug:
+            print(f"Split TV: {len(ids_f)} free‐wall pts, {len(ids_s)} septal‐wall pts.")
 
     # -------------------- Boundary Loop and Region Extraction --------------------
     def _find_top_boundary_loop(self, boundary_edges_polydata: vtk.vtkPolyData,
@@ -743,352 +603,379 @@ class RingDetector:
             print("Warning: No connecting boundary loop found.")
         return top_cut_loop
 
-    def _get_region_excluding_ids(self, mesh: vtk.vtkPolyData, ids_to_exclude: list[int],
-                                  debug: bool = False) -> vtk.vtkPolyData | None:
-        """
-        Returns the connected region in the mesh that does NOT contain any of the specified IDs.
-        This is used to isolate the final TOP_ENDO or TOP_EPI region.
-        """
-        if not self._validate_vtk_data(mesh, check_points=True, check_ids=True):
-            return None
-        if not ids_to_exclude:
-            return None
+    @staticmethod
+    def _get_region_not_including_ids(mesh, ids):
+        connect = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
+        num_regions = connect.GetNumberOfExtractedRegions()
+        for region_id in range(num_regions):
+            connect.AddSpecifiedRegion(region_id)
+            connect.Update()
+            surface = connect.GetOutput()
+            # Clean unused points
+            surface = clean_polydata(surface)
 
-        connect_filter = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
-        num_regions = connect_filter.GetNumberOfExtractedRegions()
-        exclude_region_id = -1
-        ids_to_exclude_set = set(ids_to_exclude)
-        if debug:
-            print(f"_get_region_excluding_ids: Evaluating {num_regions} regions for exclusion.")
+            pts_surf = vtk_to_numpy(surface.GetPointData().GetArray("Ids"))
 
-        # Find which region contains any of the IDs to be excluded.
-        for region_index in range(num_regions):
-            connect_filter.AddSpecifiedRegion(region_index)
-            connect_filter.Update()
-            region_ug = connect_filter.GetOutput()
-            region_pd = apply_vtk_geom_filter(region_ug)
-            region_pd = clean_polydata(region_pd)
-            if self._validate_vtk_data(region_pd, check_points=True, check_ids=True):
-                region_ids = set(vtk_to_numpy(region_pd.GetPointData().GetArray("Ids")))
-                if not region_ids.isdisjoint(ids_to_exclude_set):
-                    exclude_region_id = region_index
-                    if debug:
-                        print(f"Excluding region {region_index} (contains IDs to exclude).")
-                    connect_filter.DeleteSpecifiedRegion(region_index)
-                    break
-            connect_filter.DeleteSpecifiedRegion(region_index)
+            if ids not in pts_surf:
+                found_id = region_id
+                # TODO: decided adding the following -> break
 
-        # Reinitialize filter to add all regions except the excluded one.
-        connect_filter = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
-        found_target = False
-        for region_index in range(num_regions):
-            if region_index != exclude_region_id:
-                connect_filter.AddSpecifiedRegion(region_index)
-                found_target = True
-        if not found_target:
-            if debug:
-                print("No target region found after exclusion.")
-            return None
-        connect_filter.Update()
-        target_ug = connect_filter.GetOutput()
-        target_pd = apply_vtk_geom_filter(target_ug)
-        target_pd = clean_polydata(target_pd)
-        if self._validate_vtk_data(target_pd, check_points=True):
-            return target_pd
-        else:
-            if debug:
-                print("Final region after exclusion is empty or invalid.")
-            return None
+            # delete added region id
+            connect.DeleteSpecifiedRegion(region_id)
+            connect.Update()
+        connect.AddSpecifiedRegion(found_id)
+        connect.Update()
+        return connect.GetOutput()
 
-    # -------------------- Standard TOP_ENDO Workflow --------------------
-    def cutting_plane_to_identify_tv_f_tv_s(self, model: vtk.vtkPolyData, rings: list[Ring],
+    @staticmethod
+    def find_first_ring(rings, name):
+        for r in rings:
+            if r.name == name:
+                return r
+        raise ValueError(f"Ring with name '{name}' not found.")
+
+    def cutting_plane_to_identify_tv_f_tv_s(self,
+                                            model: vtk.vtkPolyData,
+                                            rings: list[Ring],
                                             debug: bool = True) -> None:
         """
-        Implements the standard workflow to split the TV ring and then identify the TOP_ENDO region.
-        It uses a cutting plane derived from the TV, SVC, and IVC rings, filters out unwanted points,
-        and isolates the region of interest.
+        Standard single-surface workflow. Replicates the original bug by feeding
+        SVC coordinates in place of IVC coordinates when selecting the top-cut.
         """
-        # Retrieve required rings (TV, SVC, IVC) from the provided list.
-        tv_ring = next((r for r in rings if r.name == "TV"), None)
-        svc_ring = next((r for r in rings if r.name == "SVC"), None)
-        ivc_ring = next((r for r in rings if r.name == "IVC"), None)
-        if not all([tv_ring, svc_ring, ivc_ring]):
-            if debug:
-                print("Warning: Missing required rings for TOP_ENDO workflow. Aborting.")
-            return
+        tv_ring = self.find_first_ring(rings, "TV")
+        svc_ring = self.find_first_ring(rings, "SVC")
+        ivc_ring = self.find_first_ring(rings, "IVC")
 
-        # Split the TV ring into its free and septal parts.
-        self._split_tv(tv_ring.vtk_polydata, tv_ring.center, ivc_ring.center, svc_ring.center, debug=debug)
+        tv_c = np.asarray(tv_ring.center)
+        svc_c = np.asarray(svc_ring.center)
+        ivc_c = np.asarray(ivc_ring.center)
+
+        plane_f = initialize_plane_with_points(tv_c, svc_c, ivc_c, tv_c)
+
+        surf_over = apply_vtk_geom_filter(get_elements_above_plane(model, plane_f))
+
+        # 1. split the TV
+        self._split_tv(tv_ring.vtk_polydata, tv_c, ivc_c, svc_c, debug=debug)
+
+        # 2. BUG-replicating coordinate prep  -------------------------------
+        svc_coords = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData()).tolist()
+
+        self.tv_identification_top_cut_loop = self._extract_top_cut(surface_over_tv_f=surf_over,
+                                                                    ivc_coords_for_comparison=svc_coords,
+                                                                    svc_coords_for_comparison=svc_coords,
+                                                                    debug=debug)
+
         if debug:
-            print("TV splitting completed.")
+            Mesh(self.tv_identification_top_cut_loop).save(os.path.join(self.outdir, "top_endo_epi.vtk"))
 
-        try:
-            # Create a cutting plane using the negative normalized cross product.
-            norm_1 = -get_normalized_cross_product(tv_ring.center, svc_ring.center, ivc_ring.center)
-            tv_f_plane = initialize_plane(norm_1, tv_ring.center)
-        except Exception as e:
-            if debug:
-                print(f"Error creating cutting plane: {e}")
-            return
+        # 3. Remove genuine SVC / IVC points -------------------------------
+        svc_pts = set(vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")))
+        ivc_pts = set(vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids")))
 
-        # Extract geometry above the cutting plane from the input model.
-        surface_over = apply_vtk_geom_filter(get_elements_above_plane(model, tv_f_plane))
-        if not self._validate_vtk_data(surface_over, check_points=True):
-            if debug:
-                print("Warning: No geometry extracted above the TV cutting plane.")
-            return
-
-        # Extract boundary edges from the extracted surface.
-        gamma_top = get_feature_edges(surface_over, boundary_edges_on=True, feature_edges_on=False,
-                                      manifold_edges_on=False, non_manifold_edges_on=False)
-        if not self._validate_vtk_data(gamma_top, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Feature edges extraction failed or missing 'Ids'.")
-            return
-
-        # Find the boundary loop that connects the IVC and SVC rings.
-        ivc_ids = vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
-        svc_ids = vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids"))
-        top_cut_loop = self._find_top_boundary_loop(gamma_top, ivc_ids, svc_ids, debug=debug)
-        if not self._validate_vtk_data(top_cut_loop, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Failed to isolate the connecting boundary loop.")
-            return
-
-        # Remove points from the loop that belong to the IVC and SVC rings.
-        pts_in_loop = vtk_to_numpy(top_cut_loop.GetPointData().GetArray("Ids"))
-        svc_ivc_set = set(ivc_ids).union(set(svc_ids))
-        to_delete = np.array([1 if pt in svc_ivc_set else 0 for pt in pts_in_loop], dtype=int)
-        if debug:
-            print(f"Marked {np.sum(to_delete)} SVC/IVC points for deletion from the loop.")
-        top_cut_ds = dsa.WrapDataObject(top_cut_loop)
-        top_cut_ds.PointData.append(to_delete, "delete")
-        thresh = get_lower_threshold(top_cut_ds.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
-        threshed = apply_vtk_geom_filter(thresh.GetOutput())
-        threshed = clean_polydata(threshed)
-        if not self._validate_vtk_data(threshed, check_points=True, check_ids=True):
-            if debug:
-                print("Warning: Thresholding/cleaning failed for TOP_ENDO region.")
-            return
-
-        # Determine which TV point (from the TV ring) to use as the exclusion marker.
-        tv_ids = vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids"))
-        threshed_ids = vtk_to_numpy(threshed.GetPointData().GetArray("Ids"))
-        tv_on_boundary = list(set(tv_ids).intersection(set(threshed_ids)))
-        ids_to_exclude = tv_on_boundary[:1] if tv_on_boundary else []
-        if not ids_to_exclude:
-            if debug:
-                print("Warning: No TV points found on the thresholded loop; using fallback.")
-            closest_idx = find_closest_point(threshed, tv_ring.center)
-            if closest_idx >= 0:
-                try:
-                    ids_to_exclude = [int(threshed.GetPointData().GetArray("Ids").GetValue(closest_idx))]
-                except Exception:
-                    return
+        top_ids = vtk_to_numpy(self.tv_identification_top_cut_loop.GetPointData().GetArray("Ids"))
+        to_delete = []
+        for pid in top_ids:
+            if pid in svc_pts or pid in ivc_pts:
+                to_delete.append(1)
             else:
-                return
-        if debug:
-            print(f"Using exclude ID(s): {ids_to_exclude}")
+                to_delete.append(0)
+        to_delete = np.array(to_delete, dtype=int)
 
-        # Isolate the region that does not contain the excluded ID.
-        top_endo_region = self._get_region_excluding_ids(threshed, ids_to_exclude, debug=debug)
-        if self._validate_vtk_data(top_endo_region, check_points=True, check_ids=True):
-            top_endo_ids = vtk_to_numpy(top_endo_region.GetPointData().GetArray("Ids"))
-            if top_endo_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, 'ids_TOP_ENDO.vtx'), top_endo_ids)
-                if debug:
-                    print(f"TOP_ENDO identification complete with {len(top_endo_ids)} points.")
-            else:
-                if debug:
-                    print("Warning: Final TOP_ENDO region has empty IDs.")
-        else:
-            if debug:
-                print("Warning: Failed to isolate final TOP_ENDO region.")
+        mesh_ds = dsa.WrapDataObject(self.tv_identification_top_cut_loop)
+        mesh_ds.PointData.append(to_delete, "delete")
+
+        th = get_lower_threshold(mesh_ds.VTKObject, 0,
+                                 "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
+        self.tv_identification_final_thresholded_mesh = apply_vtk_geom_filter(th.GetOutputPort(), True)
+
+        mv_id = top_ids[0]  # first point on MV (same trick as original code)
+        top_endo_ids = self._get_top_endo_ids(mv_id, self.tv_identification_final_thresholded_mesh)
+
+        write_to_vtx(os.path.join(self.outdir, "ids_TOP_ENDO.vtx"), top_endo_ids)
+
+    @staticmethod
+    def _is_top_endo_epi_cut(ivc_ring_coords: List[List[float]],
+                             svc_ring_coords: List[List[float]],
+                             border_region_coords: List[List[float]]) -> bool:
+        """
+        Returns ``True`` iff *border_region_coords* contains at least one coordinate
+        originating from **both** the IVC and the SVC rings.
+
+        NOTE – this version works on coordinates (not point-IDs) and therefore
+        enables the deliberate bug-replication downstream where the SVC
+        coordinates are (wrongly) re-used for the IVC test.
+        """
+        set_ivc = {tuple(pt) for pt in ivc_ring_coords}
+        set_svc = {tuple(pt) for pt in svc_ring_coords}
+
+        has_ivc = False
+        has_svc = False
+        for coord in border_region_coords:
+            tup = tuple(coord)
+
+            if not has_ivc and tup in set_ivc:
+                has_ivc = True
+            if not has_svc and tup in set_svc:
+                has_svc = True
+            if has_ivc and has_svc:
+                return True
+
+        return False
+
+    def _extract_top_cut(self,
+                         surface_over_tv_f: vtk.vtkPolyData,
+                         ivc_coords_for_comparison: List[List[float]],
+                         svc_coords_for_comparison: List[List[float]],
+                         debug: bool = False) -> vtk.vtkPolyData:
+        """
+        From *surface_over_tv_f* (geometry above the TV-F plane) extract the single
+        boundary loop that simultaneously touches IVC **and** SVC coordinates
+        (NB: the coordinate lists may be intentionally identical to replicate the
+        historical bug).
+        """
+        gamma_top = get_feature_edges(surface_over_tv_f,
+                                      boundary_edges_on=True,
+                                      feature_edges_on=False,
+                                      manifold_edges_on=False,
+                                      non_manifold_edges_on=False)
+
+        conn = init_connectivity_filter(gamma_top, ExtractionModes.SPECIFIED_REGIONS)
+        num_regions = conn.GetNumberOfExtractedRegions()
+        top_region = None
+
+        for region_id in range(num_regions):
+            conn.AddSpecifiedRegion(region_id)
+            conn.Update()
+
+            reg_pd = clean_polydata(conn.GetOutput())
+
+            border_pts = vtk_to_numpy(reg_pd.GetPoints().GetData()).tolist()
+
+            if self._is_top_endo_epi_cut(ivc_coords_for_comparison,
+                                         svc_coords_for_comparison,
+                                         border_pts):
+                top_region = region_id
+                break  # found – stop searching
+
+            # not the one – discard and continue
+            conn.DeleteSpecifiedRegion(region_id)
+            conn.Update()
+
+        # Fallback – return empty polydata
+        if top_region is None:
+            return vtk.vtkPolyData()
+
+        # Re-select only the desired region
+        #conn.InitializeSpecifiedRegionList()
+        conn.AddSpecifiedRegion(top_region)
+        conn.Update()
+        top_cut = clean_polydata(conn.GetOutput())
+
+        if debug:
+            write_vtk_file_path = os.path.join(self.outdir,
+                                               f"gamma_top_{top_region}.vtk")
+            Mesh(top_cut).save(write_vtk_file_path)
+
+        return top_cut
+
+    def _get_region_excluding_ids(self,
+                                  mesh: vtk.vtkPolyData,
+                                  ids_to_exclude: list[int],
+                                  debug: bool = False) -> vtk.vtkPolyData:
+        """
+        Equivalent to get_region_not_including_ids(mesh, ids) in extract_rings.py.
+        Splits mesh into connected regions and returns the first region that
+        does NOT contain any of the specified point IDs.
+        """
+        # initialize connectivity filter for specified regions
+        conn = init_connectivity_filter(mesh, ExtractionModes.SPECIFIED_REGIONS)
+        num_regions = conn.GetNumberOfExtractedRegions()
+
+        found_region = None
+        for region_id in range(num_regions):
+            conn.AddSpecifiedRegion(region_id)
+            conn.Update()
+            region = conn.GetOutput()
+            region = clean_polydata(region)
+
+            pts = vtk_to_numpy(region.GetPointData().GetArray("Ids"))
+
+            # If none of the exclude IDs appear here, this is our region
+            contains = False
+            for ex in ids_to_exclude:
+                if ex in pts:
+                    contains = True
+                    break
+
+            if not contains:
+                found_region = region_id
+                break
+
+            # Remove and continue
+            conn.DeleteSpecifiedRegion(region_id)
+            conn.Update()
+
+        if found_region is None:
+            # fallback: empty polydata
+            return vtk.vtkPolyData()
+
+        # Select the found region and return
+        conn.InitializeSpecifiedRegionList()
+        conn.AddSpecifiedRegion(found_region)
+        conn.Update()
+        return conn.GetOutput()
+
+    def _get_top_endo_ids(self,
+                          mv_id: int,
+                          threshed_mesh: vtk.vtkPolyData,
+                          debug: bool = False) -> np.ndarray:
+        """
+        Equivalent to get_top_endo_ids(...) from extract_rings.py.
+        Starts from the thresholded mesh, excludes the single MV ID,
+        cleans the result, and returns the remaining point IDs.
+        """
+        # Exclude MV point from the mesh
+        region = self._get_region_excluding_ids(threshed_mesh, [mv_id], debug=debug)
+        cleaned = clean_polydata(region)
+
+        # Extract its 'Ids' array
+        ids_array = cleaned.GetPointData().GetArray("Ids")
+        top_endo_ids = vtk_to_numpy(ids_array)
+
+        return top_endo_ids
 
     # -------------------- Specialized TOP_EPI/ENDO Workflow --------------------
-    def _process_top_surface(self, surface_model: vtk.vtkPolyData, plane: vtk.vtkPlane,
-                             ivc_ring_ids: np.ndarray, svc_ring_ids: np.ndarray,
-                             tv_ring_center: tuple, tv_ring_ids: np.ndarray,
-                             surface_name: str, vtx_filename: str, debug: bool = False) -> np.ndarray | None:
+    # -------------------- Re-usable helper for separate EPI / ENDO ---------
+    def _process_top_surface(self,
+                             surface_model: vtk.vtkPolyData,
+                             plane: vtk.vtkPlane,
+                             ivc_coords_for_buggy_comparison: List[List[float]],
+                             svc_coords_for_buggy_comparison: List[List[float]],
+                             ivc_actual_node_ids: np.ndarray,
+                             svc_actual_node_ids: np.ndarray,
+                             tv_ring_node_ids_for_mv_id: np.ndarray,
+                             surface_name: str,
+                             vtx_filename: str,
+                             debug: bool = False) -> np.ndarray | None:
         """
-        Helper function to process a top surface (either EPI or ENDO) by applying a cutting plane,
-        extracting boundary edges, filtering out unwanted regions, and isolating the final TOP region.
-
-        Returns:
-            A NumPy array of point IDs for the identified TOP surface, or None on failure.
+        Shared helper for EPI and ENDO passes.  *ivc_coords_for_buggy_comparison*
+        and *svc_coords_for_buggy_comparison* are the (possibly duplicated) lists
+        of coordinates used to pick the top-cut region, while
+        *ivc_actual_node_ids* and *svc_actual_node_ids* are the **true** point-ID
+        sets used later for masking.
         """
-        if debug:
-            print(f"  Starting TOP_{surface_name} identification...")
+        surf_over = apply_vtk_geom_filter(get_elements_above_plane(surface_model, plane))
 
-        if not self._validate_vtk_data(surface_model, check_points=True, check_ids=True):
+        loop = self._extract_top_cut(surf_over,
+                                     ivc_coords_for_buggy_comparison,
+                                     svc_coords_for_buggy_comparison,
+                                     debug=debug)
+
+        if loop.GetNumberOfPoints() == 0:
             if debug:
-                print(f"    Warning: Invalid {surface_name} model or missing IDs.")
+                print(f"[{surface_name}] No loop found – skipping.")
             return None
 
-        # Extract geometry above the given plane.
-        surface_over = apply_vtk_geom_filter(get_elements_above_plane(surface_model, plane))
-        if not self._validate_vtk_data(surface_over, check_points=True):
-            if debug:
-                print(f"    Warning: Failed to extract geometry above the plane for {surface_name}.")
-            return None
+        pts_ids = vtk_to_numpy(loop.GetPointData().GetArray("Ids"))
+        ivc_set = set(ivc_actual_node_ids)
+        svc_set = set(svc_actual_node_ids)
+        excl_ids_set = ivc_set.union(svc_set)
 
-        # Get the boundary edges (feature edges) from the extracted geometry.
-        gamma_top = get_feature_edges(surface_over, boundary_edges_on=True, feature_edges_on=False,
-                                      manifold_edges_on=False, non_manifold_edges_on=False)
-        if not self._validate_vtk_data(gamma_top, check_points=True, check_ids=True):
-            if debug:
-                print(f"    Warning: Failed to extract valid feature edges for {surface_name}.")
-            return None
-
-        # Find the connecting boundary loop using the provided IVC and SVC IDs.
-        top_cut_loop = self._find_top_boundary_loop(gamma_top, ivc_ring_ids, svc_ring_ids, debug=debug)
-        if not self._validate_vtk_data(top_cut_loop, check_points=True, check_ids=True):
-            if debug:
-                print(f"    Warning: Could not isolate the boundary loop for {surface_name}.")
-            return None
-
-        # Filter out points from the loop that belong to the IVC/SVC rings.
-        pts_in_loop = vtk_to_numpy(top_cut_loop.GetPointData().GetArray("Ids"))
-        svc_ivc_set = set(ivc_ring_ids).union(set(svc_ring_ids))
-        to_delete = np.array([1 if pt in svc_ivc_set else 0 for pt in pts_in_loop], dtype=int)
-        top_cut_ds = dsa.WrapDataObject(top_cut_loop)
-        top_cut_ds.PointData.append(to_delete, "delete")
-        thresh = get_lower_threshold(top_cut_ds.VTKObject, 0, "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
-        threshed = apply_vtk_geom_filter(thresh.GetOutput())
-        threshed = clean_polydata(threshed)
-        if not self._validate_vtk_data(threshed, check_points=True, check_ids=True):
-            if debug:
-                print(f"    Warning: Thresholding/cleaning failed for {surface_name} boundary.")
-            return None
-
-        # Determine which TV point to exclude by checking for intersection with TV ring IDs.
-        threshed_ids = vtk_to_numpy(threshed.GetPointData().GetArray("Ids"))
-        tv_ids_on_boundary = list(set(tv_ring_ids).intersection(set(threshed_ids)))
-        ids_to_exclude = tv_ids_on_boundary[:1] if tv_ids_on_boundary else []
-        if not ids_to_exclude:
-            if debug:
-                print(f"    Warning: No TV points found on {surface_name} boundary; using fallback.")
-            closest_idx = find_closest_point(threshed, tv_ring_center)
-            if closest_idx >= 0:
-                try:
-                    ids_to_exclude = [int(threshed.GetPointData().GetArray("Ids").GetValue(closest_idx))]
-                except Exception:
-                    return None
+        mask = []
+        for pid in pts_ids:
+            if pid in excl_ids_set:
+                mask.append(1)
             else:
-                return None
-        if debug:
-            print(f"    Exclude ID for {surface_name}: {ids_to_exclude}")
+                mask.append(0)
+        mask = np.array(mask, dtype=int)
 
-        # Isolate the region that does not contain the exclude ID.
-        top_region = self._get_region_excluding_ids(threshed, ids_to_exclude, debug=debug)
-        if self._validate_vtk_data(top_region, check_points=True, check_ids=True):
-            top_ids = vtk_to_numpy(top_region.GetPointData().GetArray("Ids"))
-            if top_ids.size > 0:
-                write_vtx_file(os.path.join(self.outdir, vtx_filename), top_ids)
-                if debug:
-                    print(f"  TOP_{surface_name} identification complete with {len(top_ids)} points.")
-                return top_ids
-            else:
-                if debug:
-                    print(f"    Warning: {surface_name} region identified but has empty IDs.")
-        else:
-            if debug:
-                print(f"    Warning: Failed to isolate final {surface_name} region.")
-        return None
+        ds = dsa.WrapDataObject(loop)
+        ds.PointData.append(mask, "delete")
 
-    # -------------------- Specialized TOP_EPI/ENDO Workflow --------------------
-    def perform_tv_split_and_find_top_epi_endo(self, model_epi: vtk.vtkPolyData, endo_mesh_path: str,
-                                               rings: list[Ring], debug: bool = True):
+        th = get_lower_threshold(ds.VTKObject, 0,
+                                 "vtkDataObject::FIELD_ASSOCIATION_POINTS", "delete")
+        threshed = apply_vtk_geom_filter(th.GetOutputPort())
+
+        mv_id = pts_ids[0]
+        final_ids = self._get_top_endo_ids(mv_id, threshed, debug=debug)
+
+        write_to_vtx(os.path.join(self.outdir, vtx_filename), final_ids)
+        return final_ids
+
+    # -------------------- Public EPI / ENDO workflow (bug-replicating) -----
+    def perform_tv_split_and_find_top_epi_endo(self,
+                                               model_epi: vtk.vtkPolyData,
+                                               endo_mesh_path: str,
+                                               rings: list[Ring],
+                                               debug: bool = True) -> dict:
         """
-        Specialized workflow for separate epi/endo surfaces.
-        Splits the TV ring and then identifies separate TOP_EPI and TOP_ENDO regions.
-
-        Args:
-            model_epi (vtk.vtkPolyData): The input RA model representing the epi or combined surface.
-            endo_mesh_path (str): File path to the separate endocardial mesh (.obj).
-            rings (list[Ring]): List of detected RA rings.
-            debug (bool): Enables verbose debug output.
+        Splits TV, then finds TOP_EPI and TOP_ENDO.  The “bug” is reproduced by
+        feeding SVC-derived coordinates in place of IVC coordinates when choosing
+        the top-cut on both surfaces.
         """
-        # Retrieve required rings from the list.
-        tv_ring = next((r for r in rings if r.name == "TV"), None)
-        svc_ring = next((r for r in rings if r.name == "SVC"), None)
-        ivc_ring = next((r for r in rings if r.name == "IVC"), None)
-        if not all([tv_ring, svc_ring, ivc_ring]):
-            if debug:
-                print("Warning (TOP_EPI/ENDO): Missing required rings. Aborting specialized workflow.")
-            return
+        tv_ring = self.find_first_ring(rings, "TV")
+        svc_ring = self.find_first_ring(rings, "SVC")
+        ivc_ring = self.find_first_ring(rings, "IVC")
 
-        # Step 1: Perform TV splitting using the TV ring polydata.
-        self._split_tv(tv_ring.vtk_polydata, tv_ring.center, ivc_ring.center, svc_ring.center, debug=debug)
-        if debug:
-            print("TV splitting completed.")
+        # --- TV split -------------------------------------------------------
+        self._split_tv(tv_ring.vtk_polydata,
+                       tv_ring.center,
+                       ivc_ring.center,
+                       svc_ring.center,
+                       debug=debug)
 
-        # Step 2: Load the separate endocardial mesh using MeshReader.
-        try:
-            endo_loader = MeshReader(endo_mesh_path)
-            endo_mesh = endo_loader.get_polydata()
-            if not self._validate_vtk_data(endo_mesh, check_points=True):
-                raise ValueError("Endocardial mesh is empty.")
-            if not self._validate_vtk_data(endo_mesh, check_ids=True):
-                if debug:
-                    print(f"Warning: Endo mesh missing 'Ids'. Generating IDs...")
-                endo_mesh = generate_ids(endo_mesh, "Ids", "Ids")
-            if not self._validate_vtk_data(endo_mesh, check_ids=True):
-                raise ValueError("Failed to generate 'Ids' on endo mesh.")
-        except Exception as e:
-            if debug:
-                print(f"Error: Failed to load/prepare endo mesh: {e}")
-            return
+        norm_vec = -get_normalized_cross_product(tv_ring.center,
+                                                 svc_ring.center,
+                                                 ivc_ring.center)
+        tv_plane = initialize_plane(norm_vec, tv_ring.center)
 
-        # Step 3: Define the cutting plane using the TV, SVC, and IVC ring centers.
-        norm_1 = -get_normalized_cross_product(tv_ring.center, svc_ring.center, ivc_ring.center)
-        tv_f_plane = initialize_plane(norm_1, tv_ring.center)
+        # --- EPI ------------------------------------------------------------
+        svc_coords_epi = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData()).tolist()
 
-        # Step 4: Process the epi surface using the helper function.
-        self._process_top_surface(
+        epi_ids = self._process_top_surface(
             surface_model=model_epi,
-            plane=tv_f_plane,
-            ivc_ring_ids=vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-            svc_ring_ids=vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
-            tv_ring_center=tv_ring.center,
-            tv_ring_ids=vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids")),
+            plane=tv_plane,
+            ivc_coords_for_buggy_comparison=svc_coords_epi,
+            svc_coords_for_buggy_comparison=svc_coords_epi,
+            ivc_actual_node_ids=vtk_to_numpy(ivc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
+            svc_actual_node_ids=vtk_to_numpy(svc_ring.vtk_polydata.GetPointData().GetArray("Ids")),
+            tv_ring_node_ids_for_mv_id=vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids")),
             surface_name="EPI",
             vtx_filename="ids_TOP_EPI.vtx",
             debug=debug
         )
 
-        # Step 5: Map epi ring points to the endocardial mesh using KDTree.
-        if debug:
-            print("Mapping epi ring coordinates to endo mesh IDs...")
-        try:
-            svc_coords_epi = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData())
-            ivc_coords_epi = vtk_to_numpy(ivc_ring.vtk_polydata.GetPoints().GetData())
-            tv_coords_epi = vtk_to_numpy(tv_ring.vtk_polydata.GetPoints().GetData())
-            endo_coords = vtk_to_numpy(endo_mesh.GetPoints().GetData())
-            endo_ids_all = vtk_to_numpy(endo_mesh.GetPointData().GetArray("Ids"))
-            endo_tree = cKDTree(endo_coords)
-            _, ii_svc = endo_tree.query(svc_coords_epi)
-            pts_in_svc_endo = set(endo_ids_all[ii_svc])
-            _, ii_ivc = endo_tree.query(ivc_coords_epi)
-            pts_in_ivc_endo = set(endo_ids_all[ii_ivc])
-            _, ii_tv = endo_tree.query(tv_coords_epi)
-            pts_in_tv_endo = set(endo_ids_all[ii_tv])
-            if debug:
-                print("Mapping complete.")
-        except Exception as e:
-            if debug:
-                print(f"Error during KDTree mapping: {e}")
-            return
+        self.endo_mesh_for_top_epi_endo = Mesh.from_file(endo_mesh_path).get_polydata()
+        if not self.endo_mesh_for_top_epi_endo.GetPointData().GetArray("Ids"):
+            endo = generate_ids(self.endo_mesh_for_top_epi_endo, "Ids", "Ids")
 
-        # Step 6: Process the endo surface using the helper function with the mapped IDs.
-        self._process_top_surface(
-            surface_model=endo_mesh,
-            plane=tv_f_plane,
-            ivc_ring_ids=np.array(list(pts_in_ivc_endo)),
-            svc_ring_ids=np.array(list(pts_in_svc_endo)),
-            tv_ring_center=tv_ring.center,
-            tv_ring_ids=np.array(list(pts_in_tv_endo)),
+        endo_points = vtk_to_numpy(self.endo_mesh_for_top_epi_endo.GetPoints().GetData())
+        endo_ids = vtk_to_numpy(self.endo_mesh_for_top_epi_endo.GetPointData().GetArray("Ids"))
+        tree = cKDTree(endo_points)
+
+        # Map epi-ring points to endo surface
+        svc_epi_pts = vtk_to_numpy(svc_ring.vtk_polydata.GetPoints().GetData())
+        ivc_epi_pts = vtk_to_numpy(ivc_ring.vtk_polydata.GetPoints().GetData())
+
+        _, svc_nn = tree.query(svc_epi_pts)
+        _, ivc_nn = tree.query(ivc_epi_pts)
+
+        mapped_svc_ids = endo_ids[svc_nn]
+        mapped_ivc_ids = endo_ids[ivc_nn]
+
+        mapped_svc_coords = endo_points[svc_nn].tolist()
+        # (mapped_ivc_coords are **not** used – bug replication)
+
+        endo_ids_out = self._process_top_surface(
+            surface_model=self.endo_mesh_for_top_epi_endo,
+            plane=tv_plane,
+            ivc_coords_for_buggy_comparison=mapped_svc_coords,
+            svc_coords_for_buggy_comparison=mapped_svc_coords,
+            ivc_actual_node_ids=mapped_ivc_ids,
+            svc_actual_node_ids=mapped_svc_ids,
+            tv_ring_node_ids_for_mv_id=vtk_to_numpy(tv_ring.vtk_polydata.GetPointData().GetArray("Ids")),
             surface_name="ENDO",
             vtx_filename="ids_TOP_ENDO.vtx",
-            debug=debug
-        )
+            debug=debug)
+
+        return {"TOP_EPI": epi_ids, "TOP_ENDO": endo_ids_out}

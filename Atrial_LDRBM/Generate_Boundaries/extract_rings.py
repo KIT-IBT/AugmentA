@@ -243,21 +243,27 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
     rings = []
 
     for i in range(num):
+        # Tell the connect filter to focus only on the i-th region
         connect.AddSpecifiedRegion(i)
+        # Executes the filter for the specified region
         connect.Update()
+        # Gets the actual geometric data (points and lines) for this single ring
         surface = connect.GetOutput()
 
-        # Clean unused points
+        # Converts vtkUnstructuredGrid output from the connectivity filter into a vtkPolyData
         surface = apply_vtk_geom_filter(surface)
+        # Removes any unused points
         surface = clean_polydata(surface)
 
-        # be careful overwrite previous rings
+        # saves this individual processed ring to a VTK file
         if debug:
             vtk_write(surface, outdir + '/ring_' + str(i) + '.vtk')
+
 
         ring_surf = vtk.vtkPolyData()
         ring_surf.DeepCopy(surface)
 
+        # Calculates the geometric center of the current ring
         c_mass = get_center_of_mass(surface, False)
 
         ring = Ring(i, "", surface.GetNumberOfPoints(), c_mass, np.sqrt(np.sum((np.array(ap_point) - \
@@ -273,7 +279,11 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
 
 
 def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
+    # finds the Ring object in the rings list that has the maximum
+    # number of points (r.np) and assigns the name "MV" to it.
     rings[np.argmax([r.np for r in rings])].name = "MV"
+
+    # creates a list pvs containing the indices of all rings that are not the MV.
     pvs = [i for i in range(len(rings)) if rings[i].name != "MV"]
 
     estimator = KMeans(n_clusters=2)
