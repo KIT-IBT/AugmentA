@@ -31,6 +31,7 @@ under the License.
 
 import os
 import sys
+import traceback
 from string import Template
 from typing import Dict, Tuple, Any, Optional
 from pathlib import Path
@@ -968,5 +969,6 @@ def AugmentA(args):
         print("\n--- Pipeline Finished ---")
 
     except Exception as e:
-        print(f"\nFATAL ERROR: Pipeline failed — {e}", file=sys.stderr)
+        tr = traceback.extract_tb(e.__traceback__)
+        print(f"FATAL ERROR: Pipeline failed — {e} in {tr[-1].name} at line {tr[-1].lineno}", file=sys.stderr)
         sys.exit(1)
