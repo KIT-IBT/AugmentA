@@ -72,17 +72,20 @@ class WorkflowPaths:
     @property
     def mesh_data_csv(self) -> Path:
         """Path for the LAA/RAA apex ID csv file, named after the active mesh."""
-        return self.active_mesh_base.with_suffix('.csv').with_name(f"{self.active_mesh_base.name}{PATH_COMPONENTS['mesh_data_suffix']}")
+        return self.active_mesh_base.with_suffix('.csv').with_name(
+            f"{self.active_mesh_base.name}{PATH_COMPONENTS['mesh_data_suffix']}")
 
     @property
     def closed_surface_epi_mesh(self) -> Path:
         """Path for the separated epicardial mesh in the closed surface workflow."""
-        return self.initial_mesh_base.with_name(f"{self.initial_mesh_base.name}_{self.atrium}{PATH_COMPONENTS['epi_suffix']}")
+        return self.initial_mesh_base.with_name(
+            f"{self.initial_mesh_base.name}_{self.atrium}{PATH_COMPONENTS['epi_suffix']}")
 
     @property
     def closed_surface_vol_mesh(self) -> Path:
         """Path for the volumetric mesh in the closed surface workflow."""
-        return self.initial_mesh_base.with_name(f"{self.initial_mesh_base.name}_{self.atrium}{PATH_COMPONENTS['vol_suffix']}")
+        return self.initial_mesh_base.with_name(
+            f"{self.initial_mesh_base.name}_{self.atrium}{PATH_COMPONENTS['vol_suffix']}")
 
     @property
     def cut_mesh(self) -> Path:
@@ -93,7 +96,6 @@ class WorkflowPaths:
     def ssm_target_dir(self) -> Path:
         """Path for the SSM target's surf directory."""
         return self.initial_mesh_dir / f"{self.atrium}{PATH_COMPONENTS['cut_suffix']}{PATH_COMPONENTS['surface_dir_suffix']}"
-
 
     @property
     def fit_mesh(self) -> Path:
@@ -111,7 +113,6 @@ class WorkflowPaths:
         """The base directory for fiber generation output, named after the active mesh."""
         return self.active_mesh_base.parent / f"{self.active_mesh_base.name}{PATH_COMPONENTS['fibers_dir_suffix']}"
 
-
     def final_bilayer_mesh(self, extension: str) -> Path:
         """
         Path for the final bilayer mesh with fibers.
@@ -126,7 +127,8 @@ class WorkflowPaths:
             atrium_for_subdir = self.atrium
 
         result_dir = self.fiber_base_dir / f"result_{atrium_for_subdir}"
-        return result_dir / f"{self.atrium}{PATH_COMPONENTS['bilayer_fiber_suffix']}.{extension}"
+        final_bilayer_path_no_ext = result_dir / f"{self.atrium}{PATH_COMPONENTS['bilayer_fiber_suffix']}"
+        return final_bilayer_path_no_ext if extension == "" else Path(f"{final_bilayer_path_no_ext}.{extension}")
 
     def final_volumetric_mesh(self, extension: str) -> Path:
         """Path for the final volumetric mesh with fibers."""
