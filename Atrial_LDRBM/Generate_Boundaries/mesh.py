@@ -1,8 +1,8 @@
 import os
 import vtk
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_obj_writer
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer, vtk_obj_writer
 
 
 class Mesh:

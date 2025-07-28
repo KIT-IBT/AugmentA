@@ -5,10 +5,10 @@ from glob import glob
 import vtk
 from scipy.spatial import cKDTree
 
-from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.reader import vtx_reader
-from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import write_to_vtx
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.reader import vtx_reader
+from vtk_openCARP_methods_ibt.vtk_methods.filters import generate_ids
 
 from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 

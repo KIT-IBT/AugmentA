@@ -36,17 +36,17 @@ from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 from vtk.numpy_interface import dataset_adapter as dsa
 
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
     get_center_of_mass, get_feature_edges, get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane, \
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane, \
     init_connectivity_filter, ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 

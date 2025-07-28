@@ -11,13 +11,13 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.filters import generate_ids, apply_vtk_geom_filter
-from vtk_opencarp_helper_methods.vtk_methods.reader import vtx_reader
-from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
+from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_threshold_between
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.filters import generate_ids, apply_vtk_geom_filter
+from vtk_openCARP_methods_ibt.vtk_methods.reader import vtx_reader
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import write_to_vtx
 
 from Atrial_LDRBM.Generate_Boundaries.epi_endo_separator import EpiEndoSeparator
 from Atrial_LDRBM.Generate_Boundaries.tag_loader import TagLoader

@@ -2,9 +2,9 @@ import os
 import vtk
 from typing import Dict, Any
 
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_threshold_between
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter
 
 from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 

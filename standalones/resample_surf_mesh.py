@@ -36,12 +36,12 @@ import vtk
 from scipy.spatial import cKDTree
 
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import find_elements_around_path_within_radius
-from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, get_cells_with_ids, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_obj_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, get_cells_with_ids, \
     get_feature_edges
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]

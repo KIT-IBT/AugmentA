@@ -10,13 +10,13 @@ import pymeshfix
 import pyvista as pv
 import vtk
 
-from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.helper_methods import cut_mesh_with_radius
-from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region
+from vtk_openCARP_methods_ibt.AugmentA_methods.point_selection import pick_point
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.helper_methods import cut_mesh_with_radius
+from vtk_openCARP_methods_ibt.vtk_methods.mapper import point_array_mapper
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import extract_largest_region
 
 # Use dark theme for PyVista plots
 pv.set_plot_theme("dark")

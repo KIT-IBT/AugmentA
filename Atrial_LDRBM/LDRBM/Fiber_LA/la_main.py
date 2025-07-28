@@ -33,9 +33,9 @@ from carputils import tools
 
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import la_generate_fiber
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import la_laplace
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
 
 def parser():

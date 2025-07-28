@@ -36,19 +36,19 @@ import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from standalones.open_orifices_manually import open_orifices_manually
-from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region, vtk_thr
-from vtk_opencarp_helper_methods.vtk_methods import filters
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import extract_largest_region, vtk_thr
+from vtk_openCARP_methods_ibt.vtk_methods import filters
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_cells_with_ids, get_center_of_mass
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
+from vtk_openCARP_methods_ibt.vtk_methods.mapper import point_array_mapper
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
 pv.set_plot_theme('dark')
 

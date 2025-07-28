@@ -4,9 +4,9 @@ import os
 
 from typing import Dict, Tuple, Any
 
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_obj_writer, vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_threshold_between
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_obj_writer, vtk_polydata_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_threshold_between
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import smart_reader

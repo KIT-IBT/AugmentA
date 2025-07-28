@@ -28,8 +28,8 @@ import os
 
 import vtk
 
-from vtk_opencarp_helper_methods.vtk_methods.converters import convert_point_to_cell_data
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
+from vtk_openCARP_methods_ibt.vtk_methods.converters import convert_point_to_cell_data
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 
 
 def ra_calculate_gradient(args, model, job):

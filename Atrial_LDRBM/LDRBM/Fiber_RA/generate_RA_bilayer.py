@@ -12,10 +12,10 @@ import vtk
 from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, vtk_append
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, vtk_append
 
 parser = argparse.ArgumentParser(description='Create Right Atrium.')
 

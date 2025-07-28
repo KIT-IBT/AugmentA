@@ -30,21 +30,21 @@ from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import standalones.function
-import vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations
+import vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations
 from Atrial_LDRBM.LDRBM.Fiber_LA import Methods_LA
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import generate_spline_points
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors, \
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import normalize_vectors, \
     get_normalized_cross_product
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_elem, write_to_pts, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_elem, write_to_pts, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer, \
     vtk_xml_unstructured_grid_writer, vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, vtk_append, apply_extract_cell_filter, get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
     ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -272,7 +272,7 @@ def generate_sheet_dir(args, model, job):
 
 
 def vtk_thr(model, mode, points_cells, array, thr1, thr2="None"):
-    return vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
+    return vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations.vtk_thr(model, mode, points_cells, array, thr1,
                                                                                thr2)
 
 

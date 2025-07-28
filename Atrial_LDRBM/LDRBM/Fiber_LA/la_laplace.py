@@ -26,7 +26,7 @@ under the License.
 """
 import os
 
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_polydata_writer
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_polydata_writer
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 

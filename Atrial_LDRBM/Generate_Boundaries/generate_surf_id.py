@@ -32,8 +32,8 @@ from glob import glob
 import numpy as np
 from scipy.spatial import cKDTree
 
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.exporting import write_to_vtx
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import write_to_vtx
 
 sys.path.append('Atrial_LDRBM/Generate_Boundaries')
 from extract_rings import smart_reader

@@ -51,11 +51,11 @@ from standalones.resample_surf_mesh import resample_surf_mesh
 from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
 from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
 
-from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter
-from vtk_opencarp_helper_methods.vtk_methods.mapper import mapp_ids_for_folder
-from vtk_opencarp_helper_methods.vtk_methods.normal_orientation import are_normals_outside
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_openCARP_methods_ibt.vtk_methods.mapper import mapp_ids_for_folder
+from vtk_openCARP_methods_ibt.vtk_methods.normal_orientation import are_normals_outside
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
 from Atrial_LDRBM.Generate_Boundaries.atrial_boundary_generator import AtrialBoundaryGenerator
 from Atrial_LDRBM.Generate_Boundaries.workflow_paths import WorkflowPaths

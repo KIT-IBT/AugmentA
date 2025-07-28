@@ -36,15 +36,15 @@ from vtk.numpy_interface import dataset_adapter as dsa
 import Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import laplace_0_1
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import normalize_vectors
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer, write_to_vtx
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, generate_ids, \
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, generate_ids, \
     get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, init_connectivity_filter, \
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane_with_points, init_connectivity_filter, \
     ExtractionModes
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
