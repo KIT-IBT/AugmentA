@@ -115,7 +115,7 @@ def parser():
     return parser
 
 
-def run():
+def main():
     args = parser().parse_args()
 
     # In case both atria and closed surface are given process LA first and RA later
@@ -130,4 +130,4 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    main()
