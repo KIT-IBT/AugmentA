@@ -3,7 +3,7 @@ import os
 import vtk
 import tempfile
 from unittest.mock import Mock, patch, MagicMock
-from mesh import Mesh
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 
 
 class TestMeshInit:
