@@ -219,8 +219,11 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
 
         if "LAA" in apex_ids:
             generator.la_apex = apex_ids["LAA"]
+            apex_id_for_resampling = apex_ids["LAA"]
         if "RAA" in apex_ids:
             generator.ra_apex = apex_ids["RAA"]
+            if apex_id_for_resampling == -1:
+                apex_id_for_resampling = apex_ids["RAA"]
 
         csv_data_to_save = {}
         if generator.la_apex is not None:
