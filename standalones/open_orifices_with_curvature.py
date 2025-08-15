@@ -104,8 +104,18 @@ def parser():
     return parser
 
 
-def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cutting_radius=7.5,
-                                 max_cutting_radius=17.5, LAA="", RAA="", debug=0):
+def open_orifices_with_curvature(meshpath,
+                                 atrium,
+                                 MRI,
+                                 scale=1,
+                                 size=30,
+                                 min_cutting_radius=7.5,
+                                 max_cutting_radius=17.5,
+                                 LAA="",
+                                 RAA="",
+                                 debug=0,
+                                 apex_coordinate=None):
+
     meshname = meshpath.split("/")[-1]
     full_path = meshpath[:-len(meshname)]
 
@@ -212,9 +222,12 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     old_max = 0
 
     if MRI:
-        cc = pv.PolyData(valve_center)
-
-        apex = pick_point_with_preselection(meshfix.mesh, "appendage apex", cc)
+        if apex_coordinate is not None:
+            apex = apex_coordinate
+            print(f"Using provided apex coordinate: {apex}")
+        else:
+            cc = pv.PolyData(valve_center)
+            apex = pick_point_with_preselection(meshfix.mesh, "appendage apex", cc)
 
         apex_id = find_closest_point(model, apex)
 
@@ -304,8 +317,11 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     vtk_polydata_writer(f"{full_path}/{atrium}_cutted.vtk", model)
     if debug:
-        mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
-        apex = pick_point_with_preselection(mesh_from_vtk, "appendage apex", apex)
+        if apex_coordinate is not None:
+            apex = apex_coordinate
+        else:
+            mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
+            apex = pick_point_with_preselection(mesh_from_vtk, "appendage apex", apex)
 
     model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
 

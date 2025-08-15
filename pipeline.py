@@ -251,6 +251,17 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
                 raise RuntimeError("Orifice opening scripts not available")
 
             if args.open_orifices:
+                # Get apex coordinate if available from file or generator
+                apex_coordinate = None
+                if args.atrium == "LA" and generator.la_apex is not None:
+                    # Get the coordinate from the initial mesh
+                    if generator.polydata and generator.la_apex < generator.polydata.GetNumberOfPoints():
+                        apex_coordinate = generator.polydata.GetPoint(generator.la_apex)
+                elif args.atrium == "RA" and generator.ra_apex is not None:
+                    if generator.polydata and generator.ra_apex < generator.polydata.GetNumberOfPoints():
+                        apex_coordinate = generator.polydata.GetPoint(generator.ra_apex)
+
+
                 # Pick which opening function to use
                 orifice_func = open_orifices_with_curvature if args.use_curvature_to_open else open_orifices_manually
                 print(f"Calling {orifice_func.__name__} for mesh='{args.mesh}', atrium='{args.atrium}'...")
@@ -262,7 +273,8 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
                                                  scale=args.scale,
                                                  min_cutting_radius=getattr(args, 'min_cutting_radius', 7.5),
                                                  max_cutting_radius=getattr(args, 'max_cutting_radius', 17.5),
-                                                 debug=args.debug)
+                                                 debug=args.debug,
+                                                 apex_coordinate=apex_coordinate)
 
                 if cut_path is None or not Path(cut_path).exists():
                     raise FileNotFoundError(f"{orifice_func.__name__} failed: Invalid cut_path")
