@@ -621,6 +621,17 @@ def _resample_mesh_if_needed(args: Any, paths: WorkflowPaths):
 
     print(f'INFO: Resampling requested and apex information available from {apex_source}.')
 
+    laa_id, raa_id = _load_apex_ids(str(paths.active_mesh_base))
+    apex_id_to_pass = -1
+    if args.atrium == "LA" and laa_id is not None:
+        apex_id_to_pass = laa_id
+    elif args.atrium == "RA" and raa_id is not None:
+        apex_id_to_pass = raa_id
+
+    # This is a safeguard. In your test, this condition should not be met.
+    if apex_id_to_pass == -1 and not args.find_appendage:
+        raise ValueError("Could not load a valid apex ID for automated resampling.")
+
     mesh_base = paths.active_mesh_base
     print(f"INFO: Resampling mesh: '{mesh_base.name}'")
 
@@ -634,7 +645,7 @@ def _resample_mesh_if_needed(args: Any, paths: WorkflowPaths):
                            target_mesh_resolution=args.target_mesh_resolution,
                            find_apex_with_curv=0,
                            scale=args.scale,
-                           apex_id=-1,
+                           apex_id=apex_id_to_pass,  # Use the loaded apex id instead of -1 if apex_file enabled(-1 means pick them by hand)
                            atrium=args.atrium)
     except Exception as e:
         raise RuntimeError(f"Mesh resampling failed for '{paths.active_mesh_base}': {e}")
