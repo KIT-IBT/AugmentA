@@ -8,12 +8,12 @@ from pipeline import AugmentA
 from main import parser
 
 # Test configuration - paths to our test data and expected results
-TESTS_ROOT = Path(__file__).parent.resolve()
-TEST_DATA_DIR = TESTS_ROOT / "test_data"
+TESTS_ROOT = Path(__file__).parent.resolve()  # e.g. Path(/Users/ou736l/augmentaupgrade/tests)
+TEST_DATA_DIR = TESTS_ROOT / "test_data"  # e.g. Path(/Users/ou736l/augmentaupgrade/tests/test_data)
 GOLDEN_RESULTS_DIR = TESTS_ROOT / "good_results"
 
-# Test files we're working with
-TEST_MESH_BASENAME = "LA_MRI"
+# Test files we are working with
+TEST_MESH_BASENAME = "LA_MRI"  # input mesh basename
 TEST_MESH_FILENAME = f"{TEST_MESH_BASENAME}.vtp"
 APEX_FILE_FILENAME = f"{TEST_MESH_BASENAME}_apexes.csv"
 FINAL_OUTPUT_FOLDER = f"{TEST_MESH_BASENAME}_cutted_res_surf"
@@ -38,47 +38,49 @@ def compare_directories(current_dir: Path, golden_dir: Path):
     Compare two directories for structure and content.
     This does a thorough comparison to make sure our pipeline produces exactly the expected output.
     """
-    # Compare file structures - make sure we have the same files
+    # Compare file structures to make sure we have the same files
+    # Create sets of relative file paths for both directories
     golden_files = {path.relative_to(golden_dir) for path in golden_dir.rglob('*') if path.is_file()}
     current_files = {path.relative_to(current_dir) for path in current_dir.rglob('*') if path.is_file()}
 
-    if golden_files != current_files:
+    if golden_files != current_files:  # Check if both sets of files match
         missing = golden_files - current_files
         extra = current_files - golden_files
         assert False, f"File mismatch. Missing: {missing}, Extra: {extra}"
 
-    # Compare each file's content using appropriate methods
+    # Compare each file's content
     for golden_path in golden_dir.rglob('*'):
-        if golden_path.is_file():
-            relative_path = golden_path.relative_to(golden_dir)
-            current_path = current_dir / relative_path
+        if not golden_path.is_file():
+            continue
 
-            file_extension = golden_path.suffix
-            file_name = golden_path.name
+        relative_path = golden_path.relative_to(golden_dir)
+        current_path = current_dir / relative_path
 
-            if file_name == "rings_centroids.csv":
-                # CSV files with numbers need fuzzy comparison due to floating point precision
-                golden_df = pd.read_csv(golden_path)
-                current_df = pd.read_csv(current_path)
-                pd.testing.assert_frame_equal(golden_df, current_df, check_exact=False, rtol=1e-5)
+        file_extension = golden_path.suffix
+        file_name = golden_path.name
 
-            elif file_extension == ".vtx":
-                # VTX files: compare sets of IDs (order doesn't matter)
-                golden_set = read_vtx_to_set(golden_path)
-                current_set = read_vtx_to_set(current_path)
-                assert golden_set == current_set, f"VTX content mismatch in {file_name}"
+        if file_name == "rings_centroids.csv":
+            # CSV files with numbers need fuzzy comparison due to floating point precision
+            golden_df = pd.read_csv(golden_path)
+            current_df = pd.read_csv(current_path)
+            pd.testing.assert_frame_equal(golden_df, current_df, check_exact=False, rtol=1e-5)
 
-            else:
-                # Everything else: exact binary comparison
-                assert filecmp.cmp(golden_path, current_path, shallow=False), f"File content mismatch in {file_name}"
+        elif file_extension == ".vtx":
+            # VTX files: compare sets of IDs (order doesn't matter)
+            golden_set = read_vtx_to_set(golden_path)
+            current_set = read_vtx_to_set(current_path)
+            assert golden_set == current_set, f"VTX content mismatch in {file_name}"
+
+        else:
+            # Everything else: exact binary comparison
+            assert filecmp.cmp(golden_path, current_path, shallow=False), f"File content mismatch in {file_name}"
 
 
 def test_la_cut_resample_pipeline_regression(tmp_path: Path):
-    """Test the full pipeline against golden results.
-
-    This is a test that makes sure our pipeline produces the
-    same output as before. If this fails, we either broke something or
-    intentionally changed the behavior.
+    """
+    Test the full pipeline against golden results.
+    This is a test that makes sure our pipeline produces the same output as before.
+    If this fails, we either broke something or intentionally changed the behavior.
     """
     # Setup test data in a temporary directory to keep things clean
     input_mesh_path = TEST_DATA_DIR / TEST_MESH_FILENAME
@@ -96,14 +98,16 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
     test_args_list = [
         '--mesh', str(temp_mesh_path),
         '--apex-file', str(temp_input_dir / APEX_FILE_FILENAME),
+        '--closed_surface', '0',
+        '--use_curvature_to_open', '1',
         '--atrium', 'LA',
-        '--open-orifices', '1',
-        '--resample-input', '1',
-        '--target-mesh-resolution', '0.4',
+        '--open_orifices', '1',
         '--MRI', '1',
-        '--use-curvature-to-open', '1',
-        '--debug', '1',
-    ]
+        '--resample', '1',
+        '--resample_input', '1',
+        '--target_mesh_resolution', '0.4',
+        '--find_appendage', '0',
+        '--debug', '1']
 
     # Parse arguments the same way main.py does
     argument_parser = parser()
