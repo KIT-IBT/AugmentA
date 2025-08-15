@@ -113,6 +113,13 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
     argument_parser = parser()
     args_instance = argument_parser.parse_args(test_args_list)
 
+    apex_path = temp_input_dir / APEX_FILE_FILENAME
+    print(f"Apex file exists: {apex_path.exists()}")
+    print(f"Apex file path: {apex_path}")
+    if apex_path.exists():
+        with open(apex_path, 'r') as f:
+            print(f"Apex file contents:\n{f.read()}")
+
     # Run the actual pipeline
     AugmentA(args_instance)
 
