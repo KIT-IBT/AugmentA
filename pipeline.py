@@ -574,9 +574,37 @@ def _resample_mesh_if_needed(args: Any, paths: WorkflowPaths):
     :param paths: WorkflowPaths object tracking mesh file paths
     :return: None
     """
-    if not (args.resample_input and args.find_appendage):
-        print('INFO: No resampling requested for this workflow.')
+    if not args.resample_input:
+        print('INFO: No resampling requested (resample_input=0).')
         return
+
+    # Check if apex information is available from any source
+    apex_available = False
+    apex_source = "unknown"
+
+    # Check if apex was provided via file
+    if args.apex_file:
+        apex_available = True
+        apex_source = "apex file"
+
+    # Check if interactive selection is enabled
+    elif args.find_appendage:
+        apex_available = True
+        apex_source = "interactive selection"
+
+    # Check if apex IDs were already saved from a previous step
+    else:
+        laa_id, raa_id = _load_apex_ids(str(paths.active_mesh_base))
+        if laa_id is not None or raa_id is not None:
+            apex_available = True
+            apex_source = "previously saved IDs"
+
+    if not apex_available:
+        print('WARNING: Resampling requested but no apex information available.')
+        print('Provide apex via --apex-file, enable --find_appendage=1, or ensure apex IDs were saved in a previous step.')
+        return
+
+    print(f'INFO: Resampling requested and apex information available from {apex_source}.')
 
     mesh_base = paths.active_mesh_base
     print(f"INFO: Resampling mesh: '{mesh_base.name}'")
