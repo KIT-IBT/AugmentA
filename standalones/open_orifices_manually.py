@@ -150,7 +150,8 @@ def open_orifices_manually(
         max_cutting_radius: float = 17.5,
         LAA: Union[str, int] = "",
         RAA: Union[str, int] = "",
-        debug: int = 0
+        debug: int = 0,
+        apex_coordinate: tuple = None
 ) -> Tuple[str, int]:
     """
     Open atrial orifices manually by cleaning the mesh, mapping data,
@@ -215,7 +216,6 @@ def open_orifices_manually(
             selected_radius = min_cutting_radius
         print(f"Cutting '{r_name}' with radius {selected_radius} at {picked_pt}")
 
-
         try:
             current_mesh_vtk = cut_mesh_with_radius(current_mesh_vtk, picked_pt, selected_radius)
             if current_mesh_vtk is None or current_mesh_vtk.GetNumberOfPoints() == 0:
@@ -238,14 +238,22 @@ def open_orifices_manually(
     except Exception as e:
         raise RuntimeError(f"Failed to save cut mesh: {e}")
 
-    # Manually pick the appendage apex on the final cut mesh
     try:
-        mesh_pv_final = pv.PolyData(model_final_vtk)
-        apex_coord = pick_point(mesh_pv_final, f"{atrium} appendage apex")
-        if apex_coord is None:
-            raise RuntimeError("Apex point picking cancelled or failed.")
+        if apex_coordinate is not None:
+            # Use provided apex coordinate (automatic mode)
+            apex_coord = apex_coordinate
+            print(f"Using provided apex coordinate: {apex_coord}")
+        else:
+            # Manually pick the appendage apex on the final cut mesh
+            mesh_pv_final = pv.PolyData(model_final_vtk)
+            apex_coord = pick_point(mesh_pv_final, f"{atrium} appendage apex")
+            if apex_coord is None:
+                raise RuntimeError("Apex point picking cancelled or failed.")
     except Exception as e:
-        raise RuntimeError(f"Error during apex picking setup: {e}")
+        if apex_coordinate is not None:
+            raise RuntimeError(f"Error using provided apex coordinate: {e}")
+        else:
+            raise RuntimeError(f"Error during apex picking setup: {e}")
 
     # Find the closest point ID on the final VTK model
     try:
