@@ -333,7 +333,7 @@ def open_orifices_with_curvature(meshpath,
 
     label_atrial_orifices(f"{full_path}/{atrium}_cutted.vtk", LAA, RAA)
 
-    return apex_id
+    return f"{full_path}/{atrium}_cutted.vtk", apex_id
 
 
 def run():
