@@ -112,6 +112,15 @@ def parser():
                         default=None,
                         help='Path to a CSV file specifying apex IDs to bypass interactive picking. '
                              'Format: a header row "atrium,id" followed by rows like "LAA,123".')
+    parser.add_argument('--orifice-file',
+                        type=str,
+                        default=None,
+                        help='Path to a CSV file specifying orifice coordinates to bypass interactive picking. '
+                             'Format: a header row "orifice_name,x,y,z" followed by coordinate rows.')
+    parser.add_argument('--no-plot',
+                        action='store_true',
+                        help='Disable the final interactive plot, for headless environments.')
+
     return parser
 
 
