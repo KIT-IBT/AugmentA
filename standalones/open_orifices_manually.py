@@ -22,6 +22,31 @@ from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import extract_lar
 pv.set_plot_theme("dark")
 
 
+def _save_orifice_coordinates(coords_list, output_path):
+    """Save picked coordinates to CSV for future automated use."""
+    import csv
+    try:
+        with open(output_path, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['orifice_name', 'x', 'y', 'z'])
+            writer.writeheader()
+            for coord in coords_list:
+                writer.writerow(coord)
+        print(f"Saved orifice coordinates to: {output_path}")
+    except Exception as e:
+        print(f"Warning: Could not save coordinates: {e}")
+
+def _load_orifice_coordinates(filepath: str) -> dict:
+    """Load orifice coordinates from CSV file."""
+    import pandas as pd
+    if not os.path.exists(filepath):
+        return {}
+
+    df = pd.read_csv(filepath)
+    coords = {}
+    for _, row in df.iterrows():
+        coords[row['orifice_name']] = (row['x'], row['y'], row['z'])
+    return coords
+
 def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Cut veins manually')
     parser.add_argument('--mesh', type=str, default="", help='path to mesh')
@@ -151,7 +176,8 @@ def open_orifices_manually(
         LAA: Union[str, int] = "",
         RAA: Union[str, int] = "",
         debug: int = 0,
-        apex_coordinate: tuple = None
+        apex_coordinate: tuple = None,
+        orifice_coordinates_file: str = None
 ) -> Tuple[str, int]:
     """
     Open atrial orifices manually by cleaning the mesh, mapping data,
@@ -193,6 +219,15 @@ def open_orifices_manually(
     except Exception as e:
         raise RuntimeError(f"Orifice list error: {e}")
 
+    # Load orifice coordinates if file provided
+    orifice_coords = {}
+    if orifice_coordinates_file and os.path.exists(orifice_coordinates_file):
+        orifice_coords = _load_orifice_coordinates(orifice_coordinates_file)
+        print(f"Loaded {len(orifice_coords)} orifice coordinates from {orifice_coordinates_file}")
+
+    # Collect coordinates for saving
+    picked_coordinates = []
+
     for r_idx, r_name in enumerate(orifices):
         print(f"Processing orifice {r_idx + 1}/{len(orifices)}: {r_name}")
         try:
@@ -201,10 +236,14 @@ def open_orifices_manually(
             if mesh_pv_for_picking.n_points == 0:
                 raise RuntimeError(f"Mesh empty before picking {r_name}")
 
-            picked_pt = pick_point(mesh_pv_for_picking, f"center of the {r_name}")
-
-            if picked_pt is None:
-                raise RuntimeError(f"Picking cancelled or failed for {r_name}")
+            # Use stored coordinates if available, otherwise interactive picking
+            if r_name in orifice_coords:
+                picked_pt = orifice_coords[r_name]
+                print(f"Using stored coordinate for {r_name}: {picked_pt}")
+            else:
+                picked_pt = pick_point(mesh_pv_for_picking, f"center of the {r_name}")
+                if picked_pt is None:
+                    raise RuntimeError(f"Picking cancelled or failed for {r_name}")
 
         except Exception as e:
             raise RuntimeError(f"Point picking failed for {r_name}: {e}")
