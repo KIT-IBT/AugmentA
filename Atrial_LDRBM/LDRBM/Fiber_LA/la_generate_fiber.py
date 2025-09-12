@@ -98,6 +98,8 @@ def la_generate_fiber(model, args, job):
     lb = 0
     ub = 0.4
     tao_lpv = Method.find_tau(model, ub, lb, "low", "phie_v")
+    if tao_lpv == 0:
+        print("WARNING tao_lpv == 0 could lead to no tags for LPVs")
     print('Calculating tao_lpv done! tap_lpv = ', tao_lpv)
 
     thr_phi_v = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
