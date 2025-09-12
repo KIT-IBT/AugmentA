@@ -319,7 +319,6 @@ class AtrialBoundaryGenerator:
 
                 # If the isolated LA polydata is valid and non-empty, regenerate 'Ids' array
                 if la_poly and la_poly.GetNumberOfPoints() > 0:
-                    """
                     if la_poly.GetPointData().GetArray("Ids"):
                         if self.debug:
                             print("DEBUG_LA: Removing existing 'Ids' from isolated LA part before local generation.")
@@ -327,16 +326,6 @@ class AtrialBoundaryGenerator:
                         la_poly.GetPointData().RemoveArray("Ids")
 
                     la_region_polydata = generate_ids(la_poly, "Ids", "Ids")
-                    """
-                    if not la_poly.GetPointData().GetArray("Ids"):
-                        if self.debug:
-                            print("DEBUG_LA: Generating missing 'Ids' from isolated LA part.")
-                        la_region_polydata = generate_ids(la_poly, "Ids", "Ids")
-                    else:
-                        if self.debug:
-                            print("DEBUG_LA: Using existing 'Ids' from isolated LA part.")
-                        la_region_polydata = la_poly
-
                 else:
                     print("Warning: LA region extraction resulted in empty mesh.")
                     return {}
@@ -355,8 +344,6 @@ class AtrialBoundaryGenerator:
             except IndexError:
                 print(f"ERROR: LA apex ID {self.la_apex} out of bounds for LA-only mesh.")
                 return {}
-
-            """
             # If an 'Ids' array already exists, remove it before regenerating
             if la_region_polydata.GetPointData().GetArray("Ids"):
                 if self.debug:
@@ -364,15 +351,6 @@ class AtrialBoundaryGenerator:
                 la_region_polydata.GetPointData().RemoveArray("Ids")  # Ensure it's fresh if we regenerate
 
             la_region_polydata = generate_ids(la_region_polydata, "Ids", "Ids")
-            """
-            if not la_region_polydata.GetPointData().GetArray("Ids"):
-                if self.debug:
-                    print(f"DEBUG_LA: LA-only: Generating missing 'Ids' array.")
-                la_region_polydata = generate_ids(la_region_polydata, "Ids", "Ids")
-            else:
-                if self.debug:
-                    print(f"DEBUG_LA: LA-only: Using existing 'Ids' array.")
-
         self.la_isolated_region_polydata = la_region_polydata
 
         # === Ring detection on the LA region ===
