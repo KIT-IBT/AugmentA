@@ -75,6 +75,16 @@ def parser():
 
 def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv=0, scale=1, size=30, apex_id=-1,
                        atrium='LA'):
+    import random
+    import numpy as np
+    random.seed(42)
+    np.random.seed(42)
+
+    try:
+        vtk.vtkRandomSequence.SetGlobalSeed(42)
+    except:
+        pass
+
     mesh_data = dict()
 
     ms = pymeshlab.MeshSet()
@@ -229,6 +239,11 @@ def resample_mesh_set(mesh_set, out_dict, scale, target_mesh_resolution, tgt_edg
     :param tgt_edge_length:
     :return:
     """
+    import random
+    import numpy as np
+    random.seed(42)
+    np.random.seed(42)
+
     avg_edge_length = out_dict['avg_edge_length']
     loc_tgt_edge_length = target_mesh_resolution * scale
     it = 1

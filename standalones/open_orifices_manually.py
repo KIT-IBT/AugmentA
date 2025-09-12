@@ -276,7 +276,7 @@ def open_orifices_manually(
         vtk_polydata_writer(cutted_path, model_final_vtk)
     except Exception as e:
         raise RuntimeError(f"Failed to save cut mesh: {e}")
-
+    """
     try:
         if apex_coordinate is not None:
             # Use provided apex coordinate (automatic mode)
@@ -301,8 +301,8 @@ def open_orifices_manually(
             raise RuntimeError("Could not find closest point for apex.")
     except Exception as e:
         raise RuntimeError(f"Apex ID determination failed: {e}")
-
-    return cutted_path, apex_id
+    """
+    return cutted_path, -1
 
 
 def run_standalone():

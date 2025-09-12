@@ -1,3 +1,4 @@
+# Atrial_LDRBM/Generate_Boundaries/ring_detector.py
 import os
 from typing import Tuple, List, Any
 
@@ -200,17 +201,16 @@ class RingDetector:
             return None
 
     @staticmethod
-    def _cluster_rings(
-            rings: list[Ring],
-            n_clusters: int = 2
-    ) -> tuple[list[int], list[int], list[int], int]:
+    def _cluster_rings(rings: list[Ring],
+                       n_clusters: int = 2) -> tuple[list[int], list[int], list[int], int]:
         """
         Clusters non-MV rings using KMeans to separate anatomical groups.
         """
         # Calculating Pulmonary Vein indices
         pvs = [idx for idx, r in enumerate(rings) if r.name != "MV"]
 
-        estimator = KMeans(n_clusters=n_clusters)
+        # Adding fixed random state for reproducibility as regression test fails
+        estimator = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
         non_mv_centers = [rings[idx].center for idx in pvs]
         labels = estimator.fit_predict(non_mv_centers)
 
@@ -229,13 +229,14 @@ class RingDetector:
     def _name_pv_subgroup(group_indices: list[int],
                           group_name_prefix: str,
                           rings: list[Ring],
-                          local_seed_idx: int) -> None:
+                          local_seed_idx: int,
+                          n_clusters: int = 2) -> None:
         """
         Helper method to assign anatomical names (superior/inferior) to a subgroup of PV rings.
         The group_name_prefix is either "L" for left or "R" for right.
         """
         # Get centers of rings in the current group_indices
-        estimator = KMeans(n_clusters=2)
+        estimator = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
         subgroup_centers = [rings[idx].center for idx in group_indices]
         labels = estimator.fit_predict(subgroup_centers)
 
@@ -306,14 +307,13 @@ class RingDetector:
 
         return b_tag, centroids
 
-    def mark_ra_rings(
-            self,
-            adjusted_RAA_id: int,
-            rings: list[Ring],
-            b_tag: np.ndarray,
-            centroids: dict,
-            debug: bool = False
-    ) -> tuple[np.ndarray, dict, list[Ring]]:
+    def mark_ra_rings(self,
+                      adjusted_RAA_id: int,
+                      rings: list[Ring],
+                      b_tag: np.ndarray,
+                      centroids: dict,
+                      debug: bool = False,
+                      n_clusters: int = 2) -> tuple[np.ndarray, dict, list[Ring]]:
         """
         Marks the right atrial rings (TV, SVC, IVC, CS) by assigning anatomical names,
         updating the b_tag array with boundary tags, and recording centroids.
@@ -336,7 +336,7 @@ class RingDetector:
 
         # Cluster other centers
         centers = [rings[i].center for i in other_indices]
-        estimator = KMeans(n_clusters=2)
+        estimator = KMeans(n_clusters=n_clusters, random_state=0, n_init=10)
         labels = estimator.fit_predict(centers)
 
         # Seed SVC by apex distance
@@ -420,6 +420,17 @@ class RingDetector:
         mv_ant = set(bnd_ids).intersection(mv_ids)
         mv_post = mv_ids - mv_ant
 
+        print(f"DEBUG UAC: MV ring has {len(mv_ids)} total points")
+        print(f"DEBUG UAC: Boundary edges have {len(bnd_ids)} points")
+        print(f"DEBUG UAC: MV anterior has {len(mv_ant)} points")
+        print(f"DEBUG UAC: MV posterior has {len(mv_post)} points")
+        print(f"DEBUG UAC: Working directory: {os.getcwd()}")
+
+        if len(mv_post) == 0:
+            print(f"ERROR: MV posterior is empty! This will create a broken VTX file.")
+            print(f"DEBUG: mv_ids sample: {list(mv_ids)[:5] if mv_ids else 'EMPTY'}")
+            print(f"DEBUG: bnd_ids sample: {list(bnd_ids)[:5] if len(bnd_ids) > 0 else 'EMPTY'}")
+
         write_to_vtx(os.path.join(self.outdir, "ids_MV_ant.vtx"), list(mv_ant))
         write_to_vtx(os.path.join(self.outdir, "ids_MV_post.vtx"), list(mv_post))
 
@@ -456,6 +467,7 @@ class RingDetector:
                              lpv_bb,
                              rpv_bb,
                              "ids_RPV_LPV.vtx")
+
 
     def _write_uac_path(self,
                         boundary: vtk.vtkPolyData,

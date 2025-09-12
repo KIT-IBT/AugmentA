@@ -1,3 +1,5 @@
+# pipeline.py
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -199,78 +201,25 @@ def _setup(args) -> Tuple[WorkflowPaths, AtrialBoundaryGenerator]:
     return paths, generator
 
 
+# pipeline.py
 def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args) -> int:
     """
     Handle all surface preparation steps: epi/endo separation,
-    orifice opening, or manual apex picking. Updates paths and
-    generator accordingly.
-
-    :param paths: WorkflowPaths tracking file paths for each stage
-    :param generator: AtrialBoundaryGenerator for ring extraction
-    :param args: Command-line arguments object with flags and parameters
-    :return: Apex ID for potential resampling
+    orifice opening, and THEN apex picking on the final geometry.
+    This unifies the manual and automated workflows.
     """
     apex_id_for_resampling = -1
 
-    # Load apex IDs from file if provided
-    apex_coordinate = None
-    if args.apex_file:
-        print(f"Loading apex IDs from file: {args.apex_file}")
-        apex_ids = _load_apex_ids_from_file(args.apex_file)
-
-        if args.debug:
-            original_apex_id = apex_ids["LAA"]
-            print(f"DEBUG: Original apex ID from file: {original_apex_id}")
-
-            # Load original mesh and check bounds
-            original_polydata = apply_vtk_geom_filter(smart_reader(str(paths.initial_mesh)))
-            print(f"DEBUG: Original mesh has {original_polydata.GetNumberOfPoints()} vertices")
-
-            if original_apex_id >= original_polydata.GetNumberOfPoints():
-                print(f"DEBUG: ERROR - Apex ID {original_apex_id} is out of bounds!")
-                print(f"DEBUG: Valid range is 0 to {original_polydata.GetNumberOfPoints() - 1}")
-            else:
-                apex_coord = original_polydata.GetPoint(original_apex_id)
-                apex_coordinate = apex_coord  # Store for potential use in orifice opening
-                print(f"DEBUG: Apex coordinate: {apex_coord}")
-
-        if "LAA" in apex_ids:
-            generator.la_apex = apex_ids["LAA"]
-            apex_id_for_resampling = apex_ids["LAA"]
-            # Get apex coordinate for orifice opening if not already set
-            if apex_coordinate is None and generator.polydata:
-                apex_coordinate = generator.polydata.GetPoint(apex_ids["LAA"])
-
-        if "RAA" in apex_ids:
-            generator.ra_apex = apex_ids["RAA"]
-            if apex_id_for_resampling == -1:
-                apex_id_for_resampling = apex_ids["RAA"]
-            # Get apex coordinate for orifice opening if not already set
-            if apex_coordinate is None and generator.polydata:
-                apex_coordinate = generator.polydata.GetPoint(apex_ids["RAA"])
-
-        csv_data_to_save = {}
-        if generator.la_apex is not None:
-            csv_data_to_save["LAA_id"] = [generator.la_apex]
-        if generator.ra_apex is not None:
-            csv_data_to_save["RAA_id"] = [generator.ra_apex]
-
-        if csv_data_to_save:
-            _save_apex_ids(str(paths.active_mesh_base), csv_data_to_save)
-            print(f"Apex IDs from file saved to {paths.initial_mesh_base}_mesh_data.csv for consistency.")
-
-    # Now handle surface preparation logic
+    # --- Step 1: Prepare Surface Geometry (Cut or Separate) ---
     if args.closed_surface:
         generator.load_element_tags(csv_filepath=args.tag_csv)
         generator.separate_epi_endo(tagged_volume_mesh_path=str(paths.initial_mesh), atrium=args.atrium)
         paths._update_stage('epi_separated', base_path=str(paths.closed_surface_epi_mesh))
 
     elif args.open_orifices:
-        # Use curvature-based or manual orifice opening
         orifice_func = open_orifices_with_curvature if args.use_curvature_to_open else open_orifices_manually
         print(f"Calling {orifice_func.__name__} for mesh='{args.mesh}', atrium='{args.atrium}'...")
 
-        # Prepare parameters for orifice opening function
         orifice_params = {'meshpath': str(paths.initial_mesh),
                           'atrium': args.atrium,
                           'MRI': args.MRI,
@@ -279,100 +228,103 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
                           'max_cutting_radius': getattr(args, 'max_cutting_radius', 17.5),
                           'debug': args.debug}
 
-        if apex_coordinate is not None:
-            orifice_params['apex_coordinate'] = apex_coordinate
-
-        # Add orifice coordinates file for manual function
+        # Add orifice coordinates file for manual function if provided
         if hasattr(args, 'orifice_file') and args.orifice_file and not args.use_curvature_to_open:
             orifice_params['orifice_coordinates_file'] = args.orifice_file
 
-        cut_path, apex_id = orifice_func(**orifice_params)
+        # Call the orifice function. Note: open_orifices_with_curvature might return a valid apex ID,
+        # but open_orifices_manually now returns -1 as placeholder.
+        cut_path, returned_apex_id = orifice_func(**orifice_params)
 
         if cut_path is None or not Path(cut_path).exists():
             raise FileNotFoundError(f"{orifice_func.__name__} failed: Invalid cut_path")
-        if apex_id is None or apex_id < 0:
-            raise ValueError(f"{orifice_func.__name__} failed: Invalid apex_id")
-        print(f"Mesh after orifice cutting: {cut_path}\nApex ID picked: {apex_id}")
 
-        # Update the apex ID from the cut mesh
-        apex_id_for_resampling = apex_id
         paths._update_stage('cut', base_path=str(Path(cut_path).with_suffix('')))
+        print(f"Mesh after orifice cutting: {cut_path}")
 
-        # Save the updated apex IDs for the cut mesh so resampling can find them
-        csv_data_to_save = {}
-        if generator.la_apex is not None:
-            csv_data_to_save["LAA_id"] = [generator.la_apex]
-        if generator.ra_apex is not None:
-            csv_data_to_save["RAA_id"] = [generator.ra_apex]
+        # If the function was curvature-based, it found the apex for us.
+        if returned_apex_id != -1:
+            apex_id_for_resampling = returned_apex_id
 
-        if csv_data_to_save:
-            _save_apex_ids(str(paths.active_mesh_base), csv_data_to_save)
-            print(f"Saved updated apex IDs to {paths.active_mesh_base}_mesh_data.csv")
+    # --- Step 2: Determine Apex on the FINAL Geometry ---
+    # This block now runs AFTER the mesh has been cut or separated.
+    # It handles both automated (file-based) and manual apex picking.
 
-        if args.atrium == "LA":
-            generator.la_apex = apex_id
-        elif args.atrium == "RA":
-            generator.ra_apex = apex_id
+    # Only perform apex picking if the orifice function didn't already provide it.
+    if apex_id_for_resampling == -1:
+        print("--- Determining Apex on Final Mesh ---")
+        # Load the final mesh for apex determination
+        final_mesh_path = paths.active_mesh_base.with_suffix('.vtk')
+        if not final_mesh_path.exists():
+            raise FileNotFoundError(f"Final mesh not found at {final_mesh_path}")
 
-        try:
-            generator.extract_rings(
-                surface_mesh_path=str(paths.active_mesh_base.with_suffix('.vtk')),
-                output_dir=str(paths.surf_dir)
-            )
-        except Exception as e:
-            raise RuntimeError(f"Error in extract_rings('{paths.active_mesh_base.with_suffix('.vtk')}'): {e}") from e
+        final_mesh_polydata = apply_vtk_geom_filter(smart_reader(str(final_mesh_path)))
+        final_mesh_pv = pv.PolyData(final_mesh_polydata)
 
-        print(f"INFO: Ring extraction complete. Outputs saved in: {paths.surf_dir}")
+        if args.apex_file:
+            print(f"Loading apex ID from file: {args.apex_file}")
+            apex_ids_from_file = _load_apex_ids_from_file(args.apex_file)
 
-    else:  # No orifice opening, interactive apex picking only
-        if not args.apex_file:  # Only do interactive picking if no apex file was provided
-            print("No apex file provided. Starting interactive point picking...")
-
-            if args.find_appendage and not args.resample_input:
-                polydata = apply_vtk_geom_filter(smart_reader(str(paths.initial_mesh)))
-                if polydata is None:
-                    raise FileNotFoundError(f"Could not read mesh: {paths.initial_mesh}")
-                if polydata.GetNumberOfPoints() == 0:
-                    raise ValueError(f"Mesh is empty (no points): {paths.initial_mesh}")
-
-                pv_mesh = pv.PolyData(polydata)
-                points_for_tree = pv_mesh.points.astype(np.double)
-                tree = cKDTree(points_for_tree)
-
-                picked_apex_data_for_csv: Dict[str, Any] = {}
-                initial_apex = pick_point(pv_mesh, "appendage apex")
-                if initial_apex is None:
-                    raise RuntimeError("Initial 'appendage apex' picking cancelled or failed")
-
-                _, initial_apex_id = tree.query(initial_apex)
-                print(f"Initial 'appendage apex' picked: ID={initial_apex_id}")
-
-                if args.atrium == "LA":
-                    generator.la_apex = initial_apex_id
-                    picked_apex_data_for_csv["LAA_id"] = [initial_apex_id]
-                elif args.atrium == "RA":
-                    generator.ra_apex = initial_apex_id
-                    picked_apex_data_for_csv["RAA_id"] = [initial_apex_id]
-                elif args.atrium == "LA_RA":
-                    generator.la_apex = initial_apex_id
-                    picked_apex_data_for_csv["LAA_id"] = [initial_apex_id]
-                    raa_apex = pick_point_with_preselection(pv_mesh, "RA appendage apex", initial_apex)
-
-                    pv_mesh = pv.PolyData(polydata)
-                    points_for_tree = pv_mesh.points.astype(np.double)
-                    tree = cKDTree(points_for_tree)
-                    _, raa_apex_id = tree.query(raa_apex)
-                    generator.ra_apex = raa_apex_id
-                    picked_apex_data_for_csv["RAA_id"] = [raa_apex_id]
-
+            # Here we use the apex ID from the file, but we assume it is valid for the final cut mesh.
+            # However, since the mesh has been cut, the ID might not be valid. We need to ensure the ID is within bounds.
+            if args.atrium == "LA" and "LAA" in apex_ids_from_file:
+                proposed_apex_id = apex_ids_from_file["LAA"]
+                # Check if the proposed apex ID is within the range of the final mesh
+                if proposed_apex_id < final_mesh_polydata.GetNumberOfPoints():
+                    apex_id_for_resampling = proposed_apex_id
                 else:
-                    raise ValueError(f"Unknown atrium value '{args.atrium}'. Aborting...")
+                    print(
+                        f"WARNING: Apex ID {proposed_apex_id} is out of bounds for the final mesh. Falling back to interactive picking.")
+                    # Fall back to interactive picking
+                    apex_coord = pick_point(final_mesh_pv, "appendage apex")
+                    if apex_coord is None:
+                        raise RuntimeError("Apex picking cancelled or failed.")
+                    apex_id_for_resampling = int(final_mesh_pv.find_closest_point(apex_coord))
+            elif args.atrium == "RA" and "RAA" in apex_ids_from_file:
+                proposed_apex_id = apex_ids_from_file["RAA"]
+                if proposed_apex_id < final_mesh_polydata.GetNumberOfPoints():
+                    apex_id_for_resampling = proposed_apex_id
+                else:
+                    print(
+                        f"WARNING: Apex ID {proposed_apex_id} is out of bounds for the final mesh. Falling back to interactive picking.")
+                    apex_coord = pick_point(final_mesh_pv, "appendage apex")
+                    if apex_coord is None:
+                        raise RuntimeError("Apex picking cancelled or failed.")
+                    apex_id_for_resampling = int(final_mesh_pv.find_closest_point(apex_coord))
+            else:
+                raise ValueError(f"Apex file does not contain ID for atrium {args.atrium}")
 
-                _save_apex_ids(str(paths.initial_mesh_base), picked_apex_data_for_csv)
-                print(f"Apex IDs saved to {paths.initial_mesh_base}_mesh_data.csv")
+            print(f"Using apex ID {apex_id_for_resampling} from file on the final cut mesh.")
+
+        else:  # Manual interactive picking
+            print("No apex file provided. Starting interactive point picking on final mesh...")
+            apex_coord = pick_point(final_mesh_pv, "appendage apex")
+            if apex_coord is None:
+                raise RuntimeError("Apex picking cancelled or failed.")
+
+            apex_id_for_resampling = int(final_mesh_pv.find_closest_point(apex_coord))
+
+    # --- Step 3: Update State and Save Apex Info ---
+    if apex_id_for_resampling == -1:
+        raise ValueError("Failed to determine a valid apex ID.")
+
+    if args.atrium == "LA":
+        generator.la_apex = apex_id_for_resampling
+    elif args.atrium == "RA":
+        generator.ra_apex = apex_id_for_resampling
+
+    # Save the determined apex ID for subsequent steps
+    csv_data_to_save = {}
+    if generator.la_apex is not None:
+        csv_data_to_save["LAA_id"] = [generator.la_apex]
+    if generator.ra_apex is not None:
+        csv_data_to_save["RAA_id"] = [generator.ra_apex]
+
+    if csv_data_to_save:
+        _save_apex_ids(str(paths.active_mesh_base), csv_data_to_save)
+        print(f"Saved final apex ID to {paths.active_mesh_base}_mesh_data.csv")
 
     return apex_id_for_resampling
-
 
 def _ensure_ssm_base_landmarks_exist(args: Any) -> None:
     """
