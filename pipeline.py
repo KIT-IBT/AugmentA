@@ -999,6 +999,18 @@ def AugmentA(args):
         print("\n--- Pipeline Finished ---")
 
     except Exception as e:
+        print("\n" + "=" * 80, file=sys.stderr)
+        print("FATAL ERROR: Pipeline failed with full traceback:", file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
+
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+
+        print("=" * 80, file=sys.stderr)
+        print(f"Error summary: {type(e).__name__}: {e}", file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
+
         tr = traceback.extract_tb(e.__traceback__)
         print(f"FATAL ERROR: Pipeline failed — {e} in {tr[-1].name} at line {tr[-1].lineno}", file=sys.stderr)
+
         sys.exit(1)
