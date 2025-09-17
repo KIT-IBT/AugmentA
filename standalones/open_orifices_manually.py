@@ -41,7 +41,30 @@ def _load_orifice_coordinates(filepath: str) -> dict:
     if not os.path.exists(filepath):
         return {}
 
-    df = pd.read_csv(filepath)
+    try:
+        if os.path.getsize(filepath) == 0:
+            print(f"Warning: Orifice file {filepath} is empty")
+            return {}
+
+        df = pd.read_csv(filepath)
+
+        # Check if required columns exist
+        required_cols = ['orifice_name', 'x', 'y', 'z']
+        if not all(col in df.columns for col in required_cols):
+            print(f"Warning: Orifice file {filepath} missing required columns: {required_cols}")
+            return {}
+
+        if df.empty:
+            print(f"Warning: Orifice file {filepath} has no data rows")
+            return {}
+
+    except pd.errors.EmptyDataError:
+        print(f"Warning: Orifice file {filepath} has no columns to parse (likely empty or malformed)")
+        return {}
+    except Exception as e:
+        print(f"Warning: Could not read orifice file {filepath}: {e}")
+        return {}
+
     coords = {}
     for _, row in df.iterrows():
         coords[row['orifice_name']] = (row['x'], row['y'], row['z'])
