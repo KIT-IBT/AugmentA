@@ -273,9 +273,6 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
     abs_apex_file_path = (temp_input_dir / APEX_FILE_FILENAME).resolve()
     abs_orifice_file_path = (temp_input_dir / "LA_MRI_orifices.csv").resolve()
 
-    os.environ['OMPI_ALLOW_RUN_AS_ROOT'] = '1'
-    os.environ['OMPI_ALLOW_RUN_AS_ROOT_CONFIRM'] = '1'
-
     # Change the current working directory to the temporary one for the test duration
     original_cwd = Path.cwd()
     # os.chdir(temp_input_dir)
