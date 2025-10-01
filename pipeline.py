@@ -128,6 +128,31 @@ def _load_apex_ids_from_file(filepath: str) -> Dict[str, int]:
         raise RuntimeError(f"Error parsing apex file {filepath}: {e}")
 
 
+def _load_apex_coordinates_from_file(filepath: str) -> Dict[str, Tuple[float, float, float]]:
+    """
+    Reads a CSV file to load appendage apex coordinates. The CSV file must have 'atrium', 'x', 'y', 'z' columns.
+    :param filepath: Path to the CSV file.
+    :return: A dictionary mapping atrium names ('LAA', 'RAA') to coordinate tuples.
+    """
+    if not isinstance(filepath, str) or not filepath:
+        raise ValueError("filepath must be a non-empty string.")
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(f"Apex coordinate file not found: {filepath}")
+
+    try:
+        df = pd.read_csv(filepath)
+        if not all(col in df.columns for col in ['atrium', 'x', 'y', 'z']):
+            raise ValueError("CSV must contain 'atrium', 'x', 'y', and 'z' columns.")
+
+        apex_coords = {}
+        for _, row in df.iterrows():
+            apex_coords[row['atrium']] = (float(row['x']), float(row['y']), float(row['z']))
+
+        return apex_coords
+    except Exception as e:
+        raise RuntimeError(f"Error parsing apex coordinate file {filepath}: {e}")
+
+
 def _save_apex_ids(csv_base: str, ids: Dict[str, int]) -> None:
     """
     Saves apex IDs to '<csv_base>_mesh_data.csv'.
@@ -138,7 +163,41 @@ def _save_apex_ids(csv_base: str, ids: Dict[str, int]) -> None:
     df = pd.DataFrame(ids)
     df.to_csv(f"{csv_base}_mesh_data.csv", float_format="%.2f", index=False)
 
+def _save_apex_coordinates(csv_base: str, coords: Dict[str, Tuple[float, float, float]]) -> None:
+    """
+    Saves apex coordinates to '<csv_base>_mesh_data.csv'.
+    :param csv_base: Base path (without extension) where '<csv_base>_mesh_data.csv' will be written
+    :param coords: Dictionary with keys 'LAA' and/or 'RAA' mapping to (x, y, z) tuples
+    :return: None
+    """
+    data = {'atrium': [], 'x': [], 'y': [], 'z': []}
+    for atrium, coord in coords.items():
+        data['atrium'].append(atrium)
+        data['x'].append(coord[0])
+        data['y'].append(coord[1])
+        data['z'].append(coord[2])
 
+    df = pd.DataFrame(data)
+    df.to_csv(f"{csv_base}_mesh_data.csv", float_format="%.6f", index=False)
+
+
+def _save_apex_coordinates_to_file(filepath: str, coords: Dict[str, Tuple[float, float, float]]) -> None:
+    """
+    Saves apex coordinates to a CSV file in the format expected by _load_apex_coordinates_from_file.
+
+    :param filepath: Full path to the output CSV file (e.g., '/path/to/LA_cutted_apexes.csv')
+    :param coords: Dictionary with keys 'LAA' and/or 'RAA' mapping to (x, y, z) tuples
+    :return: None
+    """
+    data = {'atrium': [], 'x': [], 'y': [], 'z': []}
+    for atrium, coord in coords.items():
+        data['atrium'].append(atrium)
+        data['x'].append(float(coord[0]))
+        data['y'].append(float(coord[1]))
+        data['z'].append(float(coord[2]))
+
+    df = pd.DataFrame(data)
+    df.to_csv(filepath, index=False, float_format="%.6f")
 def _ensure_obj_available(base_path_no_ext: str, original_extension: str = ".vtk") -> str:
     """
     Ensures a .obj file exists for the given base path. Converts from .vtk or .ply if .obj is missing.
@@ -201,7 +260,6 @@ def _setup(args) -> Tuple[WorkflowPaths, AtrialBoundaryGenerator]:
     return paths, generator
 
 
-# pipeline.py
 def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args) -> int:
     """
     Handle all surface preparation steps: epi/endo separation,
@@ -261,48 +319,122 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
         final_mesh_polydata = apply_vtk_geom_filter(smart_reader(str(final_mesh_path)))
         final_mesh_pv = pv.PolyData(final_mesh_polydata)
 
+        if args.atrium == "LA":
+            atria_to_process = ["LAA"]
+        elif args.atrium == "RA":
+            atria_to_process = ["RAA"]
+        elif args.atrium == "LA_RA":
+            atria_to_process = ["LAA", "RAA"]
+        else:
+            raise ValueError(f"Unknown atrium type: {args.atrium}")
+
+        apex_ids_determined = {}
+
         if args.apex_file:
-            print(f"Loading apex ID from file: {args.apex_file}")
-            apex_ids_from_file = _load_apex_ids_from_file(args.apex_file)
+            print(f"Loading apex coords from file: {args.apex_file}")
 
-            # Here we use the apex ID from the file, but we assume it is valid for the final cut mesh.
-            # However, since the mesh has been cut, the ID might not be valid. We need to ensure the ID is within bounds.
-            if args.atrium == "LA" and "LAA" in apex_ids_from_file:
-                proposed_apex_id = apex_ids_from_file["LAA"]
-                # Check if the proposed apex ID is within the range of the final mesh
-                if proposed_apex_id < final_mesh_polydata.GetNumberOfPoints():
-                    apex_id_for_resampling = proposed_apex_id
-                else:
-                    print(
-                        f"WARNING: Apex ID {proposed_apex_id} is out of bounds for the final mesh. Falling back to interactive picking.")
-                    # Fall back to interactive picking
-                    apex_coord = pick_point(final_mesh_pv, "appendage apex")
-                    if apex_coord is None:
-                        raise RuntimeError("Apex picking cancelled or failed.")
-                    apex_id_for_resampling = int(final_mesh_pv.find_closest_point(apex_coord))
-            elif args.atrium == "RA" and "RAA" in apex_ids_from_file:
-                proposed_apex_id = apex_ids_from_file["RAA"]
-                if proposed_apex_id < final_mesh_polydata.GetNumberOfPoints():
-                    apex_id_for_resampling = proposed_apex_id
-                else:
-                    print(
-                        f"WARNING: Apex ID {proposed_apex_id} is out of bounds for the final mesh. Falling back to interactive picking.")
-                    apex_coord = pick_point(final_mesh_pv, "appendage apex")
-                    if apex_coord is None:
-                        raise RuntimeError("Apex picking cancelled or failed.")
-                    apex_id_for_resampling = int(final_mesh_pv.find_closest_point(apex_coord))
+            # Check if file contains coordinates (x,y,z) or IDs
+            try:
+                df = pd.read_csv(args.apex_file)
+            except Exception as e:
+                raise RuntimeError(f"Failed to read apex file {args.apex_file}: {e}")
+
+            # Determine file format
+            has_coordinates = all(col in df.columns for col in ['atrium', 'x', 'y', 'z'])
+            has_ids = all(col in df.columns for col in ['atrium', 'id'])
+
+            if has_coordinates:
+                print("Detected coordinate-based apex file format")
+                apex_coords_dict = _load_apex_coordinates_from_file(args.apex_file)
+
+                for atrium_key in atria_to_process:
+                    if atrium_key not in apex_coords_dict:
+                        raise ValueError(f"Apex file does not contain coordinates for {atrium_key}")
+
+                    apex_coord = apex_coords_dict[atrium_key]
+                    print(f"Using apex coordinate for {atrium_key}: {apex_coord}")
+
+                    # Map the coordinate to the closest point ID on the current mesh
+                    apex_id = int(final_mesh_pv.find_closest_point(apex_coord))
+                    apex_ids_determined[atrium_key] = apex_id
+                    print(f"Mapped coordinate to point ID {apex_id} on current mesh")
+
+            elif has_ids:
+                print("WARNING: Detected ID-based apex file format")
+                print("WARNING: Point IDs may be invalid if mesh topology changed during processing")
+
+                apex_ids_from_file = _load_apex_ids_from_file(args.apex_file)
+
+                for atrium_key in atria_to_process:
+                    if atrium_key not in apex_ids_from_file:
+                        raise ValueError(f"Apex file does not contain ID for {atrium_key}")
+
+                    proposed_apex_id = apex_ids_from_file[atrium_key]
+
+                    # Bounds check
+                    if proposed_apex_id < final_mesh_polydata.GetNumberOfPoints():
+                        print(f"WARNING: Using apex ID {proposed_apex_id} for {atrium_key} from file")
+                        print(f"WARNING: This ID was valid on original mesh but may point to wrong location")
+
+                        if args.debug:
+                            coord_at_id = final_mesh_polydata.GetPoint(proposed_apex_id)
+                            print(f"DEBUG: Point ID {proposed_apex_id} is at coordinate: {coord_at_id}")
+
+                        apex_ids_determined[atrium_key] = proposed_apex_id
+
+                    else:
+                        print(f"ERROR: Apex ID {proposed_apex_id} for {atrium_key} is out of bounds")
+                        print(f"ERROR: Falling back to interactive picking")
+
+                        apex_coord = pick_point(final_mesh_pv, f"{atrium_key} appendage apex")
+
+                        if apex_coord is None:
+                            raise RuntimeError(f"Apex picking for {atrium_key} cancelled or failed.")
+
+                        apex_ids_determined[atrium_key] = int(final_mesh_pv.find_closest_point(apex_coord))
+
             else:
-                raise ValueError(f"Apex file does not contain ID for atrium {args.atrium}")
-
-            print(f"Using apex ID {apex_id_for_resampling} from file on the final cut mesh.")
+                raise ValueError(
+                    f"Apex file format not recognized. Expected either:\n"
+                    f"  - Coordinate format: columns 'atrium', 'x', 'y', 'z'\n"
+                    f"  - ID format: columns 'atrium', 'id'\n"
+                    f"Found columns: {df.columns.tolist()}")
 
         else:  # Manual interactive picking
             print("No apex file provided. Starting interactive point picking on final mesh...")
-            apex_coord = pick_point(final_mesh_pv, "appendage apex")
-            if apex_coord is None:
-                raise RuntimeError("Apex picking cancelled or failed.")
 
-            apex_id_for_resampling = int(final_mesh_pv.find_closest_point(apex_coord))
+            apex_coordinates_picked = {}
+
+            for atrium_key in atria_to_process:
+                apex_coord = pick_point(final_mesh_pv, f"{atrium_key} appendage apex")
+                if apex_coord is None:
+                    raise RuntimeError(f"Apex picking for {atrium_key} cancelled or failed.")
+
+                apex_id = int(final_mesh_pv.find_closest_point(apex_coord))
+                apex_ids_determined[atrium_key] = apex_id
+                apex_coordinates_picked[atrium_key] = tuple(apex_coord)
+
+                print(f"Picked {atrium_key} apex at coordinate {apex_coord}, mapped to point ID {apex_id}")
+
+            if apex_coordinates_picked:
+                coord_save_path = str(paths.active_mesh_base) + "_apexes.csv"
+                _save_apex_coordinates(coord_save_path, apex_coordinates_picked)
+                _save_apex_coordinates_to_file(coord_save_path, apex_coordinates_picked)
+                print(f"\n=== SAVED APEX COORDINATES ===")
+                print(f"File: {coord_save_path}")
+                for atrium, coord in apex_coordinates_picked.items():
+                    print(f"  {atrium}: ({coord[0]:.6f}, {coord[1]:.6f}, {coord[2]:.6f})")
+                print(f"Copy this file to your test_data directory to use in automated tests")
+                print(f"================================\n")
+
+        # Set the determined apex IDs on the generator
+        if "LAA" in apex_ids_determined:
+            generator.la_apex = apex_ids_determined["LAA"]
+            apex_id_for_resampling = apex_ids_determined["LAA"]  # For return value
+        if "RAA" in apex_ids_determined:
+            generator.ra_apex = apex_ids_determined["RAA"]
+            if apex_id_for_resampling == -1:  # Only set if LAA wasn't processed
+                apex_id_for_resampling = apex_ids_determined["RAA"]
 
     # --- Step 3: Update State and Save Apex Info ---
     if apex_id_for_resampling == -1:
@@ -937,7 +1069,7 @@ def _plot_debug_results(paths: WorkflowPaths, args) -> None:
             scalar_viz_key = None
             print("WARNING: 'elemTag' not found in mesh for plotting.")
 
-        p = pv.Plotter(notebook=False)
+        p = pv.Plotter(notebook=False, off_screen=True)
         if not args.closed_surface:
             if 'fiber' in bil.point_data:
                 geom = pv.Line()
@@ -961,16 +1093,18 @@ def _plot_debug_results(paths: WorkflowPaths, args) -> None:
                 print("WARNING: 'fiber' data not found for glyphing.")
 
             p.add_mesh(bil, scalars=scalar_viz_key, show_scalar_bar=False, cmap='tab20')
-            if not args.no_plot:
-                p.show()
-            else:
-                # Optionally, save a screenshot for debugging in headless mode
-                output_plot_path = Path(args.mesh).parent / "debug_plot.png"
-                p.screenshot(str(output_plot_path))
-                print(f"INFO: Headless mode: saved debug plot to {output_plot_path}")
+
+        p.show()
+
+        output_plot_path = Path(args.mesh).parent / "test_debug_plot.png"
+        p.screenshot(str(output_plot_path))
+        print(f"SAVED DEBUG PLOT TO: {output_plot_path}")
+        p.close()
 
     except Exception as e:
         print(f"ERROR during debug plotting: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def AugmentA(args):

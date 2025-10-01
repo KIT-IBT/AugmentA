@@ -23,22 +23,43 @@ pv.set_plot_theme("dark")
 
 
 def _save_orifice_coordinates(coords_list, output_path):
-    """Save picked coordinates to CSV for future automated use."""
+    """
+    Save picked coordinates to CSV for future automated use.
+
+    Args:
+        coords_list: List of coordinate dictionaries with keys: orifice_name, x, y, z
+        output_path: Path where CSV file will be saved
+    """
     import csv
+
     try:
-        with open(output_path, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['orifice_name', 'x', 'y', 'z'])
+        with open(output_path, 'w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=['orifice_name', 'x', 'y', 'z'])
             writer.writeheader()
+
             for coord in coords_list:
                 writer.writerow(coord)
+
         print(f"Saved orifice coordinates to: {output_path}")
+
     except Exception as e:
         print(f"Warning: Could not save coordinates: {e}")
 
+
 def _load_orifice_coordinates(filepath: str) -> dict:
-    """Load orifice coordinates from CSV file."""
+    """
+    Load orifice coordinates from CSV file.
+
+    Args:
+        filepath: Path to the CSV file containing orifice coordinates
+
+    Returns:
+        Dictionary mapping orifice names to (x, y, z) coordinates
+    """
     import pandas as pd
+
     if not os.path.exists(filepath):
+        print(f"Warning: Orifice file {filepath} does not exist")
         return {}
 
     try:
@@ -61,14 +82,19 @@ def _load_orifice_coordinates(filepath: str) -> dict:
     except pd.errors.EmptyDataError:
         print(f"Warning: Orifice file {filepath} has no columns to parse (likely empty or malformed)")
         return {}
-    except Exception as e:
-        print(f"Warning: Could not read orifice file {filepath}: {e}")
+    except pd.errors.ParserError:
+        print(f"Warning: Orifice file {filepath} contains malformed data")
+        return {}
+    except Exception as error:
+        print(f"Warning: Could not read orifice file {filepath}: {error}")
         return {}
 
     coords = {}
     for _, row in df.iterrows():
         coords[row['orifice_name']] = (row['x'], row['y'], row['z'])
+
     return coords
+
 
 def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Cut veins manually')
@@ -105,10 +131,15 @@ def _clean_mesh(meshpath: str, atrium: str) -> Tuple[str, str]:
     clean_path_vtk = clean_base + ".vtk"
     clean_path_obj = clean_base + ".obj"
 
-    meshin = pv.read(meshpath)
+    try:
+        meshin = pv.read(meshpath)
+    except Exception as error:
+        raise RuntimeError(f"Failed to read mesh file {meshpath}: {error}")
+
     if meshin.n_points == 0 or meshin.n_cells == 0:
         raise ValueError("Loaded mesh is empty or invalid.")
 
+    # Read and repair mesh
     try:
         meshfix = pymeshfix.MeshFix(meshin)
         meshfix.repair()
@@ -124,6 +155,8 @@ def _clean_mesh(meshpath: str, atrium: str) -> Tuple[str, str]:
 
         # Also save an OBJ version for compatibility
         pv.save_meshio(clean_path_obj, meshfix.mesh, "obj")
+    except PermissionError:
+        raise RuntimeError(f"Permission denied when saving cleaned mesh to {clean_path_vtk}")
     except Exception as e:
         raise RuntimeError(f"Failed to save cleaned mesh: {e}")
 
@@ -142,6 +175,10 @@ def _map_mesh(meshpath: str, clean_path: str) -> Any:
         raise ValueError("meshpath must be a non-empty string.")
     if not isinstance(clean_path, str) or not clean_path:
         raise ValueError("clean_path must be a non-empty string.")
+    if not os.path.isfile(meshpath):
+        raise FileNotFoundError(f"Original mesh file not found: {meshpath}")
+    if not os.path.isfile(clean_path):
+        raise FileNotFoundError(f"Cleaned mesh file not found: {clean_path}")
 
     print(f"Mapping data from {meshpath} to {clean_path}")
 
@@ -220,6 +257,17 @@ def open_orifices_manually(
         - Path to the cut VTK file
         - Apex point ID on the cut mesh
     """
+    if not isinstance(meshpath, str) or not meshpath:
+        raise ValueError("mesh_path must be a non-empty string.")
+    if not os.path.isfile(meshpath):
+        raise FileNotFoundError(f"Mesh file not found: {meshpath}")
+    if min_cutting_radius <= 0:
+        raise ValueError(f"min_cutting_radius must be positive, got: {min_cutting_radius}")
+    if max_cutting_radius <= 0:
+        raise ValueError(f"max_cutting_radius must be positive, got: {min_cutting_radius}")
+    if min_cutting_radius > max_cutting_radius:
+        raise ValueError(f"min_cutting_radius ({min_cutting_radius}) cannot be greater than max_cutting_radius ({max_cutting_radius})")
+
     print(f"--- Starting Manual Orifice Opening for {atrium} ---")
 
     # Clean the mesh and obtain the cleaned VTK file
@@ -278,6 +326,7 @@ def open_orifices_manually(
             selected_radius = min_cutting_radius
         print(f"Cutting '{r_name}' with radius {selected_radius} at {picked_pt}")
 
+        # Cutting the hole
         try:
             current_mesh_vtk = cut_mesh_with_radius(current_mesh_vtk, picked_pt, selected_radius)
             if current_mesh_vtk is None or current_mesh_vtk.GetNumberOfPoints() == 0:
