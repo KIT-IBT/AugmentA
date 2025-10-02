@@ -10,19 +10,11 @@ from scipy.spatial import cKDTree
 
 from pipeline import AugmentA
 from main import parser
+from test_config import TestPaths
 
+# Test configuration
 COMPARE_WITH_TOLERANCE = False  # Set False to require exact matches for all files
 COMPARE_BY_COORDINATES = True  # For VTX files, compare by coordinates instead of IDs
-
-# Test configuration - paths to our test data and expected results
-TESTS_ROOT = Path(__file__).parent.resolve()  # e.g. Path(/Users/ou736l/augmentaupgrade/tests)
-TEST_DATA_DIR = TESTS_ROOT / "test_data"  # e.g. Path(/Users/ou736l/augmentaupgrade/tests/test_data)
-GOLDEN_RESULTS_DIR = TESTS_ROOT / "good_results"
-
-# Test files we are working with
-TEST_MESH_BASENAME = "LA_MRI"  # input mesh basename
-TEST_MESH_FILENAME = f"{TEST_MESH_BASENAME}.vtp"
-APEX_FILE_FILENAME = f"{TEST_MESH_BASENAME}_apexes.csv"
 
 # Tolerance configuration - adjust these values based on acceptable variation
 VTK_DISTANCE_THRESHOLD = 2e3  # micrometers (2mm) - for geometry comparison
@@ -30,6 +22,10 @@ CSV_RTOL = 1e-4  # 0.01% relative tolerance for CSV numerical values
 CSV_ATOL = 2e3  # micrometers absolute tolerance for CSV coordinates
 MESH_COUNT_TOLERANCE_PERCENT = 10.0  # Allow 10% variation in point/element counts
 VTX_COORDINATE_TOLERANCE = 1000.0  # micrometers (1mm) for VTX coordinate matching
+
+# Test mesh configuration
+TEST_MESH_BASENAME = "LA_MRI"
+EXPECTED_OUTPUT_SURF_DIR = "LA_cutted_res_surf"
 
 
 def print_file_sizes_on_failure(current_path: Path, golden_path: Path):
@@ -63,7 +59,6 @@ def compare_vtx_with_tolerance(current_path: Path, golden_path: Path, max_diff_p
     current_set = read_vtx_to_set(current_path)
     golden_set = read_vtx_to_set(golden_path)
 
-    # Calculate differences
     total_unique_ids = len(current_set.union(golden_set))
     different_ids = len(current_set.symmetric_difference(golden_set))
 
@@ -100,7 +95,6 @@ def find_mesh_file_for_vtx_comparison(result_dir: Path, temp_input_dir: Path) ->
             return mesh_path
 
     # If not found in surf directory, look in the parent input directory
-    # for the resampled mesh that was used to generate the VTX files
     possible_parent_meshes = [
         "LA_cutted_res.ply",
         "LA_cutted_res.vtk",
@@ -184,7 +178,7 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
         print(f"Mean distance: {mean_distance:.6f} mm")
         print(f"Points within {tolerance} µm: {num_within_tolerance}/{len(distances)}")
 
-        # Use a more lenient approach: require 95% of points to be within tolerance
+        # Require 95% of points to be within tolerance
         match_percentage = num_within_tolerance / len(distances)
         required_match = 0.95
 
@@ -208,14 +202,6 @@ def compare_vtk_meshes_by_geometry(current_path: Path,
                                    distance_threshold: float = VTK_DISTANCE_THRESHOLD) -> bool:
     """
     Compare VTK meshes allowing for different point counts, by checking if geometries are similar.
-
-    Args:
-        current_path: Path to current VTK file
-        golden_path: Path to golden VTK file
-        distance_threshold: Maximum acceptable distance in micrometers (default 2mm)
-
-    Returns:
-        True if meshes represent similar geometry within threshold
     """
     try:
         current_mesh = pv.read(current_path)
@@ -233,11 +219,10 @@ def compare_vtk_meshes_by_geometry(current_path: Path,
         max_dist = np.max(distances)
         mean_dist = np.mean(distances)
 
-        print(f"Max distance to golden mesh: {max_dist:.2f} μm ({max_dist / 1000:.3f} mm)")
-        print(f"Mean distance to golden mesh: {mean_dist:.2f} μm ({mean_dist / 1000:.3f} mm)")
-        print(f"Threshold: {distance_threshold} μm ({distance_threshold / 1000} mm)")
+        print(f"Max distance to golden mesh: {max_dist:.2f} µm ({max_dist / 1000:.3f} mm)")
+        print(f"Mean distance to golden mesh: {mean_dist:.2f} µm ({mean_dist / 1000:.3f} mm)")
+        print(f"Threshold: {distance_threshold} µm ({distance_threshold / 1000} mm)")
 
-        # Check if all points are within threshold
         within_threshold = np.all(distances <= distance_threshold)
 
         if within_threshold:
@@ -256,12 +241,7 @@ def compare_vtk_meshes_by_geometry(current_path: Path,
 def compare_elem_files(current_path: Path,
                        golden_path: Path,
                        tolerance_percent: float = MESH_COUNT_TOLERANCE_PERCENT) -> bool:
-    """
-    Compare CARP .elem files allowing for some variation in element count.
-
-    Args:
-        tolerance_percent: Allow up to this % difference in element count (default 10%)
-    """
+    """Compare CARP .elem files allowing for some variation in element count."""
     try:
         with open(current_path, 'r') as f:
             current_lines = f.readlines()
@@ -274,7 +254,6 @@ def compare_elem_files(current_path: Path,
         print(f"\nElem file comparison for {current_path.name}:")
         print(f"Elements: current={current_count}, golden={golden_count}")
 
-        # Calculate percentage difference
         diff_percent = abs(current_count - golden_count) / golden_count * 100
         print(f"Difference: {diff_percent:.1f}%")
         print(f"Tolerance: {tolerance_percent}%")
@@ -294,14 +273,8 @@ def compare_elem_files(current_path: Path,
 def compare_lon_files(current_path: Path,
                       golden_path: Path,
                       tolerance_percent: float = MESH_COUNT_TOLERANCE_PERCENT) -> bool:
-    """
-    Compare CARP .lon (fiber) files allowing for different vector counts.
-
-    Args:
-        tolerance_percent: Allow up to this % difference in vector count
-    """
+    """Compare CARP .lon (fiber) files allowing for different vector counts."""
     try:
-        # Read first line (count) and data
         with open(current_path, 'r') as f:
             current_first_line = f.readline().strip()
             current_count = int(current_first_line)
@@ -313,7 +286,6 @@ def compare_lon_files(current_path: Path,
         print(f"\nLon file comparison for {current_path.name}:")
         print(f"Fiber vectors: current={current_count}, golden={golden_count}")
 
-        # Calculate percentage difference
         diff_percent = abs(current_count - golden_count) / golden_count * 100
         print(f"Difference: {diff_percent:.1f}%")
         print(f"Tolerance: {tolerance_percent}%")
@@ -333,14 +305,8 @@ def compare_lon_files(current_path: Path,
 def compare_pts_files(current_path: Path,
                       golden_path: Path,
                       tolerance_percent: float = MESH_COUNT_TOLERANCE_PERCENT) -> bool:
-    """
-    Compare CARP .pts (points/coordinates) files allowing for different point counts.
-
-    Args:
-        tolerance_percent: Allow up to this % difference in point count
-    """
+    """Compare CARP .pts (points/coordinates) files allowing for different point counts."""
     try:
-        # Read first line (point count)
         with open(current_path, 'r') as f:
             current_count = int(f.readline().strip())
 
@@ -350,7 +316,6 @@ def compare_pts_files(current_path: Path,
         print(f"\nPts file comparison for {current_path.name}:")
         print(f"  Points: current={current_count}, golden={golden_count}")
 
-        # Calculate percentage difference
         diff_percent = abs(current_count - golden_count) / golden_count * 100
         print(f"  Difference: {diff_percent:.1f}%")
         print(f"  Tolerance: {tolerance_percent}%")
@@ -370,26 +335,12 @@ def compare_pts_files(current_path: Path,
 def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Path):
     """
     Compare two directories for structure and content with tolerance-based comparisons.
-
-    This function performs regression testing by comparing output files against golden results.
-    Different file types use appropriate comparison strategies:
-    - VTK meshes: geometry-based comparison allowing different point counts
-    - CARP files (.pts, .elem, .lon): count-based comparison with percentage tolerance
-    - VTX files: coordinate-based comparison
-    - CSV files: numerical comparison with tolerance
-    - Other files: exact binary comparison
-
-    Args:
-        current_dir: Directory containing current test output
-        golden_dir: Directory containing golden reference results
-        temp_input_dir: Temporary directory for intermediate files
     """
-    # Compare file structures to make sure we have the same files
-    # Create sets of relative file paths for both directories
+    # Compare file structures
     golden_files = {path.relative_to(golden_dir) for path in golden_dir.rglob('*') if path.is_file()}
     current_files = {path.relative_to(current_dir) for path in current_dir.rglob('*') if path.is_file()}
 
-    if golden_files != current_files:  # Check if both sets of files match
+    if golden_files != current_files:
         missing = golden_files - current_files
         extra = current_files - golden_files
         assert False, f"File mismatch. Missing: {missing}, Extra: {extra}"
@@ -409,17 +360,14 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
 
         try:
             if file_name == "rings_centroids.csv":
-                # CSV files with numbers need fuzzy comparison due to floating point precision
                 golden_df = pd.read_csv(golden_path)
                 current_df = pd.read_csv(current_path)
 
                 try:
-                    # Sort columns alphabetically to make order-independent comparison
+                    # Sort columns alphabetically
                     golden_df = golden_df.reindex(sorted(golden_df.columns), axis=1)
                     current_df = current_df.reindex(sorted(current_df.columns), axis=1)
 
-                    # Compare with numerical tolerance
-                    # Compare with numerical tolerance
                     pd.testing.assert_frame_equal(golden_df, current_df,
                                                   check_exact=False,
                                                   rtol=CSV_RTOL,
@@ -429,25 +377,23 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                 except AssertionError as e:
                     assert False, f"CSV content mismatch in {file_name}: {e}"
 
-
             elif file_extension == ".vtx":
                 if COMPARE_WITH_TOLERANCE:
                     if not compare_vtx_with_tolerance(current_path, golden_path, max_diff_percent=5.0):
                         print_file_sizes_on_failure(current_path, golden_path)
-
                         assert False, f"VTX content differs too much in {file_name}"
-
 
                 elif COMPARE_BY_COORDINATES:
                     try:
                         current_mesh_path = find_mesh_file_for_vtx_comparison(current_dir, temp_input_dir)
-                        golden_mesh_path = find_mesh_file_for_vtx_comparison(golden_dir, GOLDEN_RESULTS_DIR)
+                        golden_mesh_path = find_mesh_file_for_vtx_comparison(golden_dir, golden_dir.parent)
 
                         print(f"Using meshes for VTX comparison:")
                         print(f"Current: {current_mesh_path}")
                         print(f"Golden: {golden_mesh_path}")
 
-                        if not compare_vtx_by_coordinates(current_path, golden_path, current_mesh_path, golden_mesh_path):
+                        if not compare_vtx_by_coordinates(current_path, golden_path, current_mesh_path,
+                                                          golden_mesh_path):
                             print_file_sizes_on_failure(current_path, golden_path)
                             assert False, f"VTX coordinate mismatch in {file_name}"
 
@@ -463,7 +409,7 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                             assert False, f"VTX content mismatch in {file_name}"
 
                 else:
-                    # Direct ID comparison (order doesn't matter)
+                    # Direct ID comparison
                     golden_set = read_vtx_to_set(golden_path)
                     current_set = read_vtx_to_set(current_path)
                     if golden_set != current_set:
@@ -471,26 +417,23 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                         assert False, f"VTX content mismatch in {file_name}"
 
             elif file_extension == ".pts":
-                # CARP points/coordinates files - allowing up to 10% variation in point count
                 if not compare_pts_files(current_path, golden_path, tolerance_percent=10):
                     assert False, f"Point count mismatch in {file_name}"
 
             elif file_extension == ".lon":
-                # CARP fiber orientation files - compare with numerical tolerance
                 if not compare_lon_files(current_path, golden_path, tolerance_percent=10):
                     assert False, f"Fiber orientation mismatch in {file_name}"
 
             elif file_extension == ".elem":
-                # CARP element files - compare connectivity allowing reordering
                 if not compare_elem_files(current_path, golden_path, tolerance_percent=10):
                     assert False, f"Element connectivity mismatch in {file_name}"
 
             elif file_extension == ".vtk":
-                # All VTK files - compare by geometry
-                if not compare_vtk_meshes_by_geometry(current_path, golden_path, distance_threshold=VTK_DISTANCE_THRESHOLD):
+                if not compare_vtk_meshes_by_geometry(current_path, golden_path,
+                                                      distance_threshold=VTK_DISTANCE_THRESHOLD):
                     assert False, f"VTK mesh content mismatch in {file_name}"
             else:
-                # Everything else: exact binary comparison
+                # Binary comparison for other files
                 if not filecmp.cmp(golden_path, current_path, shallow=False):
                     print_file_sizes_on_failure(current_path, golden_path)
                     assert False, f"File content mismatch in {file_name}"
@@ -502,40 +445,40 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
             print(f"ERROR: Unexpected error comparing {file_name}: {e}")
             raise
 
+
 def test_la_cut_resample_pipeline_regression(tmp_path: Path):
     """
     Test the full pipeline against golden results.
-    This is a test that makes sure our pipeline produces the same output as before.
-    If this fails, we either broke something or intentionally changed the behavior.
     """
-    # Setup test data in a temporary directory to keep things clean
-    input_mesh_path = TEST_DATA_DIR / TEST_MESH_FILENAME
-    apex_file_path = TEST_DATA_DIR / APEX_FILE_FILENAME
-    orifice_file_path = TEST_DATA_DIR / "LA_MRI_orifices.csv"
+    # Initialize test paths
+    test_paths = TestPaths()
 
+    # Validate test data exists
+    test_paths.validate_test_data_exists(TEST_MESH_BASENAME, require_orifice=True)
+    test_paths.validate_golden_results_exist(EXPECTED_OUTPUT_SURF_DIR)
+
+    # Setup temporary test directory with copies of input files
     temp_input_dir = tmp_path / "input"
     temp_input_dir.mkdir()
+
     original_cwd = Path.cwd()
-    try:
-        shutil.copy(input_mesh_path, temp_input_dir)
-        shutil.copy(apex_file_path, temp_input_dir)
-        shutil.copy(orifice_file_path, temp_input_dir)
-    except FileNotFoundError as e:
-        pytest.fail(f"Failed to copy test data. A required file was not found: {e}")
-    except Exception as e:
-        pytest.fail(f"An unexpected error occurred during test data setup: {e}")
-
-    abs_mesh_path = (temp_input_dir / TEST_MESH_FILENAME).resolve()
-    # → /tmp/pytest-xxx/test_la_cut0/input/LA_MRI.vtp
-
-    abs_apex_file_path = (temp_input_dir / APEX_FILE_FILENAME).resolve()
-    # → /tmp/pytest-xxx/test_la_cut0/input/LA_MRI_apexes.csv
-
-    abs_orifice_file_path = (temp_input_dir / "LA_MRI_orifices.csv").resolve()
-    # → /tmp/pytest-xxx/test_la_cut0/input/LA_MRI_orifices.csv
 
     try:
-        # Setup the exact same arguments using the absolute paths
+        # Copy input files to temp directory
+        input_mesh_source = test_paths.input_mesh(TEST_MESH_BASENAME, ".vtp")
+        apex_file_source = test_paths.apex_coordinates_file(TEST_MESH_BASENAME)
+        orifice_file_source = test_paths.orifice_coordinates_file(TEST_MESH_BASENAME)
+
+        shutil.copy(input_mesh_source, temp_input_dir)
+        shutil.copy(apex_file_source, temp_input_dir)
+        shutil.copy(orifice_file_source, temp_input_dir)
+
+        # Build absolute paths for pipeline arguments
+        abs_mesh_path = (temp_input_dir / input_mesh_source.name).resolve()
+        abs_apex_file_path = (temp_input_dir / apex_file_source.name).resolve()
+        abs_orifice_file_path = (temp_input_dir / orifice_file_source.name).resolve()
+
+        # Setup pipeline arguments
         test_args_list = [
             '--mesh', str(abs_mesh_path),
             '--apex-file', str(abs_apex_file_path),
@@ -549,19 +492,14 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
             '--target_mesh_resolution', '0.4',
             '--find_appendage', '0',
             '--debug', '1',
-            '--no-plot']
+            '--no-plot'
+        ]
 
-        # Parse arguments the same way main.py does
+        # Parse arguments
         argument_parser = parser()
         args_instance = argument_parser.parse_args(test_args_list)
 
-        print(f"Apex file exists: {abs_apex_file_path.exists()}")
-        print(f"Apex file path: {abs_apex_file_path}")
-        if abs_apex_file_path.exists():
-            with open(abs_apex_file_path, 'r') as f:
-                print(f"Apex file contents:\n{f.read()}")
-
-        # Run the actual pipeline, with specific error handling
+        # Run pipeline
         try:
             AugmentA(args_instance)
         except SystemExit as e:
@@ -569,22 +507,20 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
         except Exception as e:
             pytest.fail(f"The pipeline raised an unexpected exception: {e.__class__.__name__}: {e}")
 
-        # Define paths for comparing results
+        # Determine output directory name
         if args_instance.resample_input:
             output_dir_name = f"{args_instance.atrium}_cutted_res_surf"
-            FINAL_OUTPUT_FOLDER = "LA_cutted_res_surf"
         else:
             output_dir_name = f"{args_instance.atrium}_cutted_surf"
-            FINAL_OUTPUT_FOLDER = "LA_cutted_surf"
 
         current_result_dir = temp_input_dir / output_dir_name
-        golden_comparison_dir = GOLDEN_RESULTS_DIR / FINAL_OUTPUT_FOLDER
+        golden_comparison_dir = test_paths.golden_surf_dir(EXPECTED_OUTPUT_SURF_DIR)
 
-        # Verify both directories exist before comparing
+        # Verify both directories exist
         assert current_result_dir.exists(), f"Output directory '{current_result_dir}' was not created."
         assert golden_comparison_dir.exists(), f"Golden results folder '{golden_comparison_dir}' not found."
 
-        # Save test results for visual inspection
+        # Save results for inspection
         inspection_dir = Path("/tmp/test_results_for_inspection")
         inspection_dir.mkdir(exist_ok=True)
         if current_result_dir.exists():
@@ -594,11 +530,9 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
             print(f"Current results: {inspection_dir / 'current_results'}")
             print(f"Good results: {inspection_dir / 'golden_results'}")
 
-        # Perform the detailed comparison of output files
+        # Compare results
         compare_directories(current_result_dir, golden_comparison_dir, temp_input_dir)
         print("ALL COMPARISONS PASSED!")
 
     finally:
-        # **Crucially, always change back to the original directory.**
-        # This ensures this test does not interfere with others, even if assertions fail.
         os.chdir(original_cwd)
