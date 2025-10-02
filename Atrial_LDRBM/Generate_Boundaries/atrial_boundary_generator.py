@@ -656,8 +656,8 @@ class AtrialBoundaryGenerator:
         processing the LA and/or RA regions, and writing centroids to CSV.
         """
         if self.debug:
-            print(f"Initiating standard ring extraction on: {surface_mesh_path}")
-            print(f"Using provided output directory: {output_dir}")
+            print(f"\nINFO: Initiating standard ring extraction on: {surface_mesh_path}")
+            print(f"INFO: Using provided output directory: {output_dir}")
 
         os.makedirs(output_dir, exist_ok=True)
 

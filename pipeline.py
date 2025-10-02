@@ -68,6 +68,9 @@ EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 LAA_APEX_ID_FOR_SSM = 6329
 RAA_APEX_ID_FOR_SSM = 21685
 
+# Configuration for test data capture behavior
+OVERWRITE_TEST_DATA = True  # Set to False to prevent overwriting existing test data files
+
 pv.set_plot_theme('dark')
 
 # Determine number of CPU cores for parallel processing
@@ -163,6 +166,7 @@ def _save_apex_ids(csv_base: str, ids: Dict[str, int]) -> None:
     df = pd.DataFrame(ids)
     df.to_csv(f"{csv_base}_mesh_data.csv", float_format="%.2f", index=False)
 
+
 def _save_apex_coordinates(csv_base: str, coords: Dict[str, Tuple[float, float, float]]) -> None:
     """
     Saves apex coordinates to '<csv_base>_mesh_data.csv'.
@@ -198,6 +202,38 @@ def _save_apex_coordinates_to_file(filepath: str, coords: Dict[str, Tuple[float,
 
     df = pd.DataFrame(data)
     df.to_csv(filepath, index=False, float_format="%.6f")
+
+
+def _save_orifice_coordinates_to_csv(csv_path: str, orifice_coords: dict) -> None:
+    """
+    Save orifice coordinates to CSV file.
+
+    Args:
+        csv_path: Full path to the CSV file to create
+        orifice_coords: Dictionary mapping orifice names to (x, y, z) tuples
+    """
+    import pandas as pd
+
+    if not orifice_coords:
+        print(f"WARNING: No orifice coordinates to save at {csv_path}")
+        return
+
+    data = {'orifice_name': [], 'x': [], 'y': [], 'z': []}
+
+    for orifice_name, coords in orifice_coords.items():
+        data['orifice_name'].append(orifice_name)
+        data['x'].append(float(coords[0]))
+        data['y'].append(float(coords[1]))
+        data['z'].append(float(coords[2]))
+
+    df = pd.DataFrame(data)
+    df.to_csv(csv_path, index=False, float_format="%.6f")
+
+    print(f"File: {csv_path}")
+    for name, coords in orifice_coords.items():
+        print(f"{name}: ({coords[0]:.6f}, {coords[1]:.6f}, {coords[2]:.6f})")
+
+
 def _ensure_obj_available(base_path_no_ext: str, original_extension: str = ".vtk") -> str:
     """
     Ensures a .obj file exists for the given base path. Converts from .vtk or .ply if .obj is missing.
@@ -308,9 +344,14 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
     # This block now runs AFTER the mesh has been cut or separated.
     # It handles both automated (file-based) and manual apex picking.
 
+    # Initialize this to track if we manually picked coordinates
+    apex_coordinates_picked = {}
+    apex_ids_determined = {}
+
     # Only perform apex picking if the orifice function didn't already provide it.
     if apex_id_for_resampling == -1:
-        print("--- Determining Apex on Final Mesh ---")
+        print("\n--- Determining Apex on Final Mesh ---")
+
         # Load the final mesh for apex determination
         final_mesh_path = paths.active_mesh_base.with_suffix('.vtk')
         if not final_mesh_path.exists():
@@ -327,8 +368,6 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
             atria_to_process = ["LAA", "RAA"]
         else:
             raise ValueError(f"Unknown atrium type: {args.atrium}")
-
-        apex_ids_determined = {}
 
         if args.apex_file:
             print(f"Loading apex coords from file: {args.apex_file}")
@@ -403,8 +442,6 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
         else:  # Manual interactive picking
             print("No apex file provided. Starting interactive point picking on final mesh...")
 
-            apex_coordinates_picked = {}
-
             for atrium_key in atria_to_process:
                 apex_coord = pick_point(final_mesh_pv, f"{atrium_key} appendage apex")
                 if apex_coord is None:
@@ -414,18 +451,7 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
                 apex_ids_determined[atrium_key] = apex_id
                 apex_coordinates_picked[atrium_key] = tuple(apex_coord)
 
-                print(f"Picked {atrium_key} apex at coordinate {apex_coord}, mapped to point ID {apex_id}")
-
-            if apex_coordinates_picked:
-                coord_save_path = str(paths.active_mesh_base) + "_apexes.csv"
-                _save_apex_coordinates(coord_save_path, apex_coordinates_picked)
-                _save_apex_coordinates_to_file(coord_save_path, apex_coordinates_picked)
-                print(f"\n=== SAVED APEX COORDINATES ===")
-                print(f"File: {coord_save_path}")
-                for atrium, coord in apex_coordinates_picked.items():
-                    print(f"  {atrium}: ({coord[0]:.6f}, {coord[1]:.6f}, {coord[2]:.6f})")
-                print(f"Copy this file to your test_data directory to use in automated tests")
-                print(f"================================\n")
+                print(f"Picked {atrium_key} apex at coordinate {apex_coord}, mapped to apex point ID {apex_id}")
 
         # Set the determined apex IDs on the generator
         if "LAA" in apex_ids_determined:
@@ -456,7 +482,26 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
         _save_apex_ids(str(paths.active_mesh_base), csv_data_to_save)
         print(f"Saved final apex ID to {paths.active_mesh_base}_mesh_data.csv")
 
+    # Save apex coordinates to input-mesh-named CSV for test automation
+    if apex_coordinates_picked:
+        input_mesh_basename = paths.initial_mesh.stem
+        input_mesh_dir = paths.initial_mesh.parent
+        apex_csv_for_testing = input_mesh_dir / f"{input_mesh_basename}_apexes.csv"
+        _save_apex_coordinates_to_file(str(apex_csv_for_testing), apex_coordinates_picked)
+
+        print(f"\n--- Saving Apex Coordinates for Testing... ---")
+        print(f"File: {apex_csv_for_testing}")
+        for atrium, coord in apex_coordinates_picked.items():
+            print(f"{atrium}: ({coord[0]:.6f}, {coord[1]:.6f}, {coord[2]:.6f})")
+
+        if getattr(args, 'save_test_data', False):
+            print(f"INFO: Will be automatically copied to tests/test_data/ at pipeline at the end of the xecution of "
+                  f"the program.")
+        else:
+            print(f"Copy this file to tests/test_data/ for automated tests")
+
     return apex_id_for_resampling
+
 
 def _ensure_ssm_base_landmarks_exist(args: Any) -> None:
     """
@@ -717,7 +762,8 @@ def _resample_mesh_if_needed(args: Any, paths: WorkflowPaths):
 
     if not apex_available:
         print('WARNING: Resampling requested but no apex information available.')
-        print('Provide apex via --apex-file, enable --find_appendage=1, or ensure apex IDs were saved in a previous step.')
+        print(
+            'Provide apex via --apex-file, enable --find_appendage=1, or ensure apex IDs were saved in a previous step.')
         return
 
     print(f'INFO: Resampling requested and apex information available from {apex_source}.')
@@ -775,7 +821,7 @@ def _update_generator_with_apex_ids(paths: WorkflowPaths, generator: AtrialBound
     if raa_id is not None:
         generator.ra_apex = raa_id
 
-    print(f"INFO: Final apex IDs for '{paths.active_mesh_base.name}': LAA={generator.la_apex}, RAA={generator.ra_apex}")
+    print(f"INFO: Final apex IDs after resampling for '{paths.active_mesh_base.name}': LAA={generator.la_apex}, RAA={generator.ra_apex}")
 
 
 def _execute_labeling_and_fiber_generation(args: Any, paths: WorkflowPaths, generator: AtrialBoundaryGenerator,
@@ -791,7 +837,8 @@ def _execute_labeling_and_fiber_generation(args: Any, paths: WorkflowPaths, gene
     """
     # Ensure the mesh is in OBJ format for labeling
     path_for_labeling_obj = _ensure_obj_available(str(paths.active_mesh_base), paths.active_mesh_base.suffix)
-    print(f"INFO: Ensuring OBJ for final labeling exists at: {path_for_labeling_obj}")
+    if args.debug:
+        print(f"DEBUG: Ensuring OBJ for final labeling exists at: {path_for_labeling_obj}")
 
     try:
         if args.atrium == "LA_RA":
@@ -854,7 +901,7 @@ def _execute_labeling_and_fiber_generation(args: Any, paths: WorkflowPaths, gene
             os.system(cmd2)
 
         elif args.atrium == "LA":
-            print(f"INFO: LA path (non-SSM). Labeling and preparing fibers for: {path_for_labeling_obj}")
+            print(f"INFO: LA path is underway (non-SSM). Labeling and preparing fibers for: {path_for_labeling_obj}")
             print(f"INFO: Using LAA: {generator.la_apex} for labeling.")
 
             try:
@@ -1024,23 +1071,35 @@ def _plot_debug_results(paths: WorkflowPaths, args) -> None:
 
     # The `paths` methods will correctly build the final file path based on the active stage
     # and will automatically handle the special subdirectory logic for the LA_RA case.
-    if is_volumetric_plot:
-        path_to_plot_file = paths.final_volumetric_mesh(args.ofmt)
-    else:
-        # In LA_RA case, fibers for RA part were in result_RA, and args.atrium was LA_RA for path construction
-        path_to_plot_file = paths.final_bilayer_mesh(args.ofmt)
-
-    print(f"INFO: Debug plotting. Reading file: {path_to_plot_file}")
+    try:
+        if is_volumetric_plot:
+            path_to_plot_file = paths.final_volumetric_mesh(args.ofmt)
+        else:
+            # In LA_RA case, fibers for RA part were in result_RA, and args.atrium was LA_RA for path construction
+            path_to_plot_file = paths.final_bilayer_mesh(args.ofmt)
+    except Exception as e:
+        print(f"ERROR: Failed to determine plot file path: {e}")
+        return
 
     if not path_to_plot_file.exists():
         print(f"ERROR: Cannot plot. File not found: {path_to_plot_file}")
         # Exit the function cleanly if the expected output file doesn't exist
         return
 
+    print(f"INFO: Debug plotting... Reading file: {path_to_plot_file}")
+
+    # Load the mesh data
     try:
         bil = pv.read(path_to_plot_file)
+    except Exception as e:
+        print(f"ERROR: Failed to read mesh file {path_to_plot_file}: {e}")
+        return
 
-        tag_data_array = None
+    # Process element tags for visualization
+    scalar_viz_key = None
+    tag_data_array = None
+    try:
+        # Find element tag data in either point or cell data
         if 'elemTag' in bil.point_data:
             tag_data_array = bil.point_data['elemTag']
         elif 'elemTag' in bil.cell_data:
@@ -1049,62 +1108,171 @@ def _plot_debug_results(paths: WorkflowPaths, args) -> None:
                 tag_data_array = bil.point_data['elemTag']
 
         if tag_data_array is not None:
+            # Process tags for visualization
             processed_tags_for_viz = tag_data_array.copy()
 
-            mask = processed_tags_for_viz > 99
-            processed_tags_for_viz[mask] = 0
-
-            mask = processed_tags_for_viz > 80
-            processed_tags_for_viz[mask] = 20
-
-            mask_gt10 = processed_tags_for_viz > 10
-            processed_tags_for_viz[mask_gt10] -= 10
-
-            mask_gt50 = processed_tags_for_viz > 50
-            processed_tags_for_viz[mask_gt50] -= 50
+            # Apply tag processing rules
+            processed_tags_for_viz[processed_tags_for_viz > 99] = 0
+            processed_tags_for_viz[processed_tags_for_viz > 80] = 20
+            processed_tags_for_viz[processed_tags_for_viz > 10] -= 10
+            processed_tags_for_viz[processed_tags_for_viz > 50] -= 50
 
             bil.point_data['elemTag_visualized'] = processed_tags_for_viz
             scalar_viz_key = 'elemTag_visualized'
         else:
-            scalar_viz_key = None
             print("WARNING: 'elemTag' not found in mesh for plotting.")
 
-        p = pv.Plotter(notebook=False, off_screen=True)
+    except Exception as e:
+        print(f"ERROR: Failed to process element tags: {e}")
+        return
+
+    # Determine mode
+    no_plot_flag = getattr(args, 'no_plot', False)
+
+    # Create the plotter
+    try:
+        p = pv.Plotter(notebook=False, off_screen=no_plot_flag)
+
         if not args.closed_surface:
+            # Add fiber glyphs if fiber data exists
             if 'fiber' in bil.point_data:
-                geom = pv.Line()
-
-                if scalar_viz_key and scalar_viz_key in bil.point_data:
-                    scale_glyph_by = scalar_viz_key
-                else:
-                    scale_glyph_by = None
-
                 try:
+                    geom = pv.Line()
+
+                    if scalar_viz_key and scalar_viz_key in bil.point_data:
+                        scale_glyph_by = scalar_viz_key
+                    else:
+                        scale_glyph_by = None
+
                     fibers = bil.glyph(orient="fiber", factor=0.5, geom=geom, scale=scale_glyph_by)
-                    p.add_mesh(fibers,
-                               show_scalar_bar=False,
-                               cmap='tab20',
-                               line_width=10,
-                               render_lines_as_tubes=True)
+                    p.add_mesh(
+                        fibers,
+                        show_scalar_bar=False,
+                        cmap='tab20',
+                        line_width=10,
+                        render_lines_as_tubes=True
+                    )
 
                 except Exception as e_glyph:
                     print(f"WARNING: Could not create fiber glyphs: {e_glyph}")
             else:
                 print("WARNING: 'fiber' data not found for glyphing.")
 
+            # Add the main mesh
+            p.add_mesh(bil, scalars=scalar_viz_key, show_scalar_bar=False, cmap='tab20')
+        else:
+            # For closed surface, just add the main mesh
             p.add_mesh(bil, scalars=scalar_viz_key, show_scalar_bar=False, cmap='tab20')
 
-        p.show()
-
-        output_plot_path = Path(args.mesh).parent / "test_debug_plot.png"
-        p.screenshot(str(output_plot_path))
-        print(f"SAVED DEBUG PLOT TO: {output_plot_path}")
-        p.close()
+        if no_plot_flag:
+            # Testing mode: save screenshot only
+            output_plot_path = Path(args.mesh).parent / "test_debug_plot.png"
+            p.show(screenshot=str(output_plot_path))
+            print(f"Debug Plot Saved (testing mode): {output_plot_path}")
+        else:
+            # Regular mode: interactive display only (NO SCREENSHOT)
+            print("Opening interactive plot window (close it to continue)...")
+            try:
+                # Use interactive=True to ensure the window blocks until closed
+                p.show(interactive=True, auto_close=False)
+                print("Interactive plot window closed.")
+                print("Interactive plot window closed.")
+            except Exception as show_err:
+                print(f"ERROR: Interactive show failed: {show_err}")
+                print("This usually means X11 display is not configured in your Docker container.")
+                print(
+                    "Make sure you have X11 forwarding enabled: docker run -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix ...")
 
     except Exception as e:
         print(f"ERROR during debug plotting: {e}")
-        import traceback
         traceback.print_exc()
+
+
+def _capture_test_data(paths: WorkflowPaths, args) -> None:
+    """
+    Automatically save test data for regression testing.
+    Copies results, input mesh, and coordinate files to test directories.
+
+    Controlled by OVERWRITE_TEST_DATA constant at top of file.
+    """
+    if not getattr(args, 'save_test_data', False):
+        return
+
+    import shutil
+
+    # Define test directories
+    test_data_dir = Path("tests/test_data")
+    good_results_dir = Path("tests/good_results")
+
+    # Create directories if they don't exist
+    test_data_dir.mkdir(parents=True, exist_ok=True)
+    good_results_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extract input mesh basename for naming CSVs
+    input_mesh_basename = paths.initial_mesh.stem  # e.g., "LA_MRI"
+    input_mesh_dir = paths.initial_mesh.parent
+
+    # Track what was captured
+    captured_files = []
+    skipped_files = []
+
+    # 1. Copy input mesh to test_data
+    test_mesh_dest = test_data_dir / paths.initial_mesh.name
+    if test_mesh_dest.exists() and not OVERWRITE_TEST_DATA:
+        skipped_files.append(f"Input mesh (already exists): {test_mesh_dest}")
+    else:
+        shutil.copy2(paths.initial_mesh, test_mesh_dest)
+        captured_files.append(f"Input mesh: {test_mesh_dest}")
+
+    # 2. Copy apex coordinates if they exist
+    apex_csv_source = input_mesh_dir / f"{input_mesh_basename}_apexes.csv"
+    if apex_csv_source.exists():
+        apex_csv_dest = test_data_dir / f"{input_mesh_basename}_apexes.csv"
+        if apex_csv_dest.exists() and not OVERWRITE_TEST_DATA:
+            skipped_files.append(f"Apex coords (already exists): {apex_csv_dest}")
+        else:
+            shutil.copy2(apex_csv_source, apex_csv_dest)
+            captured_files.append(f"Apex coords: {apex_csv_dest}")
+    else:
+        print(f"WARNING: Apex CSV not found at {apex_csv_source}")
+
+    # 3. Copy orifice coordinates if they exist
+    orifice_csv_source = input_mesh_dir / f"{input_mesh_basename}_orifices.csv"
+    if orifice_csv_source.exists():
+        orifice_csv_dest = test_data_dir / f"{input_mesh_basename}_orifices.csv"
+        if orifice_csv_dest.exists() and not OVERWRITE_TEST_DATA:
+            skipped_files.append(f"Orifice coords (already exists): {orifice_csv_dest}")
+        else:
+            shutil.copy2(orifice_csv_source, orifice_csv_dest)
+            captured_files.append(f"Orifice coords: {orifice_csv_dest}")
+    else:
+        print(f"WARNING: Orifice CSV not found at {orifice_csv_source}")
+
+    # 4. Copy output results to good_results
+    if paths.surf_dir.exists():
+        results_dest = good_results_dir / paths.surf_dir.name
+        if results_dest.exists():
+            if OVERWRITE_TEST_DATA:
+                shutil.rmtree(results_dest)
+                shutil.copytree(paths.surf_dir, results_dest)
+                captured_files.append(f"Results: {results_dest}")
+            else:
+                skipped_files.append(f"Results (already exists): {results_dest}")
+        else:
+            shutil.copytree(paths.surf_dir, results_dest)
+            captured_files.append(f"Results: {results_dest}")
+    else:
+        print(f"WARNING: Output surf directory not found: {paths.surf_dir}")
+
+    # Print summary
+    print("\nCAPTURED FILES:")
+    for item in captured_files:
+        print(f"  • {item}")
+
+    if skipped_files:
+        print(f"\nSKIPPED (OVERWRITE_TEST_DATA={OVERWRITE_TEST_DATA}):")
+        for item in skipped_files:
+            print(f"  • {item}")
 
 
 def AugmentA(args):
@@ -1130,14 +1298,13 @@ def AugmentA(args):
             print("\n--- Plotting Debug Results ---")
             _plot_debug_results(paths, args)
 
+        _capture_test_data(paths, args)
+
         print("\n--- Pipeline Finished ---")
 
     except Exception as e:
-        print("\n" + "=" * 80, file=sys.stderr)
         print("FATAL ERROR: Pipeline failed with full traceback:", file=sys.stderr)
-        print("=" * 80, file=sys.stderr)
 
-        import traceback
         traceback.print_exc(file=sys.stderr)
 
         print("=" * 80, file=sys.stderr)

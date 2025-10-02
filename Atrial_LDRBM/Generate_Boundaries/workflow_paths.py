@@ -37,8 +37,8 @@ class WorkflowPaths:
         """Logs the currently active stage and mesh base path to the console."""
         stage_name = self._active_stage
         active_base_name = self._base_paths[stage_name].name
-        print(f"--- Stage Complete: '{stage_name}' ---")
-        print(f"    Active mesh is now: '{active_base_name}'")
+        print(f"\n--- Stage Complete: '{stage_name}' ---")
+        print(f"Active mesh is now: '{active_base_name}'")
 
     @property
     def active_mesh_base(self) -> Path:

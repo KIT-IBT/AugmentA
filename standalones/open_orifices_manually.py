@@ -268,7 +268,7 @@ def open_orifices_manually(
     if min_cutting_radius > max_cutting_radius:
         raise ValueError(f"min_cutting_radius ({min_cutting_radius}) cannot be greater than max_cutting_radius ({max_cutting_radius})")
 
-    print(f"--- Starting Manual Orifice Opening for {atrium} ---")
+    print(f"\n--- Starting Manual Orifice Opening for {atrium} ---")
 
     # Clean the mesh and obtain the cleaned VTK file
     try:
@@ -316,6 +316,14 @@ def open_orifices_manually(
                 if picked_pt is None:
                     raise RuntimeError(f"Picking cancelled or failed for {r_name}")
 
+                # Store the picked coordinate
+                picked_coordinates.append({
+                    'orifice_name': r_name,
+                    'x': float(picked_pt[0]),
+                    'y': float(picked_pt[1]),
+                    'z': float(picked_pt[2])
+                })
+
         except Exception as e:
             raise RuntimeError(f"Point picking failed for {r_name}: {e}")
 
@@ -324,7 +332,7 @@ def open_orifices_manually(
             selected_radius = max_cutting_radius
         else:
             selected_radius = min_cutting_radius
-        print(f"Cutting '{r_name}' with radius {selected_radius} at {picked_pt}")
+        print(f"Cutting '{r_name}' with radius of {selected_radius} at {picked_pt}")
 
         # Cutting the hole
         try:
@@ -333,6 +341,21 @@ def open_orifices_manually(
                 raise RuntimeError("Mesh empty after cutting.")
         except Exception as e:
             raise RuntimeError(f"Cutting failed for {r_name}: {e}")
+
+    # Save picked orifice coordinates to input-mesh-named CSV
+    if picked_coordinates:
+        input_mesh_dir = os.path.dirname(meshpath)
+        input_mesh_basename = os.path.splitext(os.path.basename(meshpath))[0]
+
+        orifice_csv_path = os.path.join(input_mesh_dir, f"{input_mesh_basename}_orifices.csv")
+
+        _save_orifice_coordinates(picked_coordinates, orifice_csv_path)
+
+        print(f"File: {orifice_csv_path}")
+        for coord in picked_coordinates:
+            print(f"{coord['orifice_name']}: ({coord['x']:.6f}, {coord['y']:.6f}, {coord['z']:.6f})")
+
+        print(f"Note: If using --save-test-data=1, this data will be auto-copied to tests/test_data/")
 
     try:
         model_final_vtk = extract_largest_region(current_mesh_vtk)
@@ -348,32 +371,7 @@ def open_orifices_manually(
         vtk_polydata_writer(cutted_path, model_final_vtk)
     except Exception as e:
         raise RuntimeError(f"Failed to save cut mesh: {e}")
-    """
-    try:
-        if apex_coordinate is not None:
-            # Use provided apex coordinate (automatic mode)
-            apex_coord = apex_coordinate
-            print(f"Using provided apex coordinate: {apex_coord}")
-        else:
-            # Manually pick the appendage apex on the final cut mesh
-            mesh_pv_final = pv.PolyData(model_final_vtk)
-            apex_coord = pick_point(mesh_pv_final, f"{atrium} appendage apex")
-            if apex_coord is None:
-                raise RuntimeError("Apex point picking cancelled or failed.")
-    except Exception as e:
-        if apex_coordinate is not None:
-            raise RuntimeError(f"Error using provided apex coordinate: {e}")
-        else:
-            raise RuntimeError(f"Error during apex picking setup: {e}")
 
-    # Find the closest point ID on the final VTK model
-    try:
-        apex_id = find_closest_point(model_final_vtk, apex_coord)
-        if apex_id < 0:
-            raise RuntimeError("Could not find closest point for apex.")
-    except Exception as e:
-        raise RuntimeError(f"Apex ID determination failed: {e}")
-    """
     return cutted_path, -1
 
 

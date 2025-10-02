@@ -120,6 +120,10 @@ def parser():
     parser.add_argument('--no-plot',
                         action='store_true',
                         help='Disable the final interactive plot, for headless environments.')
+    parser.add_argument('--save-test-data',
+                        type=int,
+                        default=0,
+                        help='Save test data to tests/ directories for automated testing (1=yes, 0=no)')
 
     return parser
 
