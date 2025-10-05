@@ -42,6 +42,8 @@ import numpy as np
 import pandas as pd
 import pyvista as pv
 from scipy.spatial import cKDTree
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer
+from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
 
 from standalones.open_orifices_with_curvature import open_orifices_with_curvature
 from standalones.open_orifices_manually import open_orifices_manually
@@ -281,9 +283,9 @@ def _setup(args) -> Tuple[WorkflowPaths, AtrialBoundaryGenerator]:
     args.SSM_file = os.path.abspath(args.SSM_file)
     args.SSM_basename = os.path.abspath(args.SSM_basename)
 
+    mesh = convert_mesh_to_polydata(args, paths)
     if args.normals_outside < 0:
-        polydata = smart_reader(str(paths.initial_mesh))
-        args.normals_outside = int(are_normals_outside(polydata))
+        args.normals_outside = int(are_normals_outside(mesh))
 
     generator = AtrialBoundaryGenerator(
         mesh_path=str(paths.initial_mesh),
@@ -294,6 +296,14 @@ def _setup(args) -> Tuple[WorkflowPaths, AtrialBoundaryGenerator]:
         debug=bool(args.debug)
     )
     return paths, generator
+
+
+def convert_mesh_to_polydata(args, paths: WorkflowPaths) -> Any:
+    mesh = smart_reader(str(paths.initial_mesh))
+    if type(mesh) is vtkUnstructuredGrid:
+        mesh = apply_vtk_geom_filter(mesh)
+        vtk_polydata_writer(args.mesh, mesh)
+    return mesh
 
 
 def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, args) -> int:
