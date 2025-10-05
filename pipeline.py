@@ -1,6 +1,6 @@
 # pipeline.py
 
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Mon Apr 19 14:55:02 2021
@@ -43,8 +43,10 @@ import pandas as pd
 import pyvista as pv
 from scipy.spatial import cKDTree
 from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer
+from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_lower_threshold
 from vtkmodules.vtkCommonDataModel import vtkUnstructuredGrid
 
+from standalones.function import cut_into_two_parts
 from standalones.open_orifices_with_curvature import open_orifices_with_curvature
 from standalones.open_orifices_manually import open_orifices_manually
 from standalones.prealign_meshes import prealign_meshes
@@ -56,7 +58,7 @@ from Atrial_LDRBM.LDRBM.Fiber_LA import la_main
 from Atrial_LDRBM.LDRBM.Fiber_RA import ra_main
 
 from vtk_openCARP_methods_ibt.AugmentA_methods.point_selection import pick_point, pick_point_with_preselection
-from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, vtk_append
 from vtk_openCARP_methods_ibt.vtk_methods.mapper import mapp_ids_for_folder
 from vtk_openCARP_methods_ibt.vtk_methods.normal_orientation import are_normals_outside
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
@@ -321,7 +323,9 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
         paths._update_stage('epi_separated', base_path=str(paths.closed_surface_epi_mesh))
 
     elif args.open_orifices:
-        orifice_func = open_orifices_with_curvature if args.use_curvature_to_open else open_orifices_manually
+
+        orifice_func = (_cut_voltage_map if not args.MRI else open_orifices_with_curvature if args.use_curvature_to_open
+        else open_orifices_manually)
         print(f"Calling {orifice_func.__name__} for mesh='{args.mesh}', atrium='{args.atrium}'...")
 
         orifice_params = {'meshpath': str(paths.initial_mesh),
@@ -569,6 +573,24 @@ def _generate_target_mesh_landmarks(paths: WorkflowPaths, args: Any) -> None:
         get_landmarks(str(paths.cut_mesh), prealigned=1, scale=1)
     except Exception as e:
         raise RuntimeError(f"Landmark generation failed for '{paths.cut_mesh}': {e}")
+
+
+def _cut_voltage_map(meshpath, atrium, MRI, scale, min_cutting_radius,
+                     max_cutting_radius, debug):
+    mesh = smart_reader(meshpath)
+    point_data = mesh.GetPointData()
+
+    cut_array_names = [point_data.GetArrayName(i) for i in range(point_data.GetNumberOfArrays())]
+    candidates = ["valve", "cutoutMask"]
+
+    selected = next((name for name in candidates if name in cut_array_names), None)
+    thresholded_unst_grid = get_lower_threshold(mesh, 0.5, "vtkDataObject::FIELD_ASSOCIATION_POINTS",
+                                                selected).GetOutput()
+    poly_mesh = apply_vtk_geom_filter(thresholded_unst_grid)
+    path_no_ext = os.path.splitext(meshpath)[0]
+    cut_path = path_no_ext + "_cut.vtk"
+    vtk_polydata_writer(cut_path, poly_mesh)
+    return cut_path, -1
 
 
 def _create_ssm_registration_script(paths: WorkflowPaths, args: Any) -> None:
@@ -831,7 +853,8 @@ def _update_generator_with_apex_ids(paths: WorkflowPaths, generator: AtrialBound
     if raa_id is not None:
         generator.ra_apex = raa_id
 
-    print(f"INFO: Final apex IDs after resampling for '{paths.active_mesh_base.name}': LAA={generator.la_apex}, RAA={generator.ra_apex}")
+    print(
+        f"INFO: Final apex IDs after resampling for '{paths.active_mesh_base.name}': LAA={generator.la_apex}, RAA={generator.ra_apex}")
 
 
 def _execute_labeling_and_fiber_generation(args: Any, paths: WorkflowPaths, generator: AtrialBoundaryGenerator,
