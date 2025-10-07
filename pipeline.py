@@ -1099,6 +1099,11 @@ def _plot_debug_results(paths: WorkflowPaths, args) -> None:
     :param args:  Command-line arguments including flags and formats
     :return:      None
     """
+    no_plot_flag = getattr(args, 'no_plot', False)
+    if no_plot_flag:
+        print("INFO: Plotting disabled (--no-plot flag set)")
+        return
+
     # Determine if the final active mesh was a volumetric one.
     is_volumetric_plot = "_vol" in paths.active_mesh_base.name
 
@@ -1159,9 +1164,6 @@ def _plot_debug_results(paths: WorkflowPaths, args) -> None:
         print(f"ERROR: Failed to process element tags: {e}")
         return
 
-    # Determine mode
-    no_plot_flag = getattr(args, 'no_plot', False)
-
     # Create the plotter
     try:
         p = pv.Plotter(notebook=False, off_screen=no_plot_flag)
@@ -1197,24 +1199,18 @@ def _plot_debug_results(paths: WorkflowPaths, args) -> None:
             # For closed surface, just add the main mesh
             p.add_mesh(bil, scalars=scalar_viz_key, show_scalar_bar=False, cmap='tab20')
 
-        if no_plot_flag:
-            # Testing mode: save screenshot only
-            output_plot_path = Path(args.mesh).parent / "test_debug_plot.png"
-            p.show(screenshot=str(output_plot_path))
-            print(f"Debug Plot Saved (testing mode): {output_plot_path}")
-        else:
-            # Regular mode: interactive display only (NO SCREENSHOT)
-            print("Opening interactive plot window (close it to continue)...")
-            try:
-                # Use interactive=True to ensure the window blocks until closed
-                p.show(interactive=True, auto_close=False)
-                print("Interactive plot window closed.")
-                print("Interactive plot window closed.")
-            except Exception as show_err:
-                print(f"ERROR: Interactive show failed: {show_err}")
-                print("This usually means X11 display is not configured in your Docker container.")
-                print(
-                    "Make sure you have X11 forwarding enabled: docker run -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix ...")
+        # Interactive display only (NO SCREENSHOT in regular mode)
+        print("Opening interactive plot window (close it to continue)...")
+        try:
+            # Use interactive=True to ensure the window blocks until closed
+            p.show(interactive=True, auto_close=False)
+            print("Interactive plot window closed.")
+        except Exception as show_err:
+            print(f"ERROR: Interactive show failed: {show_err}")
+            print("This usually means X11 display is not configured in your Docker container.")
+            print(
+                "Make sure you have X11 forwarding enabled: docker run -e DISPLAY=$DISPLAY -v "
+                "/tmp/.X11-unix:/tmp/.X11-unix ...")
 
     except Exception as e:
         print(f"ERROR during debug plotting: {e}")
