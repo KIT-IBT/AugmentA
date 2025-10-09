@@ -1,157 +1,378 @@
-import os
-import sys
-import csv
-import tempfile
-import unittest
-from unittest.mock import patch, MagicMock
+import pytest
+import vtk
+from unittest.mock import Mock, patch, MagicMock
+from Atrial_LDRBM.Generate_Boundaries.epi_endo_separator import EpiEndoSeparator
+from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
-from Atrial_LDRBM.Generate_Boundaries import separate_epi_endo
+class TestEpiEndoSeparatorInit:
+    """Test the EpiEndoSeparator constructor."""
 
-class TestSeparateEpiEndo(unittest.TestCase):
-    # -------------------- Tests for load_element_tags --------------------
-    def test_load_element_tags_valid(self):
-        # Create a temporary CSV file with valid data.
-        with tempfile.NamedTemporaryFile(mode="w+", delete=False, newline='') as tmp:
-            fieldnames = ['name', 'tag']
-            writer = csv.DictWriter(tmp, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerow({'name': 'a', 'tag': '1'})
-            writer.writerow({'name': 'b', 'tag': '2'})
-            tmp_filepath = tmp.name
+    def test_init_valid_LA(self):
+        """Test successful initialization with valid LA tags."""
+        element_tags = {
+            'left_atrial_wall_epi': '10',
+            'left_atrial_wall_endo': '20'
+        }
+        separator = EpiEndoSeparator(element_tags, 'LA')
 
-        try:
-            result = separate_epi_endo.load_element_tags(tmp_filepath)
-            self.assertEqual(result, {'a': '1', 'b': '2'})
-        finally:
-            os.remove(tmp_filepath)
+        assert separator.atrium == 'LA'
+        assert separator.epi_tag == 10
+        assert separator.endo_tag == 20
 
-    def test_load_element_tags_file_not_found(self):
-        with self.assertRaises(FileNotFoundError):
-            separate_epi_endo.load_element_tags("non_existent.csv")
+    def test_init_valid_RA(self):
+        """Test successful initialization with valid RA tags."""
+        element_tags = {
+            'right_atrial_wall_epi': '30',
+            'right_atrial_wall_endo': '40'
+        }
+        separator = EpiEndoSeparator(element_tags, 'RA')
 
-    def test_load_element_tags_missing_columns(self):
-        with tempfile.NamedTemporaryFile(mode="w+", delete=False, newline='') as tmp:
-            fieldnames = ['wrong', 'column']
-            writer = csv.DictWriter(tmp, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerow({'wrong': 'a', 'column': '1'})
-            tmp_filepath = tmp.name
+        assert separator.atrium == 'RA'
+        assert separator.epi_tag == 30
+        assert separator.endo_tag == 40
 
-        try:
-            with self.assertRaises(RuntimeError):
-                separate_epi_endo.load_element_tags(tmp_filepath)
-        finally:
-            os.remove(tmp_filepath)
+    def test_init_invalid_atrium(self):
+        """Test that ValueError is raised for invalid atrium."""
+        element_tags = {
+            'left_atrial_wall_epi': '10',
+            'left_atrial_wall_endo': '20'
+        }
 
-    # -------------------- Tests for get_wall_tags --------------------
-    def test_get_wall_tags_LA(self):
-        tag_dict = {'left_atrial_wall_epi': '10', 'left_atrial_wall_endo': '20'}
-        result = separate_epi_endo.get_wall_tags(tag_dict, "LA")
-        self.assertEqual(result, (10, 20))
+        with pytest.raises(ValueError, match="Atrium must be 'LA' or 'RA'"):
+            EpiEndoSeparator(element_tags, 'XX')
 
-    def test_get_wall_tags_RA(self):
-        tag_dict = {'right_atrial_wall_epi': '30', 'right_atrial_wall_endo': '40'}
-        result = separate_epi_endo.get_wall_tags(tag_dict, "RA")
-        self.assertEqual(result, (30, 40))
+        with pytest.raises(ValueError, match="Atrium must be 'LA' or 'RA'"):
+            EpiEndoSeparator(element_tags, 'LV')
 
-    def test_get_wall_tags_invalid_atrium(self):
-        tag_dict = {}
-        with self.assertRaises(ValueError):
-            separate_epi_endo.get_wall_tags(tag_dict, "XX")
+    def test_init_missing_epi_tag_LA(self):
+        """Test that KeyError is raised when LA epi tag is missing."""
+        element_tags = {
+            'left_atrial_wall_endo': '20'
+        }
 
-    def test_get_wall_tags_missing_key(self):
-        tag_dict = {'left_atrial_wall_epi': '10'}  # Missing left_atrial_wall_endo
-        with self.assertRaises(KeyError) as cm:
-            separate_epi_endo.get_wall_tags(tag_dict, "LA")
-        self.assertIn("Missing expected tag for LA", str(cm.exception))
+        with pytest.raises(KeyError, match="Missing tag in element_tags"):
+            EpiEndoSeparator(element_tags, 'LA')
 
-    # -------------------- Tests for threshold_model --------------------
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.get_threshold_between')
-    def test_threshold_model_success(self, mock_get_threshold_between):
-        dummy_thresh = MagicMock()
-        dummy_thresh.GetOutput.return_value = "dummy_output"
-        mock_get_threshold_between.return_value = dummy_thresh
+    def test_init_missing_endo_tag_LA(self):
+        """Test that KeyError is raised when LA endo tag is missing."""
+        element_tags = {
+            'left_atrial_wall_epi': '10'
+        }
 
-        result = separate_epi_endo.threshold_model("model", 1, 2)
-        self.assertEqual(result, dummy_thresh)
+        with pytest.raises(KeyError, match="Missing tag in element_tags"):
+            EpiEndoSeparator(element_tags, 'LA')
 
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.get_threshold_between')
-    def test_threshold_model_failure(self, mock_get_threshold_between):
-        mock_get_threshold_between.return_value = None
-        with self.assertRaises(RuntimeError):
-            separate_epi_endo.threshold_model("model", 1, 2)
+    def test_init_missing_epi_tag_RA(self):
+        """Test that KeyError is raised when RA epi tag is missing."""
+        element_tags = {
+            'right_atrial_wall_endo': '40'
+        }
 
-    # -------------------- Tests for write_filtered_meshes --------------------
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.vtk_polydata_writer')
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.vtk_obj_writer')
-    def test_write_filtered_meshes(self, mock_obj_writer, mock_polydata_writer):
-        dummy_mesh = "dummy_mesh"
-        meshname = "testmesh"
-        atrium = "LA"
-        suffix = "_test"
-        separate_epi_endo.write_filtered_meshes(meshname, atrium, suffix, dummy_mesh)
-        expected_filename_obj = f"{meshname}_{atrium}{suffix}.obj"
-        expected_filename_vtk = f"{meshname}_{atrium}{suffix}.vtk"
-        mock_obj_writer.assert_called_with(expected_filename_obj, dummy_mesh)
-        mock_polydata_writer.assert_called_with(expected_filename_vtk, dummy_mesh)
+        with pytest.raises(KeyError, match="Missing tag in element_tags"):
+            EpiEndoSeparator(element_tags, 'RA')
 
-    # -------------------- Tests for separate_epi_endo --------------------
-    def test_separate_epi_endo_file_not_found(self):
-        with self.assertRaises(FileNotFoundError):
-            separate_epi_endo.separate_epi_endo("non_existent.obj", "LA")
+    def test_init_missing_endo_tag_RA(self):
+        """Test that KeyError is raised when RA endo tag is missing."""
+        element_tags = {
+            'right_atrial_wall_epi': '30'
+        }
 
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.write_filtered_meshes')
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.apply_vtk_geom_filter')
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.threshold_model')
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.smart_reader')
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.get_wall_tags')
-    @patch('Atrial_LDRBM.Generate_Boundaries.separate_epi_endo.load_element_tags')
-    @patch('os.path.exists')
-    def test_separate_epi_endo_success(self, mock_exists, mock_load_tags, mock_get_wall_tags,
-                                         mock_smart_reader, mock_threshold_model,
-                                         mock_apply_filter, mock_write_filtered_meshes):
-        # Simulate file exists for both mesh and CSV.
-        mock_exists.return_value = True
+        with pytest.raises(KeyError, match="Missing tag in element_tags"):
+            EpiEndoSeparator(element_tags, 'RA')
 
-        # Setup dummy tags and wall tags.
-        dummy_tags = {'left_atrial_wall_epi': '10', 'left_atrial_wall_endo': '20'}
-        mock_load_tags.return_value = dummy_tags
-        mock_get_wall_tags.return_value = (10, 20)
+    def test_init_non_integer_epi_tag(self):
+        """Test that ValueError is raised when epi tag is not an integer."""
+        element_tags = {
+            'left_atrial_wall_epi': 'not_an_int',
+            'left_atrial_wall_endo': '20'
+        }
 
-        # Setup dummy model from smart_reader.
-        dummy_model = MagicMock(name="dummy_model")
-        mock_smart_reader.return_value = dummy_model
+        with pytest.raises(ValueError, match="Tag values must be integers"):
+            EpiEndoSeparator(element_tags, 'LA')
 
-        # Create dummy threshold object with GetOutput method.
-        dummy_thresh = MagicMock()
-        dummy_thresh.GetOutput.return_value = "dummy_output"
-        # threshold_model will be called three times; return dummy_thresh each time.
-        mock_threshold_model.return_value = dummy_thresh
+    def test_init_non_integer_endo_tag(self):
+        """Test that ValueError is raised when endo tag is not an integer."""
+        element_tags = {
+            'left_atrial_wall_epi': '10',
+            'left_atrial_wall_endo': 'not_an_int'
+        }
 
-        # apply_vtk_geom_filter returns filtered output.
-        mock_apply_filter.return_value = "filtered_output"
+        with pytest.raises(ValueError, match="Tag values must be integers"):
+            EpiEndoSeparator(element_tags, 'LA')
 
-        # Call the function under test.
-        dummy_path = "dummy.obj"
-        separate_epi_endo.separate_epi_endo(dummy_path, "LA")
+    def test_init_empty_tags_dict(self):
+        """Test that KeyError is raised when tags dictionary is empty."""
+        element_tags = {}
 
-        # The meshname is the input file name without extension.
-        expected_meshname = "dummy"
+        with pytest.raises(KeyError, match="Missing tag in element_tags"):
+            EpiEndoSeparator(element_tags, 'LA')
 
-        # Check that write_filtered_meshes is called three times with correct suffixes.
-        calls = [
-            ((expected_meshname, "LA", "", "filtered_output"),),
-            ((expected_meshname, "LA", "_epi", "filtered_output"),),
-            ((expected_meshname, "LA", "_endo", "filtered_output"),)
-        ]
-        actual_calls = mock_write_filtered_meshes.call_args_list
-        self.assertEqual(len(actual_calls), 3)
-        for call, expected in zip(actual_calls, calls):
-            self.assertEqual(call[0], expected[0])
 
-if __name__ == '__main__':
-    unittest.main()
+class TestEpiEndoSeparatorSeparate:
+    """Test the EpiEndoSeparator.separate method."""
+
+    def create_mock_mesh(self):
+        """Helper to create a mock Mesh with vtkUnstructuredGrid."""
+        mock_ug = Mock(spec=vtk.vtkUnstructuredGrid)
+        mock_mesh = Mock(spec=Mesh)
+        mock_mesh.get_polydata.return_value = mock_ug
+        return mock_mesh, mock_ug
+
+    def create_mock_threshold_output(self):
+        """Helper to create a mock threshold filter with output."""
+        mock_threshold = Mock()
+        mock_output = Mock(spec=vtk.vtkUnstructuredGrid)
+        mock_threshold.GetOutput.return_value = mock_output
+        return mock_threshold, mock_output
+
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.get_threshold_between')
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.apply_vtk_geom_filter')
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.Mesh')
+    def test_separate_success_LA(self, mock_mesh_class, mock_geom_filter, mock_threshold):
+        """Test successful separation for LA."""
+        element_tags = {
+            'left_atrial_wall_epi': '10',
+            'left_atrial_wall_endo': '20'
+        }
+        separator = EpiEndoSeparator(element_tags, 'LA')
+
+        # Create mock input mesh
+        mock_mesh, mock_ug = self.create_mock_mesh()
+
+        # Create mock threshold outputs
+        mock_combined_thresh, mock_combined_output = self.create_mock_threshold_output()
+        mock_epi_thresh, mock_epi_output = self.create_mock_threshold_output()
+        mock_endo_thresh, mock_endo_output = self.create_mock_threshold_output()
+
+        # Setup threshold mock to return different outputs for different calls
+        mock_threshold.side_effect = [mock_combined_thresh, mock_epi_thresh, mock_endo_thresh]
+
+        # Create mock surface outputs from geometry filter
+        mock_combined_surf = Mock(spec=vtk.vtkPolyData)
+        mock_epi_surf = Mock(spec=vtk.vtkPolyData)
+        mock_endo_surf = Mock(spec=vtk.vtkPolyData)
+        mock_geom_filter.side_effect = [mock_combined_surf, mock_epi_surf, mock_endo_surf]
+
+        # Create mock Mesh objects
+        mock_combined_mesh = Mock()
+        mock_epi_mesh = Mock()
+        mock_endo_mesh = Mock()
+        mock_mesh_class.side_effect = [mock_combined_mesh, mock_epi_mesh, mock_endo_mesh]
+
+        # Call separate
+        result = separator.separate(mock_mesh)
+
+        # Verify the result dictionary
+        assert 'combined' in result
+        assert 'epi' in result
+        assert 'endo' in result
+        assert result['combined'] == mock_combined_mesh
+        assert result['epi'] == mock_epi_mesh
+        assert result['endo'] == mock_endo_mesh
+
+        # Verify get_polydata was called
+        mock_mesh.get_polydata.assert_called_once()
+
+        # Verify threshold was called three times with correct parameters
+        assert mock_threshold.call_count == 3
+
+        # Check combined threshold call (endo_tag to epi_tag)
+        mock_threshold.assert_any_call(
+            mock_ug,
+            20,  # endo_tag
+            10,  # epi_tag
+            "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+            "tag"
+        )
+
+        # Check epi threshold call (epi_tag to epi_tag)
+        mock_threshold.assert_any_call(
+            mock_ug,
+            10,  # epi_tag
+            10,  # epi_tag
+            "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+            "tag"
+        )
+
+        # Check endo threshold call (endo_tag to endo_tag)
+        mock_threshold.assert_any_call(
+            mock_ug,
+            20,  # endo_tag
+            20,  # endo_tag
+            "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+            "tag"
+        )
+
+        # Verify geometry filter was called three times
+        assert mock_geom_filter.call_count == 3
+        mock_geom_filter.assert_any_call(mock_combined_output)
+        mock_geom_filter.assert_any_call(mock_epi_output)
+        mock_geom_filter.assert_any_call(mock_endo_output)
+
+        # Verify Mesh constructor was called three times
+        assert mock_mesh_class.call_count == 3
+        mock_mesh_class.assert_any_call(mock_combined_surf)
+        mock_mesh_class.assert_any_call(mock_epi_surf)
+        mock_mesh_class.assert_any_call(mock_endo_surf)
+
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.get_threshold_between')
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.apply_vtk_geom_filter')
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.Mesh')
+    def test_separate_success_RA(self, mock_mesh_class, mock_geom_filter, mock_threshold):
+        """Test successful separation for RA."""
+        element_tags = {
+            'right_atrial_wall_epi': '30',
+            'right_atrial_wall_endo': '40'
+        }
+        separator = EpiEndoSeparator(element_tags, 'RA')
+
+        # Create mock input mesh
+        mock_mesh, mock_ug = self.create_mock_mesh()
+
+        # Create mock threshold outputs
+        mock_combined_thresh, mock_combined_output = self.create_mock_threshold_output()
+        mock_epi_thresh, mock_epi_output = self.create_mock_threshold_output()
+        mock_endo_thresh, mock_endo_output = self.create_mock_threshold_output()
+
+        mock_threshold.side_effect = [mock_combined_thresh, mock_epi_thresh, mock_endo_thresh]
+
+        # Create mock surface outputs
+        mock_combined_surf = Mock(spec=vtk.vtkPolyData)
+        mock_epi_surf = Mock(spec=vtk.vtkPolyData)
+        mock_endo_surf = Mock(spec=vtk.vtkPolyData)
+        mock_geom_filter.side_effect = [mock_combined_surf, mock_epi_surf, mock_endo_surf]
+
+        # Create mock Mesh objects
+        mock_combined_mesh = Mock()
+        mock_epi_mesh = Mock()
+        mock_endo_mesh = Mock()
+        mock_mesh_class.side_effect = [mock_combined_mesh, mock_epi_mesh, mock_endo_mesh]
+
+        # Call separate
+        result = separator.separate(mock_mesh)
+
+        # Verify the result
+        assert 'combined' in result
+        assert 'epi' in result
+        assert 'endo' in result
+
+        # Verify threshold was called with correct RA tags
+        mock_threshold.assert_any_call(
+            mock_ug,
+            40,  # endo_tag
+            30,  # epi_tag
+            "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+            "tag"
+        )
+
+        mock_threshold.assert_any_call(
+            mock_ug,
+            30,  # epi_tag
+            30,  # epi_tag
+            "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+            "tag"
+        )
+
+        mock_threshold.assert_any_call(
+            mock_ug,
+            40,  # endo_tag
+            40,  # endo_tag
+            "vtkDataObject::FIELD_ASSOCIATION_CELLS",
+            "tag"
+        )
+
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.get_threshold_between')
+    def test_separate_threshold_returns_none(self, mock_threshold):
+        """Test behavior when threshold operation returns None."""
+        element_tags = {
+            'left_atrial_wall_epi': '10',
+            'left_atrial_wall_endo': '20'
+        }
+        separator = EpiEndoSeparator(element_tags, 'LA')
+
+        # Create mock input mesh
+        mock_mesh, mock_ug = self.create_mock_mesh()
+
+        # Make threshold return None
+        mock_threshold.return_value = None
+
+        # This should raise an AttributeError when trying to call GetOutput() on None
+        with pytest.raises(AttributeError):
+            separator.separate(mock_mesh)
+
+    def test_separate_with_invalid_mesh_type(self):
+        """Test that error is raised when mesh is not a Mesh object."""
+        element_tags = {
+            'left_atrial_wall_epi': '10',
+            'left_atrial_wall_endo': '20'
+        }
+        separator = EpiEndoSeparator(element_tags, 'LA')
+
+        # Pass something that's not a Mesh
+        with pytest.raises(AttributeError):
+            separator.separate("not_a_mesh")
+
+
+class TestEpiEndoSeparatorIntegration:
+    """Integration tests using real VTK objects (not mocked)."""
+
+    def create_simple_unstructured_grid(self):
+        """Create a simple vtkUnstructuredGrid for testing."""
+        points = vtk.vtkPoints()
+        points.InsertNextPoint(0, 0, 0)
+        points.InsertNextPoint(1, 0, 0)
+        points.InsertNextPoint(0, 1, 0)
+        points.InsertNextPoint(0, 0, 1)
+
+        ug = vtk.vtkUnstructuredGrid()
+        ug.SetPoints(points)
+
+        # Create a tetrahedron
+        tetra = vtk.vtkTetra()
+        tetra.GetPointIds().SetId(0, 0)
+        tetra.GetPointIds().SetId(1, 1)
+        tetra.GetPointIds().SetId(2, 2)
+        tetra.GetPointIds().SetId(3, 3)
+
+        ug.InsertNextCell(tetra.GetCellType(), tetra.GetPointIds())
+
+        # Add tag cell data
+        tags = vtk.vtkIntArray()
+        tags.SetName("tag")
+        tags.InsertNextValue(10)  # Epi tag
+        ug.GetCellData().AddArray(tags)
+        ug.GetCellData().SetActiveScalars("tag")
+
+        return ug
+
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.get_threshold_between')
+    @patch('Atrial_LDRBM.Generate_Boundaries.epi_endo_separator.apply_vtk_geom_filter')
+    def test_separate_integration(self, mock_geom_filter, mock_threshold):
+        """Test separate method with realistic VTK objects."""
+        element_tags = {
+            'left_atrial_wall_epi': '10',
+            'left_atrial_wall_endo': '20'
+        }
+        separator = EpiEndoSeparator(element_tags, 'LA')
+
+        # Create a real unstructured grid
+        ug = self.create_simple_unstructured_grid()
+        mesh = Mesh(ug)
+
+        # Mock the threshold and filter operations
+        mock_threshold_result = Mock()
+        mock_threshold_result.GetOutput.return_value = vtk.vtkPolyData()
+        mock_threshold.return_value = mock_threshold_result
+
+        mock_geom_filter.return_value = vtk.vtkPolyData()
+
+        # Call separate
+        result = separator.separate(mesh)
+
+        # Verify result structure
+        assert isinstance(result, dict)
+        assert 'combined' in result
+        assert 'epi' in result
+        assert 'endo' in result
+        assert all(isinstance(m, Mesh) for m in result.values())

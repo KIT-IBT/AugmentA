@@ -7,18 +7,19 @@ from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer, 
 
 class Mesh:
     """
-    Encapsulates a VTK polydata object and provides methods for I/O and basic operations.
+    Encapsulates a VTK data object (polydata or unstructured grid) and provides methods for I/O and basic operations.
     """
-    def __init__(self, polydata: vtk.vtkPolyData):
+
+    def __init__(self, data_object):
         """
         Initialize the Mesh wrapper.
 
-        :param polydata: A vtk.vtkPolyData object to encapsulate.
+        :param data_object: A vtk.vtkPolyData or vtk.vtkUnstructuredGrid object to encapsulate.
         :return: None
         """
-        if not isinstance(polydata, vtk.vtkPolyData):
-            raise TypeError("Input must be a vtk.vtkPolyData object.")
-        self.polydata = polydata
+        if not isinstance(data_object, (vtk.vtkPolyData, vtk.vtkUnstructuredGrid)):
+            raise TypeError("Input must be a vtk.vtkPolyData or vtk.vtkUnstructuredGrid object.")
+        self.polydata = data_object
 
     @classmethod
     def from_file(cls, mesh_path: str):
@@ -54,20 +55,29 @@ class Mesh:
         if not isinstance(file_path, str) or not file_path:
             raise ValueError("file_path must be a non-empty string.")
 
+        # Convert to polydata if it's an unstructured grid
+        if isinstance(self.polydata, vtk.vtkUnstructuredGrid):
+            geom_filter = vtk.vtkGeometryFilter()
+            geom_filter.SetInputData(self.polydata)
+            geom_filter.Update()
+            data_to_save = geom_filter.GetOutput()
+        else:
+            data_to_save = self.polydata
+
         ext = os.path.splitext(file_path)[1].lower()
 
         if ext in ['.vtk', '.vtp']:
             is_vtp = ext == '.vtp'
-            vtk_polydata_writer(file_path, self.polydata, store_xml=is_vtp or xml_format)
+            vtk_polydata_writer(file_path, data_to_save, store_xml=is_vtp or xml_format)
         elif ext == '.obj':
-            vtk_obj_writer(file_path, self.polydata)
+            vtk_obj_writer(file_path, data_to_save)
         else:
             raise ValueError(f"Unsupported file format '{ext}'. Use .vtk, .vtp, or .obj.")
 
-    def get_polydata(self) -> vtk.vtkPolyData:
+    def get_polydata(self):
         """
-        Return the underlying VTK polydata object.
+        Return the underlying VTK data object.
 
-        :return: vtk.vtkPolyData encapsulated by this Mesh.
+        :return: vtk.vtkPolyData or vtk.vtkUnstructuredGrid encapsulated by this Mesh.
         """
         return self.polydata
