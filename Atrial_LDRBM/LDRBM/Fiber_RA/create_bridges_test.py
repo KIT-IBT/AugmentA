@@ -39,14 +39,14 @@ from vtk.numpy_interface import dataset_adapter as dsa
 
 import Methods_RA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import generate_spline_points
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, \
     vtk_unstructured_grid_writer, vtk_obj_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
     apply_extract_cell_filter, get_cells_with_ids
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 

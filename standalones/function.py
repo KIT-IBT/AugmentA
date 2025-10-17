@@ -29,12 +29,12 @@ import numpy as np
 import scipy.spatial as spatial
 import vtk
 
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, \
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, \
     get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
     ExtractionModes
 
 

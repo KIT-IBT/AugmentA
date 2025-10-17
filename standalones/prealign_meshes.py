@@ -31,8 +31,8 @@ import transformations as tf
 import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, vtk_append
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, vtk_append
 
 
 def parser():

@@ -36,17 +36,17 @@ from scipy.spatial import cKDTree
 from sklearn.cluster import KMeans
 from vtk.numpy_interface import dataset_adapter as dsa
 
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer, write_to_vtx
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
     get_center_of_mass, get_feature_edges, get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane, \
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane_with_points, initialize_plane, \
     init_connectivity_filter, ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -243,21 +243,27 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
     rings = []
 
     for i in range(num):
+        # Tell the connect filter to focus only on the i-th region
         connect.AddSpecifiedRegion(i)
+        # Executes the filter for the specified region
         connect.Update()
+        # Gets the actual geometric data (points and lines) for this single ring
         surface = connect.GetOutput()
 
-        # Clean unused points
+        # Converts vtkUnstructuredGrid output from the connectivity filter into a vtkPolyData
         surface = apply_vtk_geom_filter(surface)
+        # Removes any unused points
         surface = clean_polydata(surface)
 
-        # be careful overwrite previous rings
+        # saves this individual processed ring to a VTK file
         if debug:
             vtk_write(surface, outdir + '/ring_' + str(i) + '.vtk')
+
 
         ring_surf = vtk.vtkPolyData()
         ring_surf.DeepCopy(surface)
 
+        # Calculates the geometric center of the current ring
         c_mass = get_center_of_mass(surface, False)
 
         ring = Ring(i, "", surface.GetNumberOfPoints(), c_mass, np.sqrt(np.sum((np.array(ap_point) - \
@@ -273,7 +279,11 @@ def detect_and_mark_rings(surf, ap_point, outdir, debug):
 
 
 def mark_LA_rings(LAA_id, rings, b_tag, centroids, outdir, LA):
+    # finds the Ring object in the rings list that has the maximum
+    # number of points (r.np) and assigns the name "MV" to it.
     rings[np.argmax([r.np for r in rings])].name = "MV"
+
+    # creates a list pvs containing the indices of all rings that are not the MV.
     pvs = [i for i in range(len(rings)) if rings[i].name != "MV"]
 
     estimator = KMeans(n_clusters=2)

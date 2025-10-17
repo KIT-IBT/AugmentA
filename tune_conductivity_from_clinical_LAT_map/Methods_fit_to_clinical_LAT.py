@@ -32,15 +32,15 @@ import vtk
 from scipy.spatial import cKDTree
 from vtk.numpy_interface import dataset_adapter as dsa
 
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy, convert_point_to_cell_data
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_cells_with_ids
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.writer import write_to_dat
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.writer import write_to_dat
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 

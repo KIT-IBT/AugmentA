@@ -36,19 +36,19 @@ import vtk
 from vtk.numpy_interface import dataset_adapter as dsa
 
 from standalones.open_orifices_manually import open_orifices_manually
-from vtk_opencarp_helper_methods.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import extract_largest_region, vtk_thr
-from vtk_opencarp_helper_methods.vtk_methods import filters
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.point_selection import pick_point_with_preselection, pick_point
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import extract_largest_region, vtk_thr
+from vtk_openCARP_methods_ibt.vtk_methods import filters
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer, vtk_polydata_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, generate_ids, get_cells_with_ids, get_center_of_mass
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.helper_methods import get_maximum_distance_of_points, cut_mesh_with_radius, \
     cut_elements_from_mesh, find_elements_within_radius
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.mapper import point_array_mapper
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
+from vtk_openCARP_methods_ibt.vtk_methods.mapper import point_array_mapper
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
 pv.set_plot_theme('dark')
 
@@ -104,8 +104,18 @@ def parser():
     return parser
 
 
-def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cutting_radius=7.5,
-                                 max_cutting_radius=17.5, LAA="", RAA="", debug=0):
+def open_orifices_with_curvature(meshpath,
+                                 atrium,
+                                 MRI,
+                                 scale=1,
+                                 size=30,
+                                 min_cutting_radius=7.5,
+                                 max_cutting_radius=17.5,
+                                 LAA="",
+                                 RAA="",
+                                 debug=0,
+                                 apex_coordinate=None):
+
     meshname = meshpath.split("/")[-1]
     full_path = meshpath[:-len(meshname)]
 
@@ -212,9 +222,12 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
     old_max = 0
 
     if MRI:
-        cc = pv.PolyData(valve_center)
-
-        apex = pick_point_with_preselection(meshfix.mesh, "appendage apex", cc)
+        if apex_coordinate is not None:
+            apex = apex_coordinate
+            print(f"Using provided apex coordinate: {apex}")
+        else:
+            cc = pv.PolyData(valve_center)
+            apex = pick_point_with_preselection(meshfix.mesh, "appendage apex", cc)
 
         apex_id = find_closest_point(model, apex)
 
@@ -304,8 +317,11 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     vtk_polydata_writer(f"{full_path}/{atrium}_cutted.vtk", model)
     if debug:
-        mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
-        apex = pick_point_with_preselection(mesh_from_vtk, "appendage apex", apex)
+        if apex_coordinate is not None:
+            apex = apex_coordinate
+        else:
+            mesh_from_vtk = pv.PolyData(f"{full_path}/{atrium}_cutted.vtk")
+            apex = pick_point_with_preselection(mesh_from_vtk, "appendage apex", apex)
 
     model = smart_reader(f"{full_path}/{atrium}_cutted.vtk")
 
@@ -317,7 +333,7 @@ def open_orifices_with_curvature(meshpath, atrium, MRI, scale=1, size=30, min_cu
 
     label_atrial_orifices(f"{full_path}/{atrium}_cutted.vtk", LAA, RAA)
 
-    return apex_id
+    return f"{full_path}/{atrium}_cutted.vtk", apex_id
 
 
 def run():

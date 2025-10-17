@@ -34,20 +34,20 @@ from scipy.spatial.distance import cosine
 from vtk.numpy_interface import dataset_adapter as dsa
 
 import standalones.function
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import get_normalized_cross_product
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_polydata_writer, vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, \
     clean_polydata, vtk_append, apply_extract_cell_filter, get_center_of_mass, get_feature_edges, \
     get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
     ExtractionModes
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
-from vtk_opencarp_helper_methods.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
     get_threshold_between
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]

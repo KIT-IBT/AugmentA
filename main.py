@@ -107,10 +107,28 @@ def parser():
                         type=int,
                         default=0,
                         help='set to 1 to debug step by step, 0 otherwise')
+    parser.add_argument('--apex-file',
+                        type=str,
+                        default=None,
+                        help='Path to a CSV file specifying apex IDs to bypass interactive picking. '
+                             'Format: a header row "atrium,id" followed by rows like "LAA,123".')
+    parser.add_argument('--orifice-file',
+                        type=str,
+                        default=None,
+                        help='Path to a CSV file specifying orifice coordinates to bypass interactive picking. '
+                             'Format: a header row "orifice_name,x,y,z" followed by coordinate rows.')
+    parser.add_argument('--no-plot',
+                        action='store_true',
+                        help='Disable the final interactive plot, for headless environments.')
+    parser.add_argument('--save-test-data',
+                        type=int,
+                        default=0,
+                        help='Save test data to tests/ directories for automated testing (1=yes, 0=no)')
+
     return parser
 
 
-def run():
+def main():
     args = parser().parse_args()
 
     # In case both atria and closed surface are given process LA first and RA later
@@ -125,4 +143,4 @@ def run():
 
 
 if __name__ == '__main__':
-    run()
+    main()

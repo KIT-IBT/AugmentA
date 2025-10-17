@@ -39,15 +39,15 @@ import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import get_normalized_orthogonality
 from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
-from vtk_opencarp_helper_methods.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
-from vtk_opencarp_helper_methods.mathematical_operations.vector_operations import normalize_vectors
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.exporting import vtk_unstructured_grid_writer, \
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import normalize_vectors
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer, \
     vtk_xml_unstructured_grid_writer
-from vtk_opencarp_helper_methods.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, generate_ids, \
     get_cells_with_ids, apply_extract_cell_filter, get_elements_above_plane
-from vtk_opencarp_helper_methods.vtk_methods.finder import find_closest_point
-from vtk_opencarp_helper_methods.vtk_methods.init_objects import initialize_plane
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 

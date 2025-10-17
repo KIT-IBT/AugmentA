@@ -26,16 +26,17 @@ under the License.
 """
 import datetime
 import warnings
-
+import gc
+import traceback
 import numpy as np
 import vtk
 from carputils import tools
 
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import la_generate_fiber
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import la_laplace
-from vtk_opencarp_helper_methods.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
-from vtk_opencarp_helper_methods.vtk_methods.converters import vtk_to_numpy
-from vtk_opencarp_helper_methods.vtk_methods.reader import smart_reader
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
 
 def parser():
@@ -82,24 +83,41 @@ def jobID(args):
 
 @tools.carpexample(parser, jobID)
 def run(args, job):
-    LA = init_mesh_and_fibers(args, "LA")
+    try:
+        LA = init_mesh_and_fibers(args, "LA")
+    except Exception as e:
+        raise RuntimeError(f"Error initializing mesh and fibers: {e}")
 
     start_time = datetime.datetime.now()
     init_start_time = datetime.datetime.now()
 
     print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
-    output_laplace = la_laplace(args, job, LA)
-    end_time = datetime.datetime.now()
-    running_time = end_time - start_time
-    print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    try:
+        output_laplace = la_laplace(args, job, LA)
+        end_time = datetime.datetime.now()
+        running_time = end_time - start_time
+        print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    except MemoryError as e:
+        print(f"Out of memory during Laplace solution: {e}")
+        raise MemoryError("Laplace solution failed due to insufficient memory.")
+    except Exception as e:
+        traceback.print_exc()
+        raise RuntimeError(f"Laplace solution failed: {e}")
 
     start_time = datetime.datetime.now()
 
     print('[Step 2] Generating fibers... ' + str(start_time))
-    la_generate_fiber(output_laplace, args, job)
-    end_time = datetime.datetime.now()
-    running_time = end_time - start_time
-    print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    try:
+        la_generate_fiber(output_laplace, args, job)
+        end_time = datetime.datetime.now()
+        running_time = end_time - start_time
+        print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    except MemoryError as e:
+        raise MemoryError("Fiber generation failed due to insufficient memory.")
+    except Exception as e:
+        traceback.print_exc()
+        raise RuntimeError(f"Fiber generation failed: {e}")
+
     fin_end_time = datetime.datetime.now()
     tot_running_time = fin_end_time - init_start_time
     print('Total running time: ' + str(tot_running_time))
@@ -116,6 +134,7 @@ def init_mesh_and_fibers(args, atrium):
     """
     mesh = args.mesh + f'_surf/{atrium}'
     atrial_mesh = smart_reader(mesh + '.vtk')
+
     if args.normals_outside:
         reverse = vtk.vtkReverseSense()
         reverse.ReverseCellsOn()
@@ -124,10 +143,20 @@ def init_mesh_and_fibers(args, atrium):
         reverse.Update()
 
         atrial_mesh = reverse.GetOutput()
+        reverse.SetInputData(None)
+        reverse = None
+        gc.collect()
+
     pts = vtk_to_numpy(atrial_mesh.GetPoints().GetData())
     write_to_pts(mesh + '.pts', pts)
-    write_to_elem(mesh + '.elem', atrial_mesh, np.ones(atrial_mesh.GetNumberOfCells(), dtype=int))
+
+    num_cells = atrial_mesh.GetNumberOfCells()
+    write_to_elem(mesh + '.elem', atrial_mesh, np.ones(num_cells, dtype=int))
+
     init_fibers(atrial_mesh, atrium, mesh)
+
+    pts = None
+    gc.collect()
     return atrial_mesh
 
 
