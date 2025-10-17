@@ -35,7 +35,9 @@ docker-compose exec augmenta_debugger bash
 **What this does**: This connects you to an interactive bash session inside the `augmenta_debugger` container where the test environment is configured.
 
 ### Step 3: Run the Tests
-Inside the container shell, run pytest with verbose and output options:
+Go to your AugmentA folder (normally at 'headless/augmenta')
+
+Run pytest with verbose and output options:
 ```bash
 pytest -v -s
 ```
