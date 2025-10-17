@@ -324,8 +324,8 @@ def _prepare_surface(paths: WorkflowPaths, generator: AtrialBoundaryGenerator, a
 
     elif args.open_orifices:
 
-        orifice_func = (_cut_voltage_map if not args.MRI else open_orifices_with_curvature if args.use_curvature_to_open
-        else open_orifices_manually)
+        orifice_func = (
+            open_orifices_manually if not args.use_curvature_to_open else _cut_voltage_map if not args.MRI else open_orifices_with_curvature)
         print(f"Calling {orifice_func.__name__} for mesh='{args.mesh}', atrium='{args.atrium}'...")
 
         orifice_params = {'meshpath': str(paths.initial_mesh),

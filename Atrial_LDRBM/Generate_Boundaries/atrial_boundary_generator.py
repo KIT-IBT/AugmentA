@@ -2,6 +2,8 @@
 import os
 import subprocess
 import shutil
+import sys
+import traceback
 from glob import glob
 import numpy as np
 import pandas as pd
@@ -421,6 +423,10 @@ class AtrialBoundaryGenerator:
                 return final_la_centroids
 
             except Exception as e:
+                traceback.print_exc(file=sys.stderr)
+                tr = traceback.extract_tb(e.__traceback__)
+                print(f"FATAL ERROR: Pipeline failed — {e} in {tr[-1].name} at line {tr[-1].lineno}", file=sys.stderr)
+
                 print(f"ERROR during LA ring detection/marking: {e}")
                 return {}
 
