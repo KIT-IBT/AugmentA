@@ -28,12 +28,13 @@ under the License.
 EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
-import sys
-import os
 import argparse
+import os
+
 from pipeline import AugmentA
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 def parser():
     # Generate the standard command line parser
@@ -64,7 +65,7 @@ def parser():
                         help='set to 1 to proceed with the fitting of a given SSM, 0 otherwise')
     parser.add_argument('--atrium',
                         default="LA",
-                        choices=['LA','RA','LA_RA'],
+                        choices=['LA', 'RA', 'LA_RA'],
                         help='write LA or RA')
     parser.add_argument('--SSM_file',
                         type=str,
@@ -88,7 +89,7 @@ def parser():
                         help='target mesh resolution in mm')
     parser.add_argument('--normals_outside',
                         type=int,
-                        default=1,
+                        default=-1,
                         help='set to 1 if surface normals are pointing outside, 0 otherwise')
     parser.add_argument('--add_bridges',
                         type=int,
@@ -96,7 +97,7 @@ def parser():
                         help='set to 1 to compute and add interatrial bridges, 0 otherwise')
     parser.add_argument('--ofmt',
                         default='vtu',
-                        choices=['vtu','vtk'],
+                        choices=['vtu', 'vtk'],
                         help='Output mesh format')
     parser.add_argument('--find_appendage',
                         type=int,
@@ -106,20 +107,40 @@ def parser():
                         type=int,
                         default=0,
                         help='set to 1 to debug step by step, 0 otherwise')
+    parser.add_argument('--apex-file',
+                        type=str,
+                        default=None,
+                        help='Path to a CSV file specifying apex IDs to bypass interactive picking. '
+                             'Format: a header row "atrium,id" followed by rows like "LAA,123".')
+    parser.add_argument('--orifice-file',
+                        type=str,
+                        default=None,
+                        help='Path to a CSV file specifying orifice coordinates to bypass interactive picking. '
+                             'Format: a header row "orifice_name,x,y,z" followed by coordinate rows.')
+    parser.add_argument('--no-plot',
+                        action='store_true',
+                        help='Disable the final interactive plot, for headless environments.')
+    parser.add_argument('--save-test-data',
+                        type=int,
+                        default=0,
+                        help='Save test data to tests/ directories for automated testing (1=yes, 0=no)')
+
     return parser
 
-def run():
 
+def main():
     args = parser().parse_args()
 
-    # In case both atria are given process LA first and RA later
-    if args.atrium == 'LA_RA':
-        #args.atrium = 'LA'
+    # In case both atria and closed surface are given process LA first and RA later
+    if args.atrium == 'LA_RA' and args.closed_surface:
+        print("Current no support for biatrial volumetric bridge generation. Annotating LA and RA separately")
+        args.atrium = 'LA'
         AugmentA(args)
-        #args.atrium = 'RA'
-        #AugmentA(args)
+        args.atrium = 'RA'
+        AugmentA(args)
     else:
         AugmentA(args)
-    
+
+
 if __name__ == '__main__':
-    run()
+    main()

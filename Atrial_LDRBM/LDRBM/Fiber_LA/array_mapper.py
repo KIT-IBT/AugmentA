@@ -24,31 +24,31 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import vtk
-import Methods_LA as Method
 from carputils import tools
-from vtk.numpy_interface import dataset_adapter as dsa
+
+import Methods_LA as Method
+
 
 def parser():
     # Generate the standard command line parser
     parser = tools.standard_parser()
     # Add arguments    
     parser.add_argument('--mesh1',
-                    type=str,
-                    default="",
-                    help='path to meshname')
+                        type=str,
+                        default="",
+                        help='path to meshname')
     parser.add_argument('--mesh2',
-                    type=str,
-                    default="",
-                    help='path to meshname')
+                        type=str,
+                        default="",
+                        help='path to meshname')
     parser.add_argument('--idat',
-                    type=str,
-                    default="",
-                    help='input mesh format')
+                        type=str,
+                        default="",
+                        help='input mesh format')
     parser.add_argument('--odat',
-                    type=str,
-                    default="",
-                    help='input mesh format')
+                        type=str,
+                        default="",
+                        help='input mesh format')
     parser.add_argument('--pts_or_cells',
                         default='points',
                         choices=['points',
@@ -57,21 +57,23 @@ def parser():
 
     return parser
 
+
 def jobID(args):
-    ID = '{}_fibers'.format(args.mesh1.split('/')[-1])
+    ID = f"{args.mesh1.split('/')[-1]}_fibers"
     return ID
+
 
 @tools.carpexample(parser, jobID)
 def run(args, job):
-    
     mesh1 = Method.smart_reader(args.mesh1)
-    
+
     mesh2 = Method.smart_reader(args.mesh2)
-    
+
     if args.pts_or_cells == "points":
         Method.point_array_mapper(mesh1, mesh2, args.mesh2, args.idat)
     else:
         Method.cell_array_mapper(mesh1, mesh2, args.mesh2, args.idat)
-    
+
+
 if __name__ == '__main__':
     run()

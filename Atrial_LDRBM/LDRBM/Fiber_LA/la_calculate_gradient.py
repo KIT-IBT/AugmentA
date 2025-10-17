@@ -24,67 +24,65 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import numpy as np
-import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
 import os
+
+import vtk
+
+from vtk_openCARP_methods_ibt.vtk_methods.converters import convert_point_to_cell_data
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer
+
 
 def la_calculate_gradient(args, model, job):
     name_list = ['phi', 'r', 'v', 'ab']
 
     # change the result of Laplace from points data to cell data
-    pointDataToCellData = vtk.vtkPointDataToCellData()
-    pointDataToCellData.PassPointDataOn()
-    pointDataToCellData.SetInputData(model)
-    pointDataToCellData.Update()
+
+    model_cell_data = convert_point_to_cell_data(model, None)
 
     for var in name_list:
         print('Calculating the gradient of ' + str(var) + '...')
-        if var =='phi':
+        if var == 'phi':
             # using the vtkGradientFilter to calculate the gradient
             if args.mesh_type == "vol":
                 gradientFilter = vtk.vtkGradientFilter()
-                gradientFilter.SetInputConnection(pointDataToCellData.GetOutputPort())
-                gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS, "phie_"+str(var))
-                gradientFilter.SetResultArrayName('grad_'+str(var))
+                gradientFilter.SetInputData(model_cell_data)
+                gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS,
+                                                      "phie_" + str(var))
+                gradientFilter.SetResultArrayName('grad_' + str(var))
                 gradientFilter.Update()
                 LA_gradient = gradientFilter.GetOutput()
             else:
                 normalFilter = vtk.vtkPolyDataNormals()
-                normalFilter.SetInputConnection(pointDataToCellData.GetOutputPort())
+                normalFilter.SetInputData(model_cell_data)
                 normalFilter.ComputeCellNormalsOn()
                 normalFilter.ComputePointNormalsOff()
                 normalFilter.SplittingOff()
                 normalFilter.Update()
                 LA_gradient = normalFilter.GetOutput()
-                LA_gradient.GetCellData().GetArray("Normals").SetName('grad_'+str(var))
-                
+                LA_gradient.GetCellData().GetArray("Normals").SetName('grad_' + str(var))
+
         else:
             gradientFilter = vtk.vtkGradientFilter()
             gradientFilter.SetInputData(LA_gradient)
-            gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS, "phie_"+str(var))
-            gradientFilter.SetResultArrayName('grad_'+str(var))
+            gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS,
+                                                  "phie_" + str(var))
+            gradientFilter.SetResultArrayName('grad_' + str(var))
             gradientFilter.Update()
             LA_gradient = gradientFilter.GetOutput()
-            
+
         print('Calculating the gradient of ' + str(var) + '... Done!')
-    
+
     output = vtk.vtkUnstructuredGrid()
     output.DeepCopy(LA_gradient)
     if args.debug == 1:
         # write
-        simid = job.ID+"/gradient"
+        simid = job.ID + "/gradient"
         try:
             os.makedirs(simid)
         except OSError:
-            print ("Creation of the directory %s failed" % simid)
+            print(f"Creation of the directory {simid} failed")
         else:
-            print ("Successfully created the directory %s " % simid)
+            print(f"Successfully created the directory {simid} ")
         # write the file as vtk 
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(simid+"/LA_with_lp_res_gradient.vtk")
-        writer.SetInputData(output)
-        writer.Write()
-    
+        vtk_unstructured_grid_writer(simid + "/LA_with_lp_res_gradient.vtk", output)
     return output
-
