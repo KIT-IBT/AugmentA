@@ -1,0 +1,148 @@
+#Dockerfile from Thomas Stary modified by Pascal Maierhofer
+FROM --platform=linux/amd64 consol/debian-xfce-vnc
+
+USER root
+
+# this is just combination of Dockerfile-deps and Dockerfile, but starting from
+# consol/debian-xfce-vnc that is based on debian 11 at the moment
+
+#ENV OPENCARP_DIR="/usr/local/lib/opencarp"
+
+#python installation
+RUN apt-get update && \
+    apt-get install -y wget build-essential libssl-dev libffi-dev zlib1g-dev \
+    libncurses5-dev libncursesw5-dev libreadline-dev libsqlite3-dev libgdbm-dev \
+    libdb5.3-dev libbz2-dev libexpat1-dev liblzma-dev tk-dev && \
+    apt-get clean
+
+# Download, compile, and install Python 3.10.12
+RUN wget https://www.python.org/ftp/python/3.10.12/Python-3.10.12.tgz && \
+    tar -xf Python-3.10.12.tgz && \
+    cd Python-3.10.12 && \
+    ./configure --enable-optimizations && \
+    make -j $(nproc) && \
+    make altinstall && \
+    cd .. && \
+    rm -rf Python-3.10.12 Python-3.10.12.tgz
+
+RUN ln -s /usr/local/bin/python3.10 /usr/local/bin/python
+
+# Install packages for PETSc and openCARP
+RUN export DEBIAN_FRONTEND="noninteractive" \
+ && apt update && apt install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    dpkg-dev \
+    file \
+    g++ \
+    gengetopt \
+    gfortran \
+    git \
+    libfftw3-dev \
+    libgomp1 \
+    make \
+    pkg-config \
+    python3\
+    python3-distutils \
+    ssh \
+    valgrind \
+    zlib1g-dev \
+    libjpeg-dev \
+    cmake \
+ && ln -sf /usr/bin/python3 /usr/bin/python\
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Install PETSc
+RUN apt update && apt install petsc-dev -y
+
+
+
+
+# Install Python3 packages
+RUN export DEBIAN_FRONTEND="noninteractive" && \
+    apt update && apt install -y --no-install-recommends \
+    libhdf5-dev \
+    python3-dev \
+    python3-pip \
+    python3-setuptools \
+    python3-tk \
+    python3-wheel \
+    python-is-python3
+RUN python -m venv /venv && . /venv/bin/activate &&  \
+    python -m pip install --upgrade pip && pip install --no-cache-dir \
+    matplotlib \
+    numpy \
+    pandas \
+    scipy \
+    tables \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+
+
+ENV OPENCARP_DOCKER="1"
+
+# Install developer tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang-format \
+    clang-tools \
+    vim \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Avoid certificate issues
+# https://stackoverflow.com/questions/21181231/server-certificate-verification-failed-cafile-etc-ssl-certs-ca-certificates-c/21181447#21181447
+RUN apt-get update && apt-get install --reinstall ca-certificates \
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+
+
+
+#openCARP installation
+RUN git clone https://git.opencarp.org/openCARP/openCARP.git
+
+WORKDIR openCARP
+
+RUN git checkout b3d4acd49b918744a5d66679d9d9e03725648f16
+
+RUN cmake -S. -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_PREFIX_PATH=/usr/lib/gcc/x86_64-linux-gnu/12/ -DLIB_hdf5=/usr/lib/x86_64-linux-gnu/hdf5/openmpi/libhdf5.so -DDLOPEN=ON -DBUILD_EXTERNAL=ON -DCMAKE_BUILD_TYPE=DEBUG
+
+RUN cmake --build build
+
+ENV VIRTUAL_ENV=/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+RUN python -m pip install vtk==9.3.1
+
+COPY requirements.txt requirements.txt
+
+RUN pip install -r requirements.txt
+
+
+RUN pip install pymeshfix
+
+RUN pip install https://github.com/cnr-isti-vclab/PyMeshLab/releases/download/v2023.12.post2/pymeshlab-2023.12.post2-cp310-cp310-manylinux_2_31_x86_64.whl
+
+RUN pip install /headless/openCARP/external/carputils/
+
+ENV PATH="/headless/openCARP/build/bin/:$PATH"
+
+RUN git clone https://github.com/nuvolos-cloud/PyMesh
+RUN cd PyMesh&& git submodule update --init&&export PYMESH_PATH=`pwd`
+RUN pip install -r PyMesh/python/requirements.txt
+RUN apt-get update&&apt-get install \
+    libeigen3-dev \
+    libgmp-dev \
+    libgmpxx4ldbl \
+    libmpfr-dev \
+    libboost-dev \
+    libboost-thread-dev \
+    libtbb-dev \
+    python3-dev -y
+
+RUN pip install https://github.com/nuvolos-cloud/PyMesh/releases/download/v0.3.1/pymesh2-0.3.1-cp310-cp310-linux_x86_64.whl
+
+RUN pip install vtk-openCARP-methods-ibt
+
+RUN mkdir /headless/.config/carputils && cusettings /headless/.config/carputils/settings.yaml
+
+USER 1000
+
