@@ -24,126 +24,156 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import os
-import subprocess as sp
 import datetime
-import vtk
+import warnings
+import gc
+import traceback
 import numpy as np
-from vtk.util import numpy_support
-from carputils import settings
+import vtk
 from carputils import tools
-from carputils import mesh
-from la_laplace import la_laplace
-from la_generate_fiber import la_generate_fiber
-import Methods_LA
+
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import la_generate_fiber
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_laplace import la_laplace
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+
 
 def parser():
     # Generate the standard command line parser
     parser = tools.standard_parser()
     # Add arguments    
     parser.add_argument('--mesh',
-                    type=str,
-                    default="",
-                    help='path to meshname')
+                        type=str,
+                        default="",
+                        help='path to meshname')
     parser.add_argument('--ifmt',
-                    type=str,
-                    default="vtk",
-                    help='input mesh format')
+                        type=str,
+                        default="vtk",
+                        help='input mesh format')
     parser.add_argument('--mesh_type',
                         default='bilayer',
                         choices=['vol',
                                  'bilayer'],
                         help='Mesh type')
     parser.add_argument('--debug',
-                    type=int,
-                    default=0,
-                    help='path to meshname')
+                        type=int,
+                        default=0,
+                        help='path to meshname')
     parser.add_argument('--scale',
-                    type=int,
-                    default=1,
-                    help='normal unit is mm, set scaling factor if different')
+                        type=int,
+                        default=1,
+                        help='normal unit is mm, set scaling factor if different')
     parser.add_argument('--ofmt',
                         default='vtu',
-                        choices=['vtu','vtk'],
+                        choices=['vtu', 'vtk'],
                         help='Output mesh format')
     parser.add_argument('--normals_outside',
-                    type=int,
-                    default=1,
-                    help='set to 1 if surface normals are pointing outside')
+                        type=int,
+                        default=1,
+                        help='set to 1 if surface normals are pointing outside')
 
     return parser
 
+
 def jobID(args):
-    ID = '{}_fibers'.format(args.mesh)
+    ID = f'{args.mesh}_fibers'
     return ID
+
 
 @tools.carpexample(parser, jobID)
 def run(args, job):
-    
-    LA_mesh = args.mesh+'_surf/LA'
-    
-    if args.mesh_type == "bilayer":
-        reader = vtk.vtkPolyDataReader()
-    else:
-        reader = vtk.vtkUnstructuredGridReader()
-    reader.SetFileName(LA_mesh+'.vtk')
-    reader.Update()
-    LA = reader.GetOutput()
-    
-    if args.normals_outside:
-        reverse = vtk.vtkReverseSense()
-        reverse.ReverseCellsOn()
-        reverse.ReverseNormalsOn()
-        reverse.SetInputConnection(reader.GetOutputPort())
-        reverse.Update()
+    try:
+        LA = init_mesh_and_fibers(args, "LA")
+    except Exception as e:
+        raise RuntimeError(f"Error initializing mesh and fibers: {e}")
 
-        LA = reverse.GetOutput()
-
-    pts = numpy_support.vtk_to_numpy(LA.GetPoints().GetData())
-    
-    with open(LA_mesh+'.pts',"w") as f:
-        f.write("{}\n".format(len(pts)))
-        for i in range(len(pts)):
-            f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
-    
-    with open(LA_mesh+'.elem',"w") as f:
-            f.write("{}\n".format(LA.GetNumberOfCells()))
-            for i in range(LA.GetNumberOfCells()):
-                cell = LA.GetCell(i)
-                if cell.GetNumberOfPoints() == 2:
-                    f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), 1))
-                elif cell.GetNumberOfPoints() == 3:
-                    f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), 1))
-                elif cell.GetNumberOfPoints() == 4:
-                    f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), 1))
-    
-    fibers = np.zeros((LA.GetNumberOfCells(),6))
-    fibers[:,0]=1
-    fibers[:,4]=1
-    
-    with open(LA_mesh+'.lon',"w") as f:
-        f.write("2\n")
-        for i in range(len(fibers)):
-            f.write("{} {} {} {} {} {}\n".format(fibers[i][0], fibers[i][1], fibers[i][2], fibers[i][3],fibers[i][4],fibers[i][5]))
-            
     start_time = datetime.datetime.now()
     init_start_time = datetime.datetime.now()
+
     print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
-    output_laplace = la_laplace(args, job, LA)
-    end_time = datetime.datetime.now()
-    running_time = end_time - start_time
-    print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    try:
+        output_laplace = la_laplace(args, job, LA)
+        end_time = datetime.datetime.now()
+        running_time = end_time - start_time
+        print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    except MemoryError as e:
+        print(f"Out of memory during Laplace solution: {e}")
+        raise MemoryError("Laplace solution failed due to insufficient memory.")
+    except Exception as e:
+        traceback.print_exc()
+        raise RuntimeError(f"Laplace solution failed: {e}")
 
     start_time = datetime.datetime.now()
 
     print('[Step 2] Generating fibers... ' + str(start_time))
-    la_generate_fiber(output_laplace, args, job)
-    end_time = datetime.datetime.now()
-    running_time = end_time - start_time
-    print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    try:
+        la_generate_fiber(output_laplace, args, job)
+        end_time = datetime.datetime.now()
+        running_time = end_time - start_time
+        print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    except MemoryError as e:
+        raise MemoryError("Fiber generation failed due to insufficient memory.")
+    except Exception as e:
+        traceback.print_exc()
+        raise RuntimeError(f"Fiber generation failed: {e}")
+
     fin_end_time = datetime.datetime.now()
     tot_running_time = fin_end_time - init_start_time
     print('Total running time: ' + str(tot_running_time))
+
+
+def init_mesh_and_fibers(args, atrium):
+    """
+    Initializes the mesh and fibers for the fiber generation.
+    Sores both to disk for further processing.
+
+    :param args:
+    :param atrium: 'LA' or 'RA'
+    :return: The loaded mesh
+    """
+    mesh = args.mesh + f'_surf/{atrium}'
+    atrial_mesh = smart_reader(mesh + '.vtk')
+
+    if args.normals_outside:
+        reverse = vtk.vtkReverseSense()
+        reverse.ReverseCellsOn()
+        reverse.ReverseNormalsOn()
+        reverse.SetInputData(atrial_mesh)
+        reverse.Update()
+
+        atrial_mesh = reverse.GetOutput()
+        reverse.SetInputData(None)
+        reverse = None
+        gc.collect()
+
+    pts = vtk_to_numpy(atrial_mesh.GetPoints().GetData())
+    write_to_pts(mesh + '.pts', pts)
+
+    num_cells = atrial_mesh.GetNumberOfCells()
+    write_to_elem(mesh + '.elem', atrial_mesh, np.ones(num_cells, dtype=int))
+
+    init_fibers(atrial_mesh, atrium, mesh)
+
+    pts = None
+    gc.collect()
+    return atrial_mesh
+
+
+def init_fibers(atrial_mesh, atrium, mesh):
+    """
+    Initializes fibers with ones and stores them to disk for further processing.
+    :param atrial_mesh:
+    :param atrium:
+    :param mesh:
+    :return:
+    """
+    fibers = np.zeros((atrial_mesh.GetNumberOfCells(), 6))
+    fibers[:, 0] = 1
+    fibers[:, 4] = 1
+    warnings.warn(f"Test if lon is stored correctly {atrium}_main.py l116 ff.")
+    write_to_lon(mesh + '.lon', fibers, [fiber[3:6] for fiber in fibers], precession=1)
+
 
 if __name__ == '__main__':
     run()

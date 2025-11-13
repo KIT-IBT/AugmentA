@@ -24,66 +24,65 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import numpy as np
-import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
 import os
+
+import vtk
+
+from vtk_openCARP_methods_ibt.vtk_methods.converters import convert_point_to_cell_data
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
+
 
 def ra_calculate_gradient(args, model, job):
     name_list = ['phi', 'r', 'v', 'ab', 'w']
 
     # change the result of Laplace from points data to cell data
-    pointDataToCellData = vtk.vtkPointDataToCellData()
-    pointDataToCellData.PassPointDataOn()
-    pointDataToCellData.SetInputData(model)
-    pointDataToCellData.Update()
-    
+
+    model_with_cell_data = convert_point_to_cell_data(model)
+
     for var in name_list:
         print('Calculating the gradient of ' + str(var) + '...')
         if var == 'phi':
             # using the vtkGradientFilter to calculate the gradient
             if args.mesh_type == "vol":
                 gradientFilter = vtk.vtkGradientFilter()
-                gradientFilter.SetInputData(pointDataToCellData.GetOutput())
-                gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS, "phie_"+str(var))
-                gradientFilter.SetResultArrayName('grad_'+str(var))
+                gradientFilter.SetInputData(model_with_cell_data)
+                gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS,
+                                                      "phie_" + str(var))
+                gradientFilter.SetResultArrayName('grad_' + str(var))
                 gradientFilter.Update()
                 RA_gradient = gradientFilter.GetOutput()
             else:
                 normalFilter = vtk.vtkPolyDataNormals()
-                normalFilter.SetInputConnection(pointDataToCellData.GetOutputPort())
+                normalFilter.SetInputData(model_with_cell_data)
                 normalFilter.ComputeCellNormalsOn()
                 normalFilter.ComputePointNormalsOff()
                 normalFilter.SplittingOff()
                 normalFilter.Update()
                 RA_gradient = normalFilter.GetOutput()
-                RA_gradient.GetCellData().GetArray("Normals").SetName('grad_'+str(var))
+                RA_gradient.GetCellData().GetArray("Normals").SetName('grad_' + str(var))
         else:
             gradientFilter = vtk.vtkGradientFilter()
             gradientFilter.SetInputData(RA_gradient)
-            gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS, "phie_"+str(var))
-            gradientFilter.SetResultArrayName('grad_'+str(var))
+            gradientFilter.SetInputArrayToProcess(0, 0, 0, vtk.vtkDataObject.FIELD_ASSOCIATION_CELLS,
+                                                  "phie_" + str(var))
+            gradientFilter.SetResultArrayName('grad_' + str(var))
             gradientFilter.Update()
             RA_gradient = gradientFilter.GetOutput()
-    
+
     print('Calculating the gradient of ' + str(var) + '... Done!')
 
     output = vtk.vtkUnstructuredGrid()
     output.DeepCopy(RA_gradient)
+
     if args.debug == 1:
         # write
-        simid = job.ID+"/gradient"
+        simid = job.ID + "/gradient"
         try:
             os.makedirs(simid)
         except OSError:
-            print ("Creation of the directory %s failed" % simid)
+            print(f"Creation of the directory {simid} failed")
         else:
-            print ("Successfully created the directory %s " % simid)
+            print(f"Successfully created the directory {simid} ")
         # write the file as vtk 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(simid+"/RA_with_lp_res_gradient.vtu")
-        writer.SetInputData(output)
-        writer.Write()
-    
+        vtk_xml_unstructured_grid_writer(simid + "/RA_with_lp_res_gradient.vtu", output)
     return output
-

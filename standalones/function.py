@@ -26,20 +26,20 @@ under the License.
 """
 
 import numpy as np
-from glob import glob
-import pandas as pd
-import vtk
-from vtk.util import numpy_support
 import scipy.spatial as spatial
-from vtk.numpy_interface import dataset_adapter as dsa
+import vtk
+
+from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import get_normalized_cross_product
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, \
+    get_elements_above_plane
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
+    ExtractionModes
 
 
 def to_polydata(mesh):
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(mesh)
-    geo_filter.Update()
-    polydata = geo_filter.GetOutput()
-    return polydata
+    return apply_vtk_geom_filter(mesh)
 
 
 def get_mean_point(ring_points):
@@ -66,22 +66,22 @@ def get_farthest_point_pair(point_array_1, point_array_2):
 
 
 def get_closest_point(vtk_points_1, vtk_points_2):
-    points_array_1 = vtk.util.numpy_support.vtk_to_numpy(vtk_points_1.GetData())
-    points_array_2 = vtk.util.numpy_support.vtk_to_numpy(vtk_points_2.GetData())
+    points_array_1 = vtk_to_numpy(vtk_points_1.GetData())
+    points_array_2 = vtk_to_numpy(vtk_points_2.GetData())
     center_1 = get_mean_point(points_array_1)
     center_2 = get_mean_point(points_array_2)
 
-    KDTree = vtk.vtkKDTree()
-    KDTree.BuildLocatorFromPoints(vtk_points_1)
+    kDTree = vtk.vtkKdTree()
+    kDTree.BuildLocatorFromPoints(vtk_points_1)
     id_list = vtk.vtkIdList()
-    KDTree.FindClosestNPoints(1, center_2, id_list)
+    kDTree.FindClosestNPoints(1, center_2, id_list)
     index = id_list.GetId(0)
     res_1 = points_array_1[index]
 
-    KDTree = vtk.vtkKDTree()
-    KDTree.BuildLocatorFromPoints(vtk_points_2)
+    kDTree = vtk.vtkKdTree()
+    kDTree.BuildLocatorFromPoints(vtk_points_2)
     id_list = vtk.vtkIdList()
-    KDTree.FindClosestNPoints(1, center_1, id_list)
+    kDTree.FindClosestNPoints(1, center_1, id_list)
     index = id_list.GetId(0)
     res_2 = points_array_2[index]
 
@@ -89,135 +89,82 @@ def get_closest_point(vtk_points_1, vtk_points_2):
 
 
 def find_points_on_mv(mv_points, center_lpv):
-    mv_points_array_1 = vtk.util.numpy_support.vtk_to_numpy(mv_points.GetData())
-    KDTree = vtk.vtkKDTree()
-    KDTree.BuildLocatorFromPoints(mv_points)
+    mv_points_array_1 = vtk_to_numpy(mv_points.GetData())
+    kDTree = vtk.vtkKdTree()
+    kDTree.BuildLocatorFromPoints(mv_points)
     id_list = vtk.vtkIdList()
-    KDTree.FindClosestNPoints(1, center_lpv, id_list)
+    kDTree.FindClosestNPoints(1, center_lpv, id_list)
     index = id_list.GetId(0)
     res_1 = mv_points_array_1[index]
-    distance = []
-    for i in range(len(mv_points_array_1)):
-        d = np.linalg.norm(mv_points_array_1[i] - res_1, ord=None, axis=None, keepdims=False)
-        distance += [d]
-    res_2 = mv_points_array_1[distance.index(max(distance))]
+    distances = np.linalg.norm(mv_points_array_1 - res_1, axis=1)
+    res_2 = mv_points_array_1[np.argmax(distances)]
 
-    distance_diff = []
-    for i in range(len(mv_points_array_1)):
-        d_mv_l = np.linalg.norm(mv_points_array_1[i] - res_1, ord=None, axis=None, keepdims=False)
-        d_mv_r = np.linalg.norm(mv_points_array_1[i] - res_2, ord=None, axis=None, keepdims=False)
-        distance_diff += [abs(d_mv_l - d_mv_r)]
+    d_mv_l = np.linalg.norm(mv_points_array_1 - res_1, axis=1)  # Distances to res_1
+    d_mv_r = np.linalg.norm(mv_points_array_1 - res_2, axis=1)  # Distances to res_2
+    distance_diff = np.abs(d_mv_l - d_mv_r)  # Absolute differences
+
     res_3 = mv_points_array_1[distance_diff.index(min(distance_diff))]
 
-    distance_2 = []
-    for i in range(len(mv_points_array_1)):
-        d_2 = np.linalg.norm(mv_points_array_1[i] - res_3, ord=None, axis=None, keepdims=False)
-        distance_2 += [d_2]
+    distance_2 = np.linalg.norm(mv_points_array_1 - res_3, axis=1)
+
     res_4 = mv_points_array_1[distance_2.index(max(distance_2))]
 
     return res_1, res_2, res_3, res_4
 
 
 def cut_a_band_from_model(polydata, point_1, point_2, point_3, width):
-    v1 = point_2 - point_1
-    v2 = point_3 - point_1
-    norm = np.cross(v1, v2)
-    #
-    # # normlize norm
-    n = np.linalg.norm([norm], axis=1, keepdims=True)
-    norm_1 = norm / n
+    norm_1 = get_normalized_cross_product(point_1, point_2, point_3)
 
     point_pass = point_1 + 0.5 * width * norm_1
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0][0], norm_1[0][1], norm_1[0][2])
-    plane.SetOrigin(point_pass[0][0], point_pass[0][1], point_pass[0][2])
 
-    meshExtractFilter1 = vtk.vtkExtractGeometry()
-    meshExtractFilter1.SetInputData(polydata)
-    meshExtractFilter1.SetImplicitFunction(plane)
-    meshExtractFilter1.Update()
+    plane = initialize_plane(norm_1[0], point_pass[0])
+
+    extract_mesh_1 = get_elements_above_plane(polydata, plane)
 
     point_moved = point_1 - 0.5 * width * norm_1
-    # print(point_moved[0][0])
-    plane2 = vtk.vtkPlane()
-    plane2.SetNormal(-norm_1[0][0], -norm_1[0][1], -norm_1[0][2])
-    plane2.SetOrigin(point_moved[0][0], point_moved[0][1], point_moved[0][2])
 
-    meshExtractFilter2 = vtk.vtkExtractGeometry()
-    meshExtractFilter2.SetInputData(meshExtractFilter1.GetOutput())
-    meshExtractFilter2.SetImplicitFunction(plane2)
-    meshExtractFilter2.Update()
-    band = meshExtractFilter2.GetOutput()
-    geo_filter = vtk.vtkGeometryFilter()
-    geo_filter.SetInputData(band)
-    geo_filter.Update()
-    band = geo_filter.GetOutput()
+    plane2 = initialize_plane(-norm_1[0], point_moved[0])
+
+    band = apply_vtk_geom_filter(get_elements_above_plane(extract_mesh_1, plane2))
 
     return band
 
 
 def cut_into_two_parts(polydata, point_1, point_2, point_3):
-    v1 = point_2 - point_1
-    v2 = point_3 - point_1
-    norm = np.cross(v1, v2)
-    #
-    # # normlize norm
-    n = np.linalg.norm([norm], axis=1, keepdims=True)
-    norm_1 = norm / n
+    norm_1 = get_normalized_cross_product(point_1, point_2, point_3)
 
-    plane = vtk.vtkPlane()
-    plane.SetNormal(norm_1[0][0], norm_1[0][1], norm_1[0][2])
-    plane.SetOrigin(point_1[0], point_1[1], point_1[2])
+    plane = initialize_plane(norm_1[0], point_1)
+    plane2 = initialize_plane(-norm_1[0], point_1)
 
-    plane2 = vtk.vtkPlane()
-    plane2.SetNormal(-norm_1[0][0], -norm_1[0][1], -norm_1[0][2])
-    plane2.SetOrigin(point_1[0], point_1[1], point_1[2])
-
-    meshExtractFilter1 = vtk.vtkExtractGeometry()
-    meshExtractFilter1.SetInputData(polydata)
-    meshExtractFilter1.SetImplicitFunction(plane)
-    meshExtractFilter1.Update()
-    sub_1 = meshExtractFilter1.GetOutput()
-
-    meshExtractFilter2 = vtk.vtkExtractGeometry()
-    meshExtractFilter2.SetInputData(polydata)
-    meshExtractFilter2.ExtractBoundaryCellsOn()
-    meshExtractFilter2.SetImplicitFunction(plane2)
-    meshExtractFilter2.Update()
-    sub_2 = meshExtractFilter2.GetOutput()
+    sub_1 = get_elements_above_plane(polydata, plane)
+    sub_2 = get_elements_above_plane(polydata, plane2, extract_boundary_cells_on=True)
 
     return sub_1, sub_2
 
 
-def dijkstra_path(polydata, StartVertex, EndVertex):
+def dijkstra_path(polydata, start_vertex, end_vertex):
     path = vtk.vtkDijkstraGraphGeodesicPath()
     path.SetInputData(polydata)
     # attention the return value will be reversed
-    path.SetStartVertex(EndVertex)
-    path.SetEndVertex(StartVertex)
+    path.SetStartVertex(end_vertex)
+    path.SetEndVertex(start_vertex)
     path.Update()
     points_data = path.GetOutput().GetPoints().GetData()
-    points_data = vtk.util.numpy_support.vtk_to_numpy(points_data)
+    points_data = vtk_to_numpy(points_data)
     return points_data
 
 
 def get_mv_l_and_r(mv_band, center_lpv):
-    connect = vtk.vtkConnectivityFilter()
-    connect.SetInputData(mv_band)
-    connect.SetExtractionModeToAllRegions()
-    connect.Update()
+    connect = init_connectivity_filter(mv_band, ExtractionModes.ALL_REGIONS)
     connect.SetExtractionModeToSpecifiedRegions()
     connect.AddSpecifiedRegion(1)
     connect.Update()
 
     # Clean unused points
     surface = to_polydata(connect.GetOutput())
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
-    center_point_1 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
+
+    ring = vtk_to_numpy(clean_polydata(surface).GetPoints().GetData())
+    center_point_1 = np.mean(ring, axis=0)
 
     connect.DeleteSpecifiedRegion(1)
     connect.AddSpecifiedRegion(0)
@@ -225,12 +172,9 @@ def get_mv_l_and_r(mv_band, center_lpv):
 
     # Clean unused points
     surface = to_polydata(connect.GetOutput())
-    cln = vtk.vtkCleanPolyData()
-    cln.SetInputData(surface)
-    cln.Update()
-    points_data = cln.GetOutput().GetPoints().GetData()
-    ring = vtk.util.numpy_support.vtk_to_numpy(points_data)
-    center_point_2 = np.asarray([np.mean(ring[:, 0]), np.mean(ring[:, 1]), np.mean(ring[:, 2])])
+    ring = vtk_to_numpy(clean_polydata(surface).GetPoints().GetData())
+    center_point_2 = np.mean(ring, axis=0)
+
     dis_1 = np.linalg.norm(center_point_1 - center_lpv)
     dis_2 = np.linalg.norm(center_point_2 - center_lpv)
     if dis_1 > dis_2:
@@ -243,10 +187,7 @@ def get_mv_l_and_r(mv_band, center_lpv):
 
 
 def get_closest_point_id_from_polydata(polydata, coordiante):
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(polydata)
-    loc.BuildLocator()
-    return loc.FindClosestPoint(coordiante)
+    return find_closest_point(polydata, coordiante)
 
 
 def multidim_intersect(arr1, arr2):

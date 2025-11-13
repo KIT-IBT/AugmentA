@@ -24,571 +24,438 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
-import numpy as np
-import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
-from vtk.util.numpy_support import vtk_to_numpy
-import datetime
-import Methods_RA as Method
 import csv
 import os
+import pickle
 import subprocess
+
+import numpy as np
 import pymesh
 import pymeshlab
-import pickle
-from numpy.linalg import norm
+import vtk
+from vtk.numpy_interface import dataset_adapter as dsa
+
+import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import generate_spline_points
+from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr
+from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
+from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
+from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_obj_writer, \
+    vtk_unstructured_grid_writer
+from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
+    apply_extract_cell_filter, get_cells_with_ids
+from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
-def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
+def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     ########################################
-    with open(os.path.join(EXAMPLE_DIR,'../../element_tag.csv')) as f:
+    with open(os.path.join(EXAMPLE_DIR, '../../element_tag.csv')) as f:
         tag_dict = {}
         reader = csv.DictReader(f)
         for row in reader:
             tag_dict[row['name']] = row['tag']
-    
-    bridge_radius = 1.65*args.scale
-    
-    bachmann_bundel_left = int(tag_dict['bachmann_bundel_left'])      
-    bachmann_bundel_right = int(tag_dict['bachmann_bundel_right'])
+
+    bridge_radius = 1.65 * args.scale
+
     bachmann_bundel_internal = int(tag_dict['bachmann_bundel_internal'])
     middle_posterior_bridge_left = int(tag_dict['middle_posterior_bridge_left'])
-    middle_posterior_bridge_right = int(tag_dict['middle_posterior_bridge_right'])
     upper_posterior_bridge_left = int(tag_dict['upper_posterior_bridge_left'])
-    upper_posterior_bridge_right = int(tag_dict['upper_posterior_bridge_right'])
     coronary_sinus_bridge_left = int(tag_dict['coronary_sinus_bridge_left'])
-    coronary_sinus_bridge_right = int(tag_dict['coronary_sinus_bridge_right'])
     right_atrial_septum_epi = int(tag_dict['right_atrial_septum_epi'])
     left_atrial_wall_epi = int(tag_dict["left_atrial_wall_epi"])
     mitral_valve_epi = int(tag_dict["mitral_valve_epi"])
     tricuspid_valve_epi = int(tag_dict["tricuspid_valve_epi"])
-    
-    #la_epi = Method.vtk_thr(la, 0 "CELLS", "elemTag", left_atrial_wall_epi)
-    geo_filter_la = vtk.vtkGeometryFilter()
-    geo_filter_la.SetInputData(la_epi)
-    geo_filter_la.Update()
-    la_epi_surface = geo_filter_la.GetOutput()
-    
-    #ra_epi = Method.vtk_thr(la, 0 "CELLS", "elemTag", left_atrial_wall_epi)
 
-    geo_filter_ra = vtk.vtkGeometryFilter()
-    geo_filter_ra.SetInputData(ra_epi)
-    geo_filter_ra.Update()
-    ra_epi_surface = geo_filter_ra.GetOutput()
-    
+    la_epi_surface = apply_vtk_geom_filter(la_epi)
+
+    ra_epi_surface = apply_vtk_geom_filter(ra_epi)
+
     SVC_p = np.array(df["SVC"])
     IVC_p = np.array(df["IVC"])
     TV_p = np.array(df["TV"])
-    
-    ra_septum = Method.vtk_thr(ra_epi, 2, "CELLS", "elemTag", right_atrial_septum_epi,right_atrial_septum_epi)
-    la_wall = Method.vtk_thr(la_epi, 2, "CELLS", "elemTag", left_atrial_wall_epi,left_atrial_wall_epi)
-    #mv_la = Method.vtk_thr(la_epi, 2, "CELLS", "elemTag", mitral_valve_epi,mitral_valve_epi)
-    tv_ra = Method.vtk_thr(ra_epi, 2, "CELLS", "elemTag", tricuspid_valve_epi,tricuspid_valve_epi)
-    
+
+    ra_septum = vtk_thr(ra_epi, 2, "CELLS", "elemTag", right_atrial_septum_epi, right_atrial_septum_epi)
+    la_wall = vtk_thr(la_epi, 2, "CELLS", "elemTag", left_atrial_wall_epi, left_atrial_wall_epi)
+    mv_la = vtk_thr(la_epi, 2, "CELLS", "elemTag", mitral_valve_epi, mitral_valve_epi)
+    tv_ra = vtk_thr(ra_epi, 2, "CELLS", "elemTag", tricuspid_valve_epi, tricuspid_valve_epi)
+
     # Find middle and upper posterior bridges points
-    
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(ra_septum)
-    loc.BuildLocator()
-    point_septum_SVC = ra_septum.GetPoint(loc.FindClosestPoint(SVC_p))
-    point_septum_IVC = ra_septum.GetPoint(loc.FindClosestPoint(IVC_p))
-    
+    point_septum_SVC = ra_septum.GetPoint(find_closest_point(ra_septum, SVC_p))
+    point_septum_IVC = ra_septum.GetPoint(find_closest_point(ra_septum, IVC_p))
+
     SVC_IVC_septum_path = Method.dijkstra_path_coord(ra_epi_surface, point_septum_SVC, point_septum_IVC)
-    
-    middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.6),:]
-    
-    upper_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path)*0.4),:]
-    
-    mpb_tube, mpb_sphere_1, mpb_sphere_2, mpb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface, ra_epi_surface, middle_posterior_bridge_point, bridge_radius)
+
+    if args.debug:
+        Method.create_pts(SVC_IVC_septum_path, 'SVC_IVC_septum_path', f'{args.mesh}_surf/')
+
+    middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path) * 0.6),
+                                    :]  # Can happen that the 0.6 is where the BB is
+
+    upper_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path) * 0.4), :]
+
+    mpb_tube, mpb_sphere_1, mpb_sphere_2, mpb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface,
+                                                                                          ra_epi_surface,
+                                                                                          middle_posterior_bridge_point,
+                                                                                          bridge_radius)
     Method.smart_bridge_writer(mpb_tube, mpb_sphere_1, mpb_sphere_2, "middle_posterior_bridge", job)
-    
-    upb_tube, upb_sphere_1, upb_sphere_2, upb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface, ra_epi_surface, upper_posterior_bridge_point, bridge_radius)
+
+    upb_tube, upb_sphere_1, upb_sphere_2, upb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface,
+                                                                                          ra_epi_surface,
+                                                                                          upper_posterior_bridge_point,
+                                                                                          bridge_radius)
     Method.smart_bridge_writer(upb_tube, upb_sphere_1, upb_sphere_2, "upper_posterior_bridge", job)
 
     # Coronary sinus bridge point
 
-    # loc = vtk.vtkPointLocator()  it happened that the point is too close to the edge and the heart is not found
-    # loc.SetDataSet(mv_la)
-    # loc.BuildLocator()
-    # point_CS_on_MV = mv_la.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
+    # it happened that the point is too close to the edge and the heart is not found
+    point_CS_on_MV = mv_la.GetPoint(find_closest_point(mv_la, CS_p + TV_p * 0.1))  # adapt this value if CS is too low
 
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(la_wall)
-    loc.BuildLocator()
-    point_CS_on_MV = la_wall.GetPoint(loc.FindClosestPoint(CS_p+TV_p*0.1))
-    
-    loc = vtk.vtkPointLocator()
-    loc.SetDataSet(ra_septum)
-    loc.BuildLocator()
-    point_CS_bridge = ra_septum.GetPoint(loc.FindClosestPoint(point_CS_on_MV))
-    
-    csb_tube, csb_sphere_1, csb_sphere_2, csb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface, ra_epi_surface, point_CS_bridge, bridge_radius)
+    point_CS_bridge = ra_septum.GetPoint(find_closest_point(ra_septum, point_CS_on_MV))
+
+    csb_tube, csb_sphere_1, csb_sphere_2, csb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface,
+                                                                                          ra_epi_surface,
+                                                                                          point_CS_bridge,
+                                                                                          bridge_radius)
     Method.smart_bridge_writer(csb_tube, csb_sphere_1, csb_sphere_2, "coronary_sinus_bridge", job)
-    
+
     if args.mesh_type == "vol":
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(la_epi)
-        append_filter.AddInputData(ra_epi)
-        append_filter.Update()
 
-        tag = np.zeros((append_filter.GetOutput().GetNumberOfCells(),),dtype=int)
-        tag[:la_epi.GetNumberOfCells()] = vtk.util.numpy_support.vtk_to_numpy(la_epi.GetCellData().GetArray('elemTag'))
-        tag[la_epi.GetNumberOfCells():] = vtk.util.numpy_support.vtk_to_numpy(ra_epi.GetCellData().GetArray('elemTag'))
+        biatrial_epi = vtk_append([la_epi, ra_epi])
 
-        meshNew = dsa.WrapDataObject(append_filter.GetOutput())
+        tag = np.zeros((biatrial_epi.GetNumberOfCells(),), dtype=int)
+        tag[:la_epi.GetNumberOfCells()] = vtk_to_numpy(la_epi.GetCellData().GetArray('elemTag'))
+        tag[la_epi.GetNumberOfCells():] = vtk_to_numpy(ra_epi.GetCellData().GetArray('elemTag'))
+
+        meshNew = dsa.WrapDataObject(biatrial_epi)
         meshNew.CellData.append(tag, "elemTag")
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(meshNew.VTKObject)
-        append_filter.Update()
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/la_ra_res.vtu")
-        writer.SetInputData(append_filter.GetOutput())
-        writer.Write()
+        biatrial_mesh = vtk_append([meshNew.VTKObject])
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_res.vtu", biatrial_mesh)
     elif args.mesh_type == "bilayer":
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(la_epi)
-        append_filter.AddInputData(ra_epi)
-        append_filter.Update()
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(append_filter.GetOutput())
-        geo_filter.Update()
-        writer = vtk.vtkOBJWriter()
-        writer.SetFileName(job.ID+"/result_RA/la_ra_res.obj")
-        writer.SetInputData(geo_filter.GetOutput())
-        writer.Write()
+
+        la_e = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
+        la_e = apply_vtk_geom_filter(la_e)
+
+        ra_e = Method.smart_reader(job.ID + "/result_RA/RA_epi_with_fiber.vtu")
+        ra_e = apply_vtk_geom_filter(ra_e)
+
+        biatrial_mesh = vtk_append([la_e, ra_e])
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_epi_RA_epi_with_tag.vtu", biatrial_mesh)
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     for var in bridge_list:
-        
-        mesh_A = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_tube.obj")
-        mesh_B = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_sphere_1.obj")
-        mesh_C = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_sphere_2.obj")
-        
+        mesh_A = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_tube.obj")
+        mesh_B = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_sphere_1.obj")
+        mesh_C = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_sphere_2.obj")
+
         output_mesh_1 = pymesh.boolean(mesh_A, mesh_B, operation="union", engine="igl")
-        
+
         output_mesh = pymesh.boolean(output_mesh_1, mesh_C, operation="union", engine="igl")
-        
+
         m = pymeshlab.Mesh(output_mesh.vertices, output_mesh.faces)
         # create a new MeshSet
         ms = pymeshlab.MeshSet()
         # add the mesh to the MeshSet
         ms.add_mesh(m, "bridge_mesh")
         # apply filter
-        ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4*args.scale, adaptive=True)
-        ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_bridge_resampled.obj",\
-        save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
-        
-        subprocess.run(["meshtool", 
-                    "generate", 
-                    "mesh", 
-                    "-ofmt=vtk",
-                    "-prsv_bdry=1",
-                    "-surf="+job.ID+"/bridges/"+str(var)+"_bridge_resampled.obj",
-                    "-outmsh="+job.ID+"/bridges/"+str(var)+"_bridge_resampled.vtk"])
-        
-    # if args.mesh_type == "vol":
-        
-    #     la_ra_usg = append_filter.GetOutput()
-    #     print('reading done!')
-        
-    #     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
-    #     earth_cell_ids_list = []
-    #     for var in bridge_list:
-    #         reader = vtk.vtkUnstructuredGridReader()
-    #         reader.SetFileName(job.ID+"/bridges/"+str(var)+'_bridge_resampled.vtk')
-    #         reader.Update()
-    #         bridge_usg = reader.GetOutput()
-        
-    #         geo_filter = vtk.vtkGeometryFilter()
-    #         geo_filter.SetInputData(bridge_usg)
-    #         geo_filter.Update()
-    #         bridge = geo_filter.GetOutput()
-            
-    #         locator = vtk.vtkStaticPointLocator()
-    #         locator.SetDataSet(la_ra_usg)
-    #         locator.BuildLocator()
-            
-    #         intersection_points = bridge_usg.GetPoints().GetData()
-    #         intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
-            
-    #         earth_point_ids_temp = vtk.vtkIdList()
-    #         earth_point_ids = vtk.vtkIdList()
-    #         for i in range(len(intersection_points)):
-    #             locator.FindPointsWithinRadius(0.7*args.scale, intersection_points[i], earth_point_ids_temp)
-    #             for j in range(earth_point_ids_temp.GetNumberOfIds()):
-    #                 earth_point_ids.InsertNextId(earth_point_ids_temp.GetId(j))
-            
-    #         earth_cell_ids_temp = vtk.vtkIdList()
-    #         earth_cell_ids = vtk.vtkIdList()
-    #         for i in range(earth_point_ids.GetNumberOfIds()):
-    #             la_ra_usg.GetPointCells(earth_point_ids.GetId(i),earth_cell_ids_temp)
-    #             for j in range(earth_cell_ids_temp.GetNumberOfIds()):
-    #                 earth_cell_ids.InsertNextId(earth_cell_ids_temp.GetId(j))
-    #                 earth_cell_ids_list += [earth_cell_ids_temp.GetId(j)]
-    #         extract = vtk.vtkExtractCells()
-    #         extract.SetInputData(la_ra_usg)
-    #         extract.SetCellList(earth_cell_ids)
-    #         extract.Update()
-            
-    #         geo_filter = vtk.vtkGeometryFilter()
-    #         geo_filter.SetInputData(extract.GetOutput())
-    #         geo_filter.Update()
-    #         earth = geo_filter.GetOutput()
-            
-    #         cleaner = vtk.vtkCleanPolyData()
-    #         cleaner.SetInputData(earth)
-    #         cleaner.Update()
-            
-    #         # meshNew = dsa.WrapDataObject(cleaner.GetOutput())
-    #         writer = vtk.vtkOBJWriter()
-    #         writer.SetFileName(job.ID+"/bridges/"+str(var)+"_earth.obj")
-    #         writer.SetInputData(cleaner.GetOutput())
-    #         writer.Write()
-        
-    #     print("Extracted earth")
-    #     cell_id_all = []
-    #     for i in range(la_ra_usg.GetNumberOfCells()):
-    #         cell_id_all.append(i)
-        
-    #     la_diff =  list(set(cell_id_all).difference(set(earth_cell_ids_list)))
-    #     la_ra_new = vtk.vtkIdList()
-    #     for var in la_diff:
-    #         la_ra_new.InsertNextId(var)
-            
-    #     extract = vtk.vtkExtractCells()
-    #     extract.SetInputData(la_ra_usg)
-    #     extract.SetCellList(la_ra_new)
-    #     extract.Update()
-        
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.MergePointsOn()
-    #     #append_filter.SetTolerance(0.01*args.scale)
-    #     append_filter.AddInputData(extract.GetOutput())
-    
-    # elif args.mesh_type == "bilayer":
+        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(0.4 * args.scale), adaptive=True)
+        ms.save_current_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj", \
+                             save_vertex_color=False, save_vertex_normal=False, save_face_color=False,
+                             save_wedge_texcoord=False, save_wedge_normal=False)
 
-    # if args.mesh_type == "bilayer":
-    #     la_ra_usg = append_filter.GetOutput()
-    # else:
-    #     la_ra_usg_vol = append_filter.GetOutput()
-    #     ra_epi = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 11,18)
-    #     ra_BB = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_right,bachmann_bundel_right)
-    #     la_epi = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", 61,70)
-    #     la_BB = Method.vtk_thr(append_filter.GetOutput(), 2, "CELLS", "elemTag", bachmann_bundel_left,bachmann_bundel_left)
+        subprocess.run(["meshtool",
+                        "generate",
+                        "mesh",
+                        "-ofmt=vtk",
+                        "-prsv_bdry=1",
+                        "-surf=" + job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj",
+                        "-outmsh=" + job.ID + "/bridges/" + str(var) + "_bridge_resampled.vtk"])
 
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.AddInputData(la_epi)
-    #     append_filter.AddInputData(ra_epi)
-    #     append_filter.AddInputData(la_BB)
-    #     append_filter.AddInputData(ra_BB)
-    #     append_filter.Update()
-    la_ra_usg = append_filter.GetOutput()
+    la_ra_usg = biatrial_mesh  # this has already elemTag
 
+    if args.debug:
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_usg.vtu", la_ra_usg)
     print('reading done!')
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     earth_cell_ids_list = []
     for var in bridge_list:
         print(var)
-    
+
         reader = vtk.vtkUnstructuredGridReader()
-        reader.SetFileName(job.ID+"/bridges/"+str(var)+'_bridge_resampled.vtk')
+        reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
         reader.Update()
         bridge_usg = reader.GetOutput()
-        
-        # geo_filter = vtk.vtkGeometryFilter()
-        # geo_filter.SetInputData(bridge_usg)
-        # geo_filter.Update()
-        # bridge = geo_filter.GetOutput()
-        
-        # reverse = vtk.vtkReverseSense()
-        # reverse.ReverseCellsOn()
-        # reverse.ReverseNormalsOn()
-        # reverse.SetInputConnection(cleaner.GetOutputPort())
-        # reverse.Update()
-        
-        # earth = reverse.GetOutput()
-        
-        # vbool = vtk.vtkBooleanOperationPolyDataFilter()
-        # vbool.SetOperationToDifference()
-        # vbool.SetInputData( 0, epi_surf )
-        # vbool.SetInputData( 1, bridge )
-            
-        # vbool.Update()
 
         locator = vtk.vtkStaticPointLocator()
         locator.SetDataSet(la_ra_usg)
         locator.BuildLocator()
-        
-        #intersection_points = vbool.GetOutput().GetPoints().GetData()
+
         intersection_points = bridge_usg.GetPoints().GetData()
-        intersection_points = vtk.util.numpy_support.vtk_to_numpy(intersection_points)
-        
+        intersection_points = vtk_to_numpy(intersection_points)
+
         earth_point_ids_temp = vtk.vtkIdList()
         earth_point_ids = vtk.vtkIdList()
         for i in range(len(intersection_points)):
-            locator.FindPointsWithinRadius(0.7*args.scale, intersection_points[i], earth_point_ids_temp)
+            locator.FindPointsWithinRadius(0.7 * args.scale, intersection_points[i], earth_point_ids_temp)
             for j in range(earth_point_ids_temp.GetNumberOfIds()):
                 earth_point_ids.InsertNextId(earth_point_ids_temp.GetId(j))
 
         earth_cell_ids_temp = vtk.vtkIdList()
         earth_cell_ids = vtk.vtkIdList()
         for i in range(earth_point_ids.GetNumberOfIds()):
-            la_ra_usg.GetPointCells(earth_point_ids.GetId(i),earth_cell_ids_temp)
+            la_ra_usg.GetPointCells(earth_point_ids.GetId(i), earth_cell_ids_temp)
             for j in range(earth_cell_ids_temp.GetNumberOfIds()):
                 earth_cell_ids.InsertNextId(earth_cell_ids_temp.GetId(j))
                 earth_cell_ids_list += [earth_cell_ids_temp.GetId(j)]
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(la_ra_usg)
-        extract.SetCellList(earth_cell_ids)
-        extract.Update()
 
-        geo_filter = vtk.vtkGeometryFilter()
-        geo_filter.SetInputData(extract.GetOutput())
-        geo_filter.Update()
-        earth = geo_filter.GetOutput()
-        
-        cleaner = vtk.vtkCleanPolyData()
-        cleaner.SetInputData(earth)
-        cleaner.Update()
-        earth = cleaner.GetOutput()
-        
+        earth = apply_vtk_geom_filter(apply_extract_cell_filter(la_ra_usg, earth_cell_ids))
+        earth = clean_polydata(earth)
+
         # meshNew = dsa.WrapDataObject(cleaner.GetOutput())
-        writer = vtk.vtkOBJWriter()
-        writer.SetFileName(job.ID+"/bridges/"+str(var)+"_earth.obj")
-        writer.SetInputData(earth)
-        writer.Write()
-        
+        vtk_obj_writer(job.ID + "/bridges/" + str(var) + "_earth.obj", earth)
         # Here
 
         print("Extracted earth")
         cell_id_all = []
         for i in range(la_ra_usg.GetNumberOfCells()):
             cell_id_all.append(i)
-        
-        la_diff =  list(set(cell_id_all).difference(set(earth_cell_ids_list)))
-        la_ra_new = vtk.vtkIdList()
-        for var in la_diff:
-            la_ra_new.InsertNextId(var)
-            
-        extract = vtk.vtkExtractCells()
-        extract.SetInputData(la_ra_usg)
-        extract.SetCellList(la_ra_new)
-        extract.Update()
 
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.MergePointsOn()
-        #append_filter.SetTolerance(0.01*args.scale)
+        la_diff = list(set(cell_id_all).difference(set(earth_cell_ids_list)))
 
-        append_filter.AddInputData(extract.GetOutput())
+        la_ra_epi = vtk_append([get_cells_with_ids(la_ra_usg, la_diff)],
+                               merge_points=True)  # we lose this mesh, when defining the append filter later
 
+        if args.debug and var == 'upper_posterior_bridge':
+            # Still has element Tag
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_epi_with_holes.vtu", la_ra_epi)
 
-    #     append_filter = vtk.vtkAppendFilter()
-    #     append_filter.MergePointsOn()
-    #     append_filter.SetTolerance(0.2*args.scale)
-    #     append_filter.AddInputData(append_filter.GetOutput())
-    # meshNew = dsa.WrapDataObject(extract.GetOutput())
+    # Now extract earth from LA_endo as well
 
-    filename = job.ID+'/bridges/bb_fiber.dat'
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/result_LA/LA_endo_with_fiber.vtu")  # Has elemTag! :)
+    reader.Update()
+    la_endo = reader.GetOutput()
+
+    earth_cell_ids_list = []
+
+    for var in bridge_list:
+        print(var)
+
+        reader = vtk.vtkUnstructuredGridReader()
+        reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
+        reader.Update()
+        bridge_usg = reader.GetOutput()
+
+        locator = vtk.vtkStaticPointLocator()
+        locator.SetDataSet(la_endo)
+        locator.BuildLocator()
+
+        intersection_points = bridge_usg.GetPoints().GetData()
+        intersection_points = vtk_to_numpy(intersection_points)
+
+        earth_point_ids_temp = vtk.vtkIdList()
+        earth_point_ids = vtk.vtkIdList()
+        for i in range(len(intersection_points)):
+            locator.FindPointsWithinRadius(0.7 * args.scale, intersection_points[i], earth_point_ids_temp)
+            for j in range(earth_point_ids_temp.GetNumberOfIds()):
+                earth_point_ids.InsertNextId(earth_point_ids_temp.GetId(j))
+
+        earth_cell_ids_temp = vtk.vtkIdList()
+        earth_cell_ids = vtk.vtkIdList()
+        for i in range(earth_point_ids.GetNumberOfIds()):
+            la_endo.GetPointCells(earth_point_ids.GetId(i), earth_cell_ids_temp)
+            for j in range(earth_cell_ids_temp.GetNumberOfIds()):
+                earth_cell_ids.InsertNextId(earth_cell_ids_temp.GetId(j))
+                earth_cell_ids_list += [earth_cell_ids_temp.GetId(j)]
+
+        earth = apply_vtk_geom_filter(apply_extract_cell_filter(la_endo, earth_cell_ids))
+        earth = clean_polydata(earth)
+
+        print("Extracted earth")
+        cell_id_all = []
+        for i in range(la_endo.GetNumberOfCells()):
+            cell_id_all.append(i)
+
+        la_diff = list(set(cell_id_all).difference(set(earth_cell_ids_list)))
+
+        la_endo_final = vtk_append([get_cells_with_ids(la_endo, la_diff)],
+                                   merge_points=True)  # we lose this mesh, when defining the append filter later
+
+        if args.debug and var == 'upper_posterior_bridge':
+            vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_endo_with_holes.vtu", la_endo_final)
+
+    filename = job.ID + '/bridges/bb_fiber.dat'
     f = open(filename, 'rb')
     bb_fiber = pickle.load(f)
-    
-    spline_points = vtk.vtkPoints()
-    for i in range(len(bb_fiber)):
-        spline_points.InsertPoint(i, bb_fiber[i][0], bb_fiber[i][1], bb_fiber[i][2])
-    
-    # Fit a spline to the points
-    spline = vtk.vtkParametricSpline()
-    spline.SetPoints(spline_points)
-    
-    functionSource = vtk.vtkParametricFunctionSource()
-    functionSource.SetParametricFunction(spline)
-    functionSource.SetUResolution(30 * spline_points.GetNumberOfPoints())
-    functionSource.Update()
-    bb_fiber_points_data = vtk.util.numpy_support.vtk_to_numpy(functionSource.GetOutput().GetPoints().GetData())
-    
+
+    bb_fiber_points_data = vtk_to_numpy(generate_spline_points(bb_fiber).GetPoints().GetData())
+
     print("Union between earth and bridges")
     for var in bridge_list:
-        
+
         # if args.mesh_type == "vol":
         #     mesh_D = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_bridge_resampled.obj")
         #     mesh_E = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_earth.obj")
         #     output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="igl")
         # elif args.mesh_type == "bilayer":
         # Here
-        mesh_D = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_bridge_resampled.obj")
-        mesh_E = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_earth.obj")
+        mesh_D = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj")
+        mesh_E = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_earth.obj")
         # # Warning: set -1 if pts normals are pointing outside
-        # # Use union if the endo normals are pointing outside
-        # output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
-        if args.mesh_type=="bilayer":
-            # Use difference if the endo normals are pointing inside
-            output_mesh_2 = pymesh.boolean(mesh_E, mesh_D, operation="difference", engine="corefinement")
-            pymesh.save_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj", output_mesh_2, ascii=True)
-        else:
-            output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
-            pymesh.save_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj", output_mesh_2, ascii=True)
-            
-            # reader = vtk.vtkOBJReader()
-            # reader.SetFileName(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-            # reader.Update()
+        #output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
+        # Use difference if the endo normals are pointing inside
+        output_mesh_2 = pymesh.boolean(mesh_E, mesh_D, operation="difference", engine="corefinement")
+        pymesh.save_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj", output_mesh_2, ascii=True)
+        print("Union between earth and bridges in " + var)
 
-            # output_mesh_2 = Method.extract_largest_region(reader.GetOutput())
-
-            # writer = vtk.vtkOBJWriter()
-            # writer.SetFileName(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-            # writer.SetInputData(output_mesh_2)
-            # writer.Write()
-
-            # mesh_D = pymesh.load_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-
-            # output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
-
-            # pymesh.save_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj", output_mesh_2, ascii=True)
-
-        print("Union between earth and bridges in "+var)
-        
         ms = pymeshlab.MeshSet()
-        ms.load_new_mesh(job.ID+"/bridges/"+str(var)+"_union_to_resample.obj")
-        ms.remeshing_isotropic_explicit_remeshing(iterations=5, targetlen=0.4*args.scale, adaptive=True)
-        ms.save_current_mesh(job.ID+"/bridges/"+str(var)+"_union.obj",\
-        save_vertex_color=False, save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False, save_wedge_normal=False)
-    
+        # if args.just_bridges and var == 'BB_intern_bridges':
+        # job.ID='../'+job.ID# Change if you enter from ra_main and not from pipeline.py, otherwise comment the line
+        ms.load_new_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj")
+        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(0.4 * args.scale), adaptive=True)
+        ms.save_current_mesh(job.ID + "/bridges/" + str(var) + "_union.obj", save_vertex_color=False,
+                             save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False,
+                             save_wedge_normal=False)
+
         if args.mesh_type == "vol":
-            subprocess.run(["meshtool", 
-                        "generate", 
-                        "mesh", 
-                        "-ofmt=vtk",
-                        "-prsv_bdry=1",
-                        #"-scale={}".format(0.4*args.scale),
-                        "-surf="+job.ID+"/bridges/"+str(var)+"_union.obj",
-                        "-outmsh="+job.ID+"/bridges/"+str(var)+"_union_mesh.vtk"])
-        
-            reader = vtk.vtkUnstructuredGridReader()
-            reader.SetFileName(job.ID+"/bridges/"+str(var)+"_union_mesh.vtk")
+            subprocess.run(["meshtool",
+                            "generate",
+                            "mesh",
+                            "-ofmt=vtk",
+                            "-prsv_bdry=1",
+                            # "-scale={}".format(0.4*args.scale),
+                            "-surf=" + job.ID + "/bridges/" + str(var) + "_union.obj",
+                            "-outmsh=" + job.ID + "/bridges/" + str(var) + "_union_mesh.vtk"])
+
+            reader = vtk.vtkUnstructuredGridReader()  # vtkXMLUnstructuredGridReader
+            reader.SetFileName(job.ID + "/bridges/" + str(var) + "_union_mesh.vtk")
             reader.Update()
             bridge_union = reader.GetOutput()
         elif args.mesh_type == "bilayer":
 
             reader = vtk.vtkOBJReader()
-            reader.SetFileName(job.ID+"/bridges/"+str(var)+"_union.obj")
-            reader.Update() 
+            reader.SetFileName(job.ID + "/bridges/" + str(var) + "_union.obj")
+            reader.Update()
             bridge_union = vtk.vtkUnstructuredGrid()
             bridge_union.DeepCopy(reader.GetOutput())
 
-        tag = np.zeros(bridge_union.GetNumberOfCells(), dtype = int)
+        tag = np.zeros(bridge_union.GetNumberOfCells(), dtype="int")
+
         if var == 'BB_intern_bridges':
             tag[:] = bachmann_bundel_internal
         elif var == 'coronary_sinus_bridge':
             tag[:] = coronary_sinus_bridge_left
         elif var == 'middle_posterior_bridge':
             tag[:] = middle_posterior_bridge_left
-        elif var =='upper_posterior_bridge':
+        elif var == 'upper_posterior_bridge':
             tag[:] = upper_posterior_bridge_left
-            
-            
+
         fiber = np.ones((bridge_union.GetNumberOfCells(), 3), dtype="float32")
+
         if var == 'BB_intern_bridges':
-            fiber = Method.assign_element_fiber_around_path_within_radius(bridge_union, bb_fiber_points_data, 3*args.scale, fiber, smooth=True)
+            fiber = Method.assign_element_fiber_around_path_within_radius(bridge_union, bb_fiber_points_data,
+                                                                          3 * args.scale, fiber, smooth=True)
         elif var == 'coronary_sinus_bridge':
             fiber[:] = csb_fiber
         elif var == 'middle_posterior_bridge':
             fiber[:] = mpb_fiber
-        elif var =='upper_posterior_bridge':
+        elif var == 'upper_posterior_bridge':
             fiber[:] = upb_fiber
-    
+
         meshNew = dsa.WrapDataObject(bridge_union)
         meshNew.CellData.append(tag, "elemTag")
         meshNew.CellData.append(fiber, "fiber")
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/bridges/"+str(var)+"_union_mesh.vtk")
-        writer.SetInputData(meshNew.VTKObject)
-        writer.Write()
-        append_filter.AddInputData(meshNew.VTKObject)
-        
-    append_filter.MergePointsOn()
-    append_filter.Update()
-    
-    epi = append_filter.GetOutput()
 
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(job.ID+"/result_RA/LA_RA_with_bundles.vtu")
-    writer.SetInputData(epi)
-    writer.Write()
-    
+        vtk_unstructured_grid_writer(job.ID + "/bridges/" + str(var) + "_union_mesh.vtk",
+                                     meshNew.VTKObject)  # we have the elemTags here
+
+        if var == 'BB_intern_bridges':
+            bb = meshNew.VTKObject
+        elif var == 'coronary_sinus_bridge':
+            cs = meshNew.VTKObject
+        elif var == 'middle_posterior_bridge':
+            mp = meshNew.VTKObject
+        elif var == 'upper_posterior_bridge':
+            up = meshNew.VTKObject
+
+    reader = vtk.vtkUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/bridges/BB_intern_bridges_union_mesh.vtk")
+    reader.Update()
+    bb = reader.GetOutput()
+
+    reader = vtk.vtkUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/bridges/coronary_sinus_bridge_union_mesh.vtk")
+    reader.Update()
+    cs = reader.GetOutput()
+
+    reader = vtk.vtkUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/bridges/middle_posterior_bridge_union_mesh.vtk")
+    reader.Update()
+    mp = reader.GetOutput()
+
+    reader = vtk.vtkUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/bridges/upper_posterior_bridge_union_mesh.vtk")
+    reader.Update()
+    up = reader.GetOutput()
+
+    bridges = vtk_append([bb, cs, mp, up])
+
+    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/append_bridges_2.vtu", bridges)  # Has elementTag!
+
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/result_RA/LA_RA_epi_with_holes.vtu")
+    reader.Update()
+    epi_new = reader.GetOutput()
+
+    reader = vtk.vtkXMLUnstructuredGridReader()
+    reader.SetFileName(job.ID + "/result_RA/append_bridges_2.vtu")
+    reader.Update()
+    bridges = reader.GetOutput()
+
+    epi = vtk_append([epi_new, bridges])
+
+    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_with_bundles.vtu", epi)
     epi = Method.generate_sheet_dir(args, epi, job)
-    
-    writer = vtk.vtkXMLUnstructuredGridWriter()
-    writer.SetFileName(job.ID+"/result_RA/LA_RA_with_sheets.vtu")
-    writer.SetInputData(epi)
-    writer.Write()
-    
+
+    vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_with_sheets.vtu", epi)
     if args.mesh_type == "bilayer":
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/la_ra_epi_with_sheets.vtu")
-        writer.SetInputData(epi)
-        writer.Write()
-
-        reader = vtk.vtkUnstructuredGridReader()
-        reader.SetFileName(job.ID+"/result_RA/RA_CT_PMs.vtu")
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_epi_with_sheets.vtu", epi)  # Has elemTag!
+        reader = vtk.vtkXMLUnstructuredGridReader()
+        reader.SetFileName(job.ID + "/result_RA/RA_CT_PMs.vtu")  # Has elemTag! :)
         reader.Update()
         ra_endo = reader.GetOutput()
-        
-        reader = vtk.vtkUnstructuredGridReader()
-        reader.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtu")
+
+        reader = vtk.vtkXMLUnstructuredGridReader()
+        # reader.SetFileName(job.ID+"/result_LA/LA_endo_with_fiber.vtu") # Has elemTag! :)
+        reader.SetFileName(job.ID + "/result_RA/LA_endo_with_holes.vtu")  # Has elemTag! :)
         reader.Update()
         la_endo = reader.GetOutput()
-        
-        append_filter = vtk.vtkAppendFilter()
-        append_filter.AddInputData(la_endo)
-        append_filter.AddInputData(ra_endo)
-        append_filter.Update()
-        
-        endo = Method.move_surf_along_normals(append_filter.GetOutput(), 0.1*args.scale, 1) # # Warning: set -1 if pts normals are pointing outside
-        
-        writer = vtk.vtkUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/la_ra_endo.vtu")
-        writer.SetInputData(endo)
-        writer.Write()
-        
-        bilayer = Method.generate_bilayer(endo, epi, 0.12*args.scale)
-        
+
+        bilayer_endo = vtk_append([la_endo, ra_endo])
+
+        vtk_xml_unstructured_grid_writer(
+            job.ID + "/result_RA/append_LA_endo_RA_endo.vtu", bilayer_endo)
+        # Has elemTag!
+        endo = Method.move_surf_along_normals(bilayer_endo, 0.1 * args.scale,
+                                              1)  # # Warning: set -1 if pts normals are pointing outside
+
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_endo.vtu", endo)  # Has elemTag! :,
+        bilayer = Method.generate_bilayer(args, job, endo, epi, 0.12 * args.scale)  # Does not have elemTag :(!
+
         Method.write_bilayer(bilayer, args, job)
 
     else:
 
-        writer = vtk.vtkXMLUnstructuredGridWriter()
-        writer.SetFileName(job.ID+"/result_RA/LA_RA_vol_with_fiber.vtu")
-        writer.SetInputData(epi)
-        writer.Write()
+        vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/LA_RA_vol_with_fiber.vtu", epi)
+        pts = vtk_to_numpy(epi.GetPoints().GetData())
+        write_to_pts(job.ID + '/result_RA/LA_RA_vol_with_fiber.pts', pts)
 
-        pts = vtk.util.numpy_support.vtk_to_numpy(epi.GetPoints().GetData())
-        with open(job.ID+'/result_RA/LA_RA_vol_with_fiber.pts',"w") as f:
-            f.write("{}\n".format(len(pts)))
-            for i in range(len(pts)):
-                f.write("{} {} {}\n".format(pts[i][0], pts[i][1], pts[i][2]))
-        
-        tag_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('elemTag'))
+        tag_epi = vtk_to_numpy(epi.GetCellData().GetArray('elemTag'))
+        write_to_elem(job.ID + '/result_RA/LA_RA_vol_with_fiber.elem', epi, tag_epi)
 
-        with open(job.ID+'/result_RA/LA_RA_vol_with_fiber.elem',"w") as f:
-            f.write("{}\n".format(epi.GetNumberOfCells()))
-            for i in range(epi.GetNumberOfCells()):
-                cell = epi.GetCell(i)
-                if cell.GetNumberOfPoints() == 2:
-                    f.write("Ln {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), tag_epi[i]))
-                elif cell.GetNumberOfPoints() == 3:
-                    f.write("Tr {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), tag_epi[i]))
-                elif cell.GetNumberOfPoints() == 4:
-                    f.write("Tt {} {} {} {} {}\n".format(cell.GetPointIds().GetId(0), cell.GetPointIds().GetId(1), cell.GetPointIds().GetId(2), cell.GetPointIds().GetId(3), tag_epi[i]))
-                else:
-                    print("strange "+ str(cell.GetNumberOfPoints()))
-        el_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('fiber'))
-        sheet_epi = vtk.util.numpy_support.vtk_to_numpy(epi.GetCellData().GetArray('sheet'))
-        
-        with open(job.ID+'/result_RA/LA_RA_vol_with_fiber.lon',"w") as f:
-            f.write("2\n")
-            for i in range(len(el_epi)):
-                f.write("{:.4f} {:.4f} {:.4f} {:.4f} {:.4f} {:.4f}\n".format(el_epi[i][0], el_epi[i][1], el_epi[i][2], sheet_epi[i][0], sheet_epi[i][1], sheet_epi[i][2]))
+        el_epi = vtk_to_numpy(epi.GetCellData().GetArray('fiber'))
+        sheet_epi = vtk_to_numpy(epi.GetCellData().GetArray('sheet'))
+        write_to_lon(job.ID + '/result_RA/LA_RA_vol_with_fiber.lon', el_epi, sheet_epi)

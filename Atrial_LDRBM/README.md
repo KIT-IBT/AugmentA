@@ -7,21 +7,22 @@ pip install requirements.txt
 ##Left Atrium
 
 ### [step1]Generate Boundaries
+
 Identifies and labels atrial openings. Run the file Generate_Boundaries/extract_rings.py
 
 ### [step2]Generate Fibers
+
 Warning: the algorithm expects endocardium mesh with point normals pointing inside!!!
 after generating boundaries
+
 1. input the coordinate of appendage in LDRBM/Fiber_LA/la_main.py
 2. run LDRBM/Fiber_LA/la_main.py
 
 ##Right Atrium
 same
 
-
-
-
 ## Start form blood pool
+
 if you have already have separated Epi- and Endocarium surface.
 you can:
 
