@@ -18,6 +18,8 @@ Laplace-Dirichlet-Rule-based-Method.
 - **template/**: template for non-rigid fitting process
 - **Atrial_LDRBM/**: Laplace-Dirichlet-Rule-based-Method to annotate anatomical regions and generate atrial fiber
   orientation in the atria
+- **tests/**: testing framework for unit and integration tests
+- **docker/**: Dockerfile to build a Docker image see readme in docker folder
 
 ## Setup
 
@@ -93,7 +95,7 @@ Copyright 2021 Luca Azzolin, Karlsruhe Institute of Technology.
 
 ## Contact
 
-Luca Azzolin  
+Pascal Maierhofer 
 Institute of Biomedical Engineering  
 Karlsruhe Institute of Technology  
 www.ibt.kit.edu
