@@ -1,0 +1,9 @@
+pandas~=1.5.2
+transformations~=2022.9.26
+h5py~=3.7.0
+meshio~=5.3.4
+scikit-learn~=1.2.1
+pandas==1.5.3
+numpy==1.24.0
+matplotlib==3.7.2
+matplotlib-inline==0.1.6

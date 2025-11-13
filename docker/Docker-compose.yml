@@ -1,0 +1,12 @@
+services:
+  augmenta_debugger:
+    image: augmenta_container_image
+    platform: linux/amd64
+    ports:
+      - "5901:5901" #VNC Port app
+      - "6901:6901" #VNC Port browser/web
+      - "55146:55146" #Debug Port intelij
+    volumes: #Replace with your data directory
+      - /Branch/To/Your/Data:/headless/data
+      - ../:/headless/augmenta
+
