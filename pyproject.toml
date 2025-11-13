@@ -1,20 +1,32 @@
-[tool.poetry]
+[project]
 name = "augmenta"
 version = "v1.0"
 description = "Patient-specific Augmented Atrial model Generation Tool"
-authors = ["lourdes.diaz <lourdes.diaz@kit.edu>"]
+authors = [{ name = "lourdes.diaz", email = "lourdes.diaz@kit.edu" },
+    { name = "Pascal Maierhofer", email = "pascal.maierhofer@kit.edu" }]
 license = "ACADEMIC PUBLIC LICENSE (openCARP, v1.0)"
 readme = "README.md"
 
-[tool.poetry.dependencies]
-python = "^3.9"
-pymeshfix = ">=0.16.1,<0.17.0"
-pymeshlab = "~2022.2.post2"
-pandas = "~1.5.2"
-transformations = "~2022.9.26"
-h5py = "~3.7.0"
-meshio = "~5.3.4"
-scikit-learn = "~1.2.1"
+dependencies = [
+    "pandas~=1.5.2",
+    "transformations~=2022.9.26",
+    "h5py~=3.7.0",
+    "meshio~=5.3.4",
+    "scikit-learn~=1.2.1",
+    "pandas==1.5.3",
+    "numpy==1.24.0",
+    "matplotlib==3.7.2",
+    "matplotlib-inline==0.1.6"
+]
+transformations = "^2022.9.26"
+h5py = "^3.7.0"
+meshio = "^5.3.4"
+scikit-learn = "^1.2.1"
+pandas = "1.5.3"
+numpy = "1.24.0"
+matplotlib = "3.7.2"
+matplotlib-inline = "0.1.6"
+
 
 
 [build-system]
