@@ -16,7 +16,7 @@ Work currently in progress
     - ```docker build -f Dockerfile-x64 -t augmenta_container_image .```
     - For ARM PCs (e.g. M3 MAC):
       ```docker build --platform linux/amd64 -f Dockerfile-x64 -t augmenta_container_image .```
-4. Change mounted folder to a folder on your pc ```"your/path/to/folder":headless/data```
+4. Change mounted folder to a folder on your pc ```"your/path/to/folder":headless/data``` in _Docker-compose.yml_
 5. Start docker container with `docker-compose up`
 
 # Running AugmentA
