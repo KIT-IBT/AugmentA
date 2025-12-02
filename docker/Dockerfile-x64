@@ -94,14 +94,10 @@ RUN apt-get update && apt-get install --reinstall ca-certificates \
  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 
-
-
 #openCARP installation
 RUN git clone https://git.opencarp.org/openCARP/openCARP.git
 
 WORKDIR openCARP
-
-RUN git checkout b3d4acd49b918744a5d66679d9d9e03725648f16
 
 RUN cmake -S. -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_PREFIX_PATH=/usr/lib/gcc/x86_64-linux-gnu/12/ -DLIB_hdf5=/usr/lib/x86_64-linux-gnu/hdf5/openmpi/libhdf5.so -DDLOPEN=ON -DBUILD_EXTERNAL=ON -DCMAKE_BUILD_TYPE=DEBUG
 
