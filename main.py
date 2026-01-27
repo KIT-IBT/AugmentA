@@ -36,7 +36,7 @@ import logging
 
 from pathlib import Path
 
-# DİKKAT: import yolu projendeki konuma göre seçilecek (aşağıda açıklıyorum)
+from pipeline import AugmentA
 from logging_setup import logger, set_log_file
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -142,17 +142,17 @@ def _default_log_path(mesh_path: str) -> str:
 def main():
     args = parser().parse_args()
 
-    # 1) log dosyası (file handler'ı bu path'e taşı)
+
     set_log_file(_default_log_path(args.mesh))
 
-    # 2) set_level yok: sadece console handler seviyesini --debug'a göre ayarla
+
     console_level = logging.DEBUG if int(getattr(args, "debug", 0)) == 1 else logging.INFO
     for h in logger.handlers:
         if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout:
             h.setLevel(console_level)
 
-    # 3) pipeline importunu logging'den sonra yap
-    from pipeline import AugmentA
+
+
 
     # In case both atria and closed surface are given process LA first and RA later
     if args.atrium == 'LA_RA' and args.closed_surface:
