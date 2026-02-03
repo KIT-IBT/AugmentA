@@ -41,6 +41,10 @@ from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
 from vtk_openCARP_methods_ibt.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 from vtk_openCARP_methods_ibt.writer import write_to_dat
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -75,9 +79,9 @@ def low_vol_LAT(args, path):
         try:
             os.makedirs(debug_dir)
         except OSError:
-            print(f"Creation of the directory {debug_dir} failed")
+            logger.warning("Could not create debug directory %s: %s", debug_dir, e)
         else:
-            print(f"Successfully created the directory {debug_dir} ")
+            logger.debug("Debug directory ready: %s", debug_dir)
 
         vtk_xml_unstructured_grid_writer(f'{debug_dir}/low_vol.vtu', low_vol)
     # Endo
@@ -178,7 +182,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
     tot_el_to_clean = np.array([], dtype=int)
 
     meshNew = dsa.WrapDataObject(endo)
-    print("Starting creation of bands ... ")
+    logger.info("Starting creation of bands ... ")
     for i in range(1, len(steps)):
 
         # Extract LAT band from min LAT to step i and remove all areas not connected with EAP
@@ -244,7 +248,7 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
                 connect.DeleteSpecifiedRegion(n)
                 connect.Update()
 
-    print("Bands to clean ready ... ")
+    logger.info("Bands to clean ready ... ")
 
     idss = np.zeros((endo.GetNumberOfCells(),))
     idss[tot_el_to_clean] = 1
@@ -302,9 +306,9 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         try:
             os.makedirs(debug_dir)
         except OSError:
-            print(f"Creation of the directory {debug_dir} failed")
+            logger.warning("Could not create debug directory %s: %s", debug_dir, e)
         else:
-            print(f"Successfully created the directory {debug_dir} ")
+            logger.debug("Debug directory ready: %s", debug_dir)
 
         el_border_array = np.concatenate(el_border)  # convert to linear array
         border = np.zeros((endo.GetNumberOfCells(),))
@@ -328,7 +332,7 @@ def create_regele(endo, args):
         file.write(str(i) + '\n')
     file.close()
 
-    print('Regele file done ...')
+    logger.info('Regele file done ...')
 
 
 def low_CV(model, low_CV_thr, meshfold):
@@ -356,7 +360,7 @@ def get_EAP(path_mod, path_fib):
 
     LA_MV_ids = vtk_to_numpy(LA_MV.GetPointData().GetArray('Global_ids')).astype(int)
 
-    print(LA_MV_ids[np.argmin(LAT_map[LA_MV_ids])])
+    logger.info(LA_MV_ids[np.argmin(LAT_map[LA_MV_ids])])
     stim_pt = model.GetPoint(LA_MV_ids[np.argmin(LAT_map[LA_MV_ids])])
 
     return stim_pt

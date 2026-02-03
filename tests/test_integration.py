@@ -12,6 +12,13 @@ from pipeline import AugmentA
 from main import parser
 from test_config import TestPaths
 
+
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
+
+
 # Test configuration
 COMPARE_WITH_TOLERANCE = False  # Set False to require exact matches for all files
 COMPARE_BY_COORDINATES = True  # For VTX files, compare by coordinates instead of IDs
@@ -33,7 +40,7 @@ def print_file_sizes_on_failure(current_path: Path, golden_path: Path):
     try:
         current_size = current_path.stat().st_size
         golden_size = golden_path.stat().st_size
-        print(f"File sizes: current={current_size} bytes, golden={golden_size} bytes")
+        logger.info("File sizes: current=%s bytes, golden=%s bytes", current_size, golden_size)
     except Exception:
         pass
 
@@ -67,10 +74,10 @@ def compare_vtx_with_tolerance(current_path: Path, golden_path: Path, max_diff_p
 
     diff_percent = (different_ids / total_unique_ids) * 100
 
-    print(f"VTX comparison for {current_path.name}:")
-    print(f" - Golden: {len(golden_set)} IDs")
-    print(f" - Current: {len(current_set)} IDs")
-    print(f" - Different: {different_ids} IDs ({diff_percent:.1f}%)")
+    logger.info("VTX comparison for %s:", current_path.name)
+    logger.info(" - Golden: %s IDs", len(golden_set))
+    logger.info(" - Current: %s IDs", len(current_set))
+    logger.info(" - Different: %s IDs (%.1f%%)", different_ids, diff_percent)
 
     return diff_percent <= max_diff_percent
 
@@ -138,23 +145,24 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
         current_mesh = pv.read(current_mesh_path)
         golden_mesh = pv.read(golden_mesh_path)
     except Exception as e:
-        print(f"Error reading mesh files: {e}")
-        print(f"Current mesh: {current_mesh_path}")
-        print(f"Golden mesh: {golden_mesh_path}")
+        logger.error("Error reading mesh files: %s", e)
+        logger.error("Current mesh: %s", current_mesh_path)
+        logger.error("Golden mesh: %s", golden_mesh_path)
+
         return False
 
     current_ids = read_vtx_to_set(current_vtx_path)
     golden_ids = read_vtx_to_set(golden_vtx_path)
 
-    print(f"VTX comparison for {current_vtx_path.name}:")
-    print(f"Current IDs: {len(current_ids)}, Golden IDs: {len(golden_ids)}")
+    logger.info("VTX comparison for %s:", current_vtx_path.name)
+    logger.info("Current IDs: %s, Golden IDs: %s", len(current_ids), len(golden_ids))
 
     # Handle empty VTX files
     if not current_ids and not golden_ids:
-        print("Both files empty - match")
+        logger.info("Both files empty - match")
         return True
     if not current_ids or not golden_ids:
-        print("One file empty, other not - no match")
+        logger.info("One file empty, other not - no match")
         return False
 
     try:
@@ -163,7 +171,7 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
 
         if not golden_coords or not current_coords:
             result = len(current_coords) == len(golden_coords)
-            print(f"No valid coordinates - match: {result}")
+            logger.info("No valid coordinates - match: %s", result)
             return result
 
         tree = cKDTree(golden_coords)
@@ -173,10 +181,10 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
         mean_distance = np.mean(distances)
         num_within_tolerance = np.sum(distances <= tolerance)
 
-        print(f"Coordinate comparison:")
-        print(f"Max distance: {max_distance:.6f} mm")
-        print(f"Mean distance: {mean_distance:.6f} mm")
-        print(f"Points within {tolerance} µm: {num_within_tolerance}/{len(distances)}")
+        logger.info("Coordinate comparison:")
+        logger.info("Max distance: %.6f mm", max_distance)
+        logger.info("Mean distance: %.6f mm", mean_distance)
+        logger.info("Points within %s µm: %s/%s", tolerance, num_within_tolerance, len(distances))
 
         # Require 95% of points to be within tolerance
         match_percentage = num_within_tolerance / len(distances)
@@ -185,15 +193,15 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
         result = match_percentage >= required_match
 
         if not result:
-            print(f"FAIL: Only {match_percentage:.1%} of points matched (required: {required_match:.1%})")
-            print(f"This suggests the apex point may have been at the wrong location during processing")
+            logger.warning(f"FAIL: Only {match_percentage:.1%} of points matched (required: {required_match:.1%})")
+            logger.warning(f"This suggests the apex point may have been at the wrong location during processing")
         else:
-            print(f"PASS: {match_percentage:.1%} of points matched")
+            logger.info(f"PASS: {match_percentage:.1%} of points matched")
 
         return result
 
     except Exception as e:
-        print(f"Error during coordinate comparison: {e}")
+        logger.error("Error during coordinate comparison: %s", e)
         return False
 
 
@@ -207,8 +215,8 @@ def compare_vtk_meshes_by_geometry(current_path: Path,
         current_mesh = pv.read(current_path)
         golden_mesh = pv.read(golden_path)
 
-        print(f"\nVTK geometry comparison for {current_path.name}:")
-        print(f"Points: current={current_mesh.n_points}, golden={golden_mesh.n_points}")
+        logger.info("VTK geometry comparison for %s:", current_path.name)
+        logger.info("Points: current=%s, golden=%s", current_mesh.n_points, golden_mesh.n_points)
 
         # Build KD-tree for nearest neighbor search
         tree = cKDTree(golden_mesh.points)
@@ -219,22 +227,22 @@ def compare_vtk_meshes_by_geometry(current_path: Path,
         max_dist = np.max(distances)
         mean_dist = np.mean(distances)
 
-        print(f"Max distance to golden mesh: {max_dist:.2f} µm ({max_dist / 1000:.3f} mm)")
-        print(f"Mean distance to golden mesh: {mean_dist:.2f} µm ({mean_dist / 1000:.3f} mm)")
-        print(f"Threshold: {distance_threshold} µm ({distance_threshold / 1000} mm)")
+        logger.info(f"Max distance to golden mesh: {max_dist:.2f} µm ({max_dist / 1000:.3f} mm)")
+        logger.info(f"Mean distance to golden mesh: {mean_dist:.2f} µm ({mean_dist / 1000:.3f} mm)")
+        logger.info(f"Threshold: {distance_threshold} µm ({distance_threshold / 1000} mm)")
 
         within_threshold = np.all(distances <= distance_threshold)
 
         if within_threshold:
-            print(f"PASS: All points within threshold")
+            logger.info(f"PASS: All points within threshold")
             return True
         else:
             num_exceeding = np.sum(distances > distance_threshold)
-            print(f"FAIL: {num_exceeding}/{len(distances)} points exceed threshold")
+            logger.warning(f"FAIL: {num_exceeding}/{len(distances)} points exceed threshold")
             return False
 
     except Exception as e:
-        print(f"Error comparing VTK meshes by geometry: {e}")
+        logger.error(f"Error comparing VTK meshes by geometry: {e}")
         return False
 
 
@@ -251,22 +259,22 @@ def compare_elem_files(current_path: Path,
         current_count = int(current_lines[0].strip())
         golden_count = int(golden_lines[0].strip())
 
-        print(f"\nElem file comparison for {current_path.name}:")
-        print(f"Elements: current={current_count}, golden={golden_count}")
+        logger.info("Elem file comparison for %s:", current_path.name)
+        logger.info("Elements: current=%s, golden=%s", current_count, golden_count)
 
         diff_percent = abs(current_count - golden_count) / golden_count * 100
-        print(f"Difference: {diff_percent:.1f}%")
-        print(f"Tolerance: {tolerance_percent}%")
+        logger.info(f"Difference: {diff_percent:.1f}%")
+        logger.info(f"Tolerance: {tolerance_percent}%")
 
         if diff_percent <= tolerance_percent:
-            print(f"PASS: Within tolerance")
+            logger.info(f"PASS: Within tolerance")
             return True
         else:
-            print(f"FAIL: Exceeds tolerance")
+            logger.warning(f"FAIL: Exceeds tolerance")
             return False
 
     except Exception as e:
-        print(f"Error comparing elem files: {e}")
+        logger.error(f"Error comparing elem files: {e}")
         return False
 
 
@@ -283,22 +291,22 @@ def compare_lon_files(current_path: Path,
             golden_first_line = f.readline().strip()
             golden_count = int(golden_first_line)
 
-        print(f"\nLon file comparison for {current_path.name}:")
-        print(f"Fiber vectors: current={current_count}, golden={golden_count}")
+        logger.info(f"\nLon file comparison for {current_path.name}:")
+        logger.info(f"Fiber vectors: current={current_count}, golden={golden_count}")
 
         diff_percent = abs(current_count - golden_count) / golden_count * 100
-        print(f"Difference: {diff_percent:.1f}%")
-        print(f"Tolerance: {tolerance_percent}%")
+        logger.info(f"Difference: {diff_percent:.1f}%")
+        logger.info(f"Tolerance: {tolerance_percent}%")
 
         if diff_percent <= tolerance_percent:
-            print(f"PASS: Vector count within tolerance")
+            logger.info(f"PASS: Vector count within tolerance")
             return True
         else:
-            print(f"FAIL: Vector count exceeds tolerance")
+            logger.warning(f"FAIL: Vector count exceeds tolerance")
             return False
 
     except Exception as e:
-        print(f"Error comparing lon files: {e}")
+        logger.error(f"Error comparing lon files: {e}")
         return False
 
 
@@ -313,22 +321,22 @@ def compare_pts_files(current_path: Path,
         with open(golden_path, 'r') as f:
             golden_count = int(f.readline().strip())
 
-        print(f"\nPts file comparison for {current_path.name}:")
-        print(f"  Points: current={current_count}, golden={golden_count}")
+        logger.info(f"\nPts file comparison for {current_path.name}:")
+        logger.info(f"  Points: current={current_count}, golden={golden_count}")
 
         diff_percent = abs(current_count - golden_count) / golden_count * 100
-        print(f"  Difference: {diff_percent:.1f}%")
-        print(f"  Tolerance: {tolerance_percent}%")
+        logger.info(f"  Difference: {diff_percent:.1f}%")
+        logger.info(f"  Tolerance: {tolerance_percent}%")
 
         if diff_percent <= tolerance_percent:
-            print(f"  PASS: Point count within tolerance")
+            logger.info(f"  PASS: Point count within tolerance")
             return True
         else:
-            print(f"  FAIL: Point count exceeds tolerance")
+            logger.warning(f"  FAIL: Point count exceeds tolerance")
             return False
 
     except Exception as e:
-        print(f"Error comparing pts files: {e}")
+        logger.error(f"Error comparing pts files: {e}")
         return False
 
 
@@ -353,7 +361,7 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
         relative_path = golden_path.relative_to(golden_dir)
         current_path = current_dir / relative_path
 
-        print(f"Comparing: {current_path} against {golden_path}")
+        logger.info("Comparing: %s against %s", current_path, golden_path)
 
         file_extension = golden_path.suffix
         file_name = golden_path.name
@@ -372,7 +380,7 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                                                   check_exact=False,
                                                   rtol=CSV_RTOL,
                                                   atol=CSV_ATOL)
-                    print("  PASS: CSV content matches within tolerance")
+                    logger.info("PASS: CSV content matches within tolerance")
 
                 except AssertionError as e:
                     assert False, f"CSV content mismatch in {file_name}: {e}"
@@ -388,9 +396,9 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                         current_mesh_path = find_mesh_file_for_vtx_comparison(current_dir, temp_input_dir)
                         golden_mesh_path = find_mesh_file_for_vtx_comparison(golden_dir, golden_dir.parent)
 
-                        print(f"Using meshes for VTX comparison:")
-                        print(f"Current: {current_mesh_path}")
-                        print(f"Golden: {golden_mesh_path}")
+                        logger.info("Using meshes for VTX comparison:")
+                        logger.info("Current: %s", current_mesh_path)
+                        logger.info("Golden: %s", golden_mesh_path)
 
                         if not compare_vtx_by_coordinates(current_path, golden_path, current_mesh_path,
                                                           golden_mesh_path):
@@ -398,8 +406,8 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                             assert False, f"VTX coordinate mismatch in {file_name}"
 
                     except FileNotFoundError as e:
-                        print(f"Warning: Could not find mesh files for coordinate comparison: {e}")
-                        print("Falling back to direct ID comparison")
+                        logger.warning("Could not find mesh files for coordinate comparison: %s", e)
+                        logger.warning("Falling back to direct ID comparison")
 
                         golden_set = read_vtx_to_set(golden_path)
                         current_set = read_vtx_to_set(current_path)
@@ -437,12 +445,13 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                 if not filecmp.cmp(golden_path, current_path, shallow=False):
                     print_file_sizes_on_failure(current_path, golden_path)
                     assert False, f"File content mismatch in {file_name}"
-                print("PASS: Binary content matches")
+                logger.info("PASS: Binary content matches")
+
 
         except AssertionError:
             raise
         except Exception as e:
-            print(f"ERROR: Unexpected error comparing {file_name}: {e}")
+            logger.error("Unexpected error comparing %s: %s", file_name, e)
             raise
 
 
@@ -526,13 +535,14 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
         if current_result_dir.exists():
             shutil.copytree(current_result_dir, inspection_dir / "current_results", dirs_exist_ok=True)
             shutil.copytree(golden_comparison_dir, inspection_dir / "golden_results", dirs_exist_ok=True)
-            print(f"Results saved for inspection in: {inspection_dir}")
-            print(f"Current results: {inspection_dir / 'current_results'}")
-            print(f"Good results: {inspection_dir / 'golden_results'}")
+            logger.info("Results saved for inspection in: %s", inspection_dir)
+            logger.info("Current results: %s", inspection_dir / "current_results")
+            logger.info("Golden results: %s", inspection_dir / "golden_results")
 
         # Compare results
         compare_directories(current_result_dir, golden_comparison_dir, temp_input_dir)
-        print("ALL COMPARISONS PASSED!")
+        logger.info("ALL COMPARISONS PASSED!")
+
 
     finally:
         os.chdir(original_cwd)

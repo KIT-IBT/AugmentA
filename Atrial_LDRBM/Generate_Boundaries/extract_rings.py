@@ -47,6 +47,12 @@ from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane_w
     init_connectivity_filter, ExtractionModes
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
+
+
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -92,7 +98,7 @@ def parser():
 
 def label_atrial_orifices(mesh, LAA_id="", RAA_id="", LAA_base_id="", RAA_base_id="", debug=1):
     """Extrating Rings"""
-    print('Extracting rings...')
+    logger.info('Extracting rings...')
 
     mesh_surf = smart_reader(mesh)
     mesh_surf = apply_vtk_geom_filter(mesh_surf)
@@ -640,7 +646,7 @@ def extract_top_cut(outdir, surface_over_tv_f, ivc_points, svc_points, debug):
         if is_top_endo_epi_cut(ivc_points, svc_points, boarder_points):
             top_endo_id = region_id
         else:
-            print(f"Region {region_id} is not the top cut for endo and epi")
+            logger.info(f"Region {region_id} is not the top cut for endo and epi")
 
         # delete added region id
         connect.DeleteSpecifiedRegion(region_id)

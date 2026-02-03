@@ -45,6 +45,10 @@ from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_
 from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
     apply_extract_cell_filter, get_cells_with_ids
 from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -176,12 +180,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     if args.debug:
         vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_usg.vtu", la_ra_usg)
-    print('reading done!')
+    logger.info('reading done!')
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     earth_cell_ids_list = []
     for var in bridge_list:
-        print(var)
+        logger.info(var)
 
         reader = vtk.vtkUnstructuredGridReader()
         reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
@@ -217,7 +221,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         vtk_obj_writer(job.ID + "/bridges/" + str(var) + "_earth.obj", earth)
         # Here
 
-        print("Extracted earth")
+        logger.info("Extracted earth")
         cell_id_all = []
         for i in range(la_ra_usg.GetNumberOfCells()):
             cell_id_all.append(i)
@@ -241,7 +245,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     earth_cell_ids_list = []
 
     for var in bridge_list:
-        print(var)
+        logger.info(var)
 
         reader = vtk.vtkUnstructuredGridReader()
         reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
@@ -273,7 +277,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         earth = apply_vtk_geom_filter(apply_extract_cell_filter(la_endo, earth_cell_ids))
         earth = clean_polydata(earth)
 
-        print("Extracted earth")
+        logger.info("Extracted earth")
         cell_id_all = []
         for i in range(la_endo.GetNumberOfCells()):
             cell_id_all.append(i)
@@ -292,7 +296,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     bb_fiber_points_data = vtk_to_numpy(generate_spline_points(bb_fiber).GetPoints().GetData())
 
-    print("Union between earth and bridges")
+    logger.info("Union between earth and bridges")
     for var in bridge_list:
 
         # if args.mesh_type == "vol":
@@ -308,7 +312,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         # Use difference if the endo normals are pointing inside
         output_mesh_2 = pymesh.boolean(mesh_E, mesh_D, operation="difference", engine="corefinement")
         pymesh.save_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj", output_mesh_2, ascii=True)
-        print("Union between earth and bridges in " + var)
+        logger.info("Union between earth and bridges in " + var)
 
         ms = pymeshlab.MeshSet()
         # if args.just_bridges and var == 'BB_intern_bridges':

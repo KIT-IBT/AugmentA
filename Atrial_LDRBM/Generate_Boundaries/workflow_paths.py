@@ -1,4 +1,8 @@
 from pathlib import Path
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
 
 # Configuration dictionary for all path components and naming conventions.
 # Modifying these values will change the output paths and names across the pipeline.
@@ -37,8 +41,8 @@ class WorkflowPaths:
         """Logs the currently active stage and mesh base path to the console."""
         stage_name = self._active_stage
         active_base_name = self._base_paths[stage_name].name
-        print(f"\n--- Stage Complete: '{stage_name}' ---")
-        print(f"Active mesh is now: '{active_base_name}'")
+        logger.info(f"\n--- Stage Complete: '{stage_name}' ---")
+        logger.info(f"Active mesh is now: '{active_base_name}'")
 
     @property
     def active_mesh_base(self) -> Path:

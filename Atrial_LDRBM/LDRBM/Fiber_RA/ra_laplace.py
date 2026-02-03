@@ -33,6 +33,11 @@ from vtk.numpy_interface import dataset_adapter as dsa
 from Atrial_LDRBM.LDRBM.Fiber_RA.ra_calculate_gradient import ra_calculate_gradient
 from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer, vtk_polydata_writer
 
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
+
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -158,9 +163,9 @@ def ra_laplace(args, job, model):
         try:
             os.makedirs(simid)
         except OSError:
-            print(f"Creation of the directory {simid} failed")
+            logger.info(f"Creation of the directory {simid} failed")
         else:
-            print(f"Successfully created the directory {simid} ")
+            logger.info(f"Successfully created the directory {simid} ")
         if args.mesh_type == "vol":
             vtk_xml_unstructured_grid_writer(simid + "/RA_with_laplace.vtu", meshNew.VTKObject)
         else:

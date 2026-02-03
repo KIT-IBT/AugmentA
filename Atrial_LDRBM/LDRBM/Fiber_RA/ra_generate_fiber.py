@@ -53,6 +53,11 @@ EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 from Atrial_LDRBM.LDRBM.Fiber_RA.create_bridges import add_free_bridge
 
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
+
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
@@ -61,17 +66,17 @@ def ra_generate_fiber(model, args, job):
     try:
         os.makedirs(simid)
     except OSError:
-        print(f"Creation of the directory {simid} failed")
+        logger.info(f"Creation of the directory {simid} failed")
     else:
-        print(f"Successfully created the directory {simid} ")
+        logger.info(f"Successfully created the directory {simid} ")
 
     simid = job.ID + "/bridges"
     try:
         os.makedirs(simid)
     except OSError:
-        print(f"Creation of the directory {simid} failed")
+        logger.info(f"Creation of the directory {simid} failed")
     else:
-        print(f"Successfully created the directory {simid} ")
+        logger.info(f"Successfully created the directory {simid} ")
 
     # Riunet
     tao_tv = 0.9
@@ -166,7 +171,7 @@ def ra_generate_fiber(model, args, job):
     phie_grad = vtk_to_numpy(phie_grad)
 
     start_time = datetime.datetime.now()
-    print('Calculating fibers... ' + str(start_time))
+    logger.info('Calculating fibers... ' + str(start_time))
 
     model = generate_ids(model, "Global_ids", "Global_ids")
 
@@ -452,21 +457,21 @@ def ra_generate_fiber(model, args, job):
 
     tag[SN_ids] = sinus_node
 
-    print('Bundles selection...done')
+    logger.info('Bundles selection...done')
     phie_grad_norm = normalize_vectors(phie_grad)
 
     ##### Local coordinate system #####
     # et
     et = phie_grad_norm
-    print('############### et ###############')
+    logger.info('############### et ###############')
     # print(et)
 
     # k
     # k = ab_grad
-    print('############### k ###############')
+    logger.info('############### k ###############')
 
     en = get_normalized_orthogonality(et, k)
-    print('############### en ###############')
+    logger.info('############### en ###############')
     # el
     el = np.cross(en, et)
 
@@ -474,11 +479,11 @@ def ra_generate_fiber(model, args, job):
 
     el = np.where(el == [0, 0, 0], [1, 0, 0], el).astype("float32")
 
-    print('############### el ###############')
+    logger.info('############### el ###############')
     # print(el)
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
-    print('Calculating epicardial fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
+    logger.info('Calculating epicardial fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
     if args.mesh_type == "bilayer":
         sheet = np.cross(el, et)
@@ -579,7 +584,7 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.create_pts(tv_points_data, 'tv_points_data', f'{args.mesh}_surf/')
 
-    print("Creating Pectinate muscle...")
+    logger.info("Creating Pectinate muscle...")
 
     if args.mesh_type == "vol":
 
@@ -618,7 +623,7 @@ def ra_generate_fiber(model, args, job):
     pm_tv_dis = int(len(tv_points_data) / pm_num)
 
     # Pectinate muscle
-    print("Creating Pectinate muscle 1")
+    logger.info("Creating Pectinate muscle 1")
     # the first PM is the one to the appendage
     # pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
 
@@ -666,13 +671,13 @@ def ra_generate_fiber(model, args, job):
         if args.debug:
             Method.create_pts(pm, 'pm_' + str(i + 1) + '_downsampled', f'{args.mesh}_surf/')
 
-        print("The ", i + 1, "th pm done")
+        logger.info("The ", i + 1, "th pm done")
         if args.mesh_type == "bilayer":
 
             tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-            print("The ", i + 1, "th pm's tag is done")
+            logger.info("The ", i + 1, "th pm's tag is done")
             fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
-            print("The ", i + 1, "th pm's fiber is done")
+            logger.info("The ", i + 1, "th pm's fiber is done")
 
         elif args.mesh_type == "vol":
 
@@ -686,13 +691,13 @@ def ra_generate_fiber(model, args, job):
 
     if args.mesh_type == "bilayer":
 
-        print("Creating Pectinate muscle... done!")
+        logger.info("Creating Pectinate muscle... done!")
 
         # Crista Terminalis
-        print("Creating Crista Terminalis...")
+        logger.info("Creating Crista Terminalis...")
         tag_endo[CT_ids] = tag[CT_ids]
         fiber_endo[CT_ids] = el[CT_ids]
-        print("Creating Crista Terminalis... done!")
+        logger.info("Creating Crista Terminalis... done!")
 
         """
         overwrite the pm on the TV
@@ -736,13 +741,13 @@ def ra_generate_fiber(model, args, job):
 
     elif args.mesh_type == "vol":
 
-        print("Creating Pectinate muscle... done!")
+        logger.info("Creating Pectinate muscle... done!")
 
         # Crista Terminalis
-        print("Creating Crista Terminalis...")
+        logger.info("Creating Crista Terminalis...")
         tag[CT_ids] = tag_old[CT_ids]
         el[CT_ids] = el_old[CT_ids]
-        print("Creating Crista Terminalis... done!")
+        logger.info("Creating Crista Terminalis... done!")
 
         """
         overwrite the pm on the TV
@@ -896,7 +901,7 @@ def ra_generate_fiber(model, args, job):
             CS_p = np.array(df["CS"])
         except KeyError:
             CS_p = IVC_SEPT_CT_pt
-            print("No CS found, use last CT point instead")
+            logger.info("No CS found, use last CT point instead")
 
         if args.mesh_type == "bilayer":
             add_free_bridge(args, la_epi, model, CS_p, df, job)

@@ -46,6 +46,11 @@ from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane, 
     ExtractionModes
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
+
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
@@ -185,7 +190,7 @@ def generate_sheet_dir(args, model, job):
 
     fiber = np.where(fiber == [0, 0, 0], [1, 0, 0], fiber).astype("float32")
 
-    print('reading done!')
+    logger.info('reading done!')
 
     '''
     extract the surface
@@ -205,8 +210,8 @@ def generate_sheet_dir(args, model, job):
     normal_vectors = vtk_to_numpy(normal_vectors)
 
     # print('Normal vectors: \n', normal_vectors, '\n')
-    print('Number of normals: ', len(normal_vectors))
-    print('2nd norm of vectors: ', np.linalg.norm(normal_vectors[0], ord=2), '\n')
+    logger.info('Number of normals: ', len(normal_vectors))
+    logger.info('2nd norm of vectors: ', np.linalg.norm(normal_vectors[0], ord=2), '\n')
 
     if args.mesh_type == "vol":
 
@@ -218,7 +223,7 @@ def generate_sheet_dir(args, model, job):
         filter_cell_centers.Update()
         center_surface = filter_cell_centers.GetOutput().GetPoints()
         center_surface_array = vtk_to_numpy(center_surface.GetData())
-        print('Number of center_surface: ', len(center_surface_array), '\n')
+        logger.info('Number of center_surface: ', len(center_surface_array), '\n')
 
         '''
         calculate the centers of volume mesh cells
@@ -228,7 +233,7 @@ def generate_sheet_dir(args, model, job):
         filter_cell_centers.Update()
         center_volume = filter_cell_centers.GetOutput().GetPoints().GetData()
         center_volume = vtk_to_numpy(center_volume)
-        print('Number of center_volume: ', len(center_volume), '\n')
+        logger.info('Number of center_volume: ', len(center_volume), '\n')
 
         '''
         Mapping
@@ -243,7 +248,7 @@ def generate_sheet_dir(args, model, job):
             index = id_list.GetId(0)
             normals[i] = normal_vectors[index]
 
-        print('Mapping done!')
+        logger.info('Mapping done!')
         '''
         calculate the sheet
         '''
@@ -259,14 +264,14 @@ def generate_sheet_dir(args, model, job):
     '''
     writing
     '''
-    print('writing...')
+    logger.info('writing...')
 
     meshNew = dsa.WrapDataObject(model)
     meshNew.CellData.append(fiber, "fiber")
     meshNew.CellData.append(sheet_norm, "sheet")
     if args.debug:
         vtk_unstructured_grid_writer(job.ID + "/result_RA/model_with_sheet.vtk", meshNew.VTKObject)
-        print('writing... done!')
+        logger.info('writing... done!')
 
     return meshNew.VTKObject
 
@@ -593,11 +598,11 @@ def assign_ra_appendage(model, SCV, appex_point, tag, elemTag):
     SCV_id = locator2.FindClosestPoint(appex_point)
     SCV_closed_point = SCV.GetPoint(SCV_id)
     radius = np.linalg.norm(appex_point - SCV_closed_point)
-    print(radius)
+    logger.info(radius)
 
     mesh_point_temp_id_list = vtk.vtkIdList()
     locator.FindPointsWithinRadius(radius, appex_point, mesh_point_temp_id_list)
-    print(mesh_point_temp_id_list.GetNumberOfIds())
+    logger.info(mesh_point_temp_id_list.GetNumberOfIds())
     mesh_cell_id_list = vtk.vtkIdList()
     mesh_cell_temp_id_list = vtk.vtkIdList()
     for i in range(mesh_point_temp_id_list.GetNumberOfIds()):
@@ -634,7 +639,7 @@ def get_endo_ct_intersection_cells(endo, ct):
         endo.GetPointCells(endo_id_list[i], endo_cell_temp_id_list)
         for j in range(endo_cell_temp_id_list.GetNumberOfIds()):
             endo_cell_id_list.InsertNextId(endo_cell_temp_id_list.GetId(j))
-    print(endo_cell_id_list.GetNumberOfIds())
+    logger.info(endo_cell_id_list.GetNumberOfIds())
 
     return apply_extract_cell_filter(endo, endo_cell_id_list)
 
