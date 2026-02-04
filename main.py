@@ -135,8 +135,8 @@ def parser():
 def _default_log_path(mesh_path: str) -> str:
     if mesh_path:
         p = Path(mesh_path)
-        return str(p.with_suffix("")) + "_augmenta.log"
-    return "erp_log.log"
+        return str(p.with_suffix("")) + "AugmentA.log"
+    return "AugmentA.log"
 
 
 def main():

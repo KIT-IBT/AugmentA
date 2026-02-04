@@ -2,13 +2,13 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-logger = logging.getLogger("ERP tuning")
+logger = logging.getLogger("AugmentA")
 logger.setLevel(logging.DEBUG)  # capture all levels
 
 ch = logging.StreamHandler(sys.stdout)
 ch.setLevel(logging.INFO)
 
-file_handler = RotatingFileHandler("erp_log.log", maxBytes=1_000_000, backupCount=3)
+file_handler = RotatingFileHandler("AugmentA.log", maxBytes=1_000_000, backupCount=3)
 file_handler.setLevel(logging.DEBUG)
 
 # Formatter
