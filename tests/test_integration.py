@@ -42,6 +42,7 @@ def print_file_sizes_on_failure(current_path: Path, golden_path: Path):
         golden_size = golden_path.stat().st_size
         logger.info("File sizes: current=%s bytes, golden=%s bytes", current_size, golden_size)
     except Exception:
+        logger.exception("Error in file size error")
         pass
 
 
