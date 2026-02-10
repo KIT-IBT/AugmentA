@@ -78,10 +78,10 @@ def low_vol_LAT(args, path):
         debug_dir = f'{args.init_state_dir}/{meshbasename}/debug'
         try:
             os.makedirs(debug_dir)
-        except OSError:
-            logger.warning("Could not create debug directory %s: %s", debug_dir, e)
+        except OSError as e:
+            logger.warning(f"Could not create debug directory {debug_dir}: {e}")
         else:
-            logger.debug("Debug directory ready: %s", debug_dir)
+            logger.debug(f"Debug directory ready: {debug_dir}")
 
         vtk_xml_unstructured_grid_writer(f'{debug_dir}/low_vol.vtu', low_vol)
     # Endo
@@ -305,12 +305,13 @@ def areas_to_clean(endo, args, min_LAT, stim_pt):
         debug_dir = f'{args.init_state_dir}/{meshbasename}/debug'
         try:
             os.makedirs(debug_dir)
-        except OSError:
-            logger.warning("Could not create debug directory %s: %s", debug_dir, e)
+        except OSError as e:
+            logger.warning(f"Could not create debug directory {debug_dir}: {e}")
         else:
-            logger.debug("Debug directory ready: %s", debug_dir)
+        logger.debug(f"Debug directory ready: {debug_dir}")
 
-        el_border_array = np.concatenate(el_border)  # convert to linear array
+
+el_border_array = np.concatenate(el_border)  # convert to linear array
         border = np.zeros((endo.GetNumberOfCells(),))
         border[el_border_array] = 1
         meshNew.CellData.append(border, "border")

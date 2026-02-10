@@ -133,8 +133,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         Mass.SetInputData(reader.GetOutput())
         Mass.Update()
 
-        logger.info("Volume = %s", Mass.GetVolume())
-        logger.info("Surface = %s", Mass.GetSurfaceArea())
+        logger.info(f"Volume = {Mass.GetVolume()}")
+        logger.info(f"Surface = {Mass.GetSurfaceArea()}")
 
         bd_ids = find_elements_around_path_within_radius(reader.GetOutput(), boundary_pts, 0.5 * scale)
 
@@ -190,11 +190,13 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
 
         apex = mesh_curv.points[np.argmax(curv), :]
         apex = pick_point_with_preselection(meshin, "appendage apex", apex)
-        logger.info("Apex coordinates: %s", apex)
+        logger.info(f"Apex coordinates: {apex}")
+
 
     elif find_apex_with_curv == 0 and apex_id == -1:
         apex = pick_point(meshin, "appendage apex")
-        logger.info("Apex coordinates: %s", apex)
+        logger.info(f"Apex coordinates: {apex}")
+
 
     tree = cKDTree(meshin.points.astype(np.double))
     dist, apex_id = tree.query(apex)
@@ -208,7 +210,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         atrium = 'RA'
 
         apex = pick_point(meshin, "RA appendage apex")
-        logger.info("Apex coordinates: %s", apex)
+        logger.info(f"Apex coordinates: {apex}")
+
 
         tree = cKDTree(meshin.points.astype(np.double))
         dist, apex_id = tree.query(apex)
@@ -223,8 +226,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         Mass.SetInputData(reader.GetOutput())
         Mass.Update()
 
-        logger.info("Volume = %s", Mass.GetVolume())
-        logger.info("Surface = %s", Mass.GetSurfaceArea())
+        logger.info(f"Volume = {Mass.GetVolume()}")
+        logger.info(f"Surface = {Mass.GetSurfaceArea()}")
         mesh_data["vol_bi"] = Mass.GetVolume()  # Biatrial volume
 
     fname = f'{meshname}_res_mesh_data.csv'

@@ -239,13 +239,9 @@ def _save_orifice_coordinates_to_csv(csv_path: str, orifice_coords: dict) -> Non
     df = pd.DataFrame(data)
     df.to_csv(csv_path, index=False, float_format="%.6f")
 
-
-    logger.info("File: %s", csv_path)
+    logger.info(f"File: {csv_path}")
     for name, coords in orifice_coords.items():
-        logger.info(
-            "%s: (%.6f, %.6f, %.6f)",
-            name, coords[0], coords[1], coords[2]
-        )
+        logger.info(f"{name}: ({coords[0]:.6f}, {coords[1]:.6f}, {coords[2]:.6f})")
 
 
 def _ensure_obj_available(base_path_no_ext: str, original_extension: str = ".vtk") -> str:

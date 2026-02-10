@@ -46,10 +46,12 @@ def _save_orifice_coordinates(coords_list, output_path):
                 writer.writerow(coord)
 
 
-        logger.info("Saved orifice coordinates to: %s", output_path)
+        logger.info(f"Saved orifice coordinates to: {output_path}")
+
 
     except Exception as e:
-        logger.warning("Could not save orifice coordinates to %s: %s", output_path, e)
+        logger.warning(f"Could not save orifice coordinates to {output_path}: {e}")
+
 
 
 def _load_orifice_coordinates(filepath: str) -> dict:
@@ -399,8 +401,8 @@ def run_standalone():
             orifice_coordinates_file = args.orifice_file
         )
         logger.info(f"Standalone run complete. Cut mesh: {cut_mesh}, Apex ID: {final_apex_id}")
-    except Exception as e:
-        logger.info(f"Standalone execution failed: {e}")
+    except Exception:
+        logger.exception("Standalone execution failed")
         sys.exit(1)
 
 

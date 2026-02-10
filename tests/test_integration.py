@@ -40,7 +40,7 @@ def print_file_sizes_on_failure(current_path: Path, golden_path: Path):
     try:
         current_size = current_path.stat().st_size
         golden_size = golden_path.stat().st_size
-        logger.info("File sizes: current=%s bytes, golden=%s bytes", current_size, golden_size)
+        logger.info(f"File sizes: current={current_size} bytes, golden={golden_size} bytes")
     except Exception:
         logger.exception("Error in file size error")
         pass
@@ -75,10 +75,10 @@ def compare_vtx_with_tolerance(current_path: Path, golden_path: Path, max_diff_p
 
     diff_percent = (different_ids / total_unique_ids) * 100
 
-    logger.info("VTX comparison for %s:", current_path.name)
-    logger.info(" - Golden: %s IDs", len(golden_set))
-    logger.info(" - Current: %s IDs", len(current_set))
-    logger.info(" - Different: %s IDs (%.1f%%)", different_ids, diff_percent)
+    logger.info(f"VTX comparison for {current_path.name}:")
+    logger.info(f" - Golden: {len(golden_set)} IDs")
+    logger.info(f" - Current: {len(current_set)} IDs")
+    logger.info(f" - Different: {different_ids} IDs ({diff_percent:.1f}%)")
 
     return diff_percent <= max_diff_percent
 
@@ -146,17 +146,17 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
         current_mesh = pv.read(current_mesh_path)
         golden_mesh = pv.read(golden_mesh_path)
     except Exception as e:
-        logger.error("Error reading mesh files: %s", e)
-        logger.error("Current mesh: %s", current_mesh_path)
-        logger.error("Golden mesh: %s", golden_mesh_path)
+        logger.error(f"Error reading mesh files: {e}")
+        logger.error(f"Current mesh: {current_mesh_path}")
+        logger.error(f"Golden mesh: {golden_mesh_path}")
 
         return False
 
     current_ids = read_vtx_to_set(current_vtx_path)
     golden_ids = read_vtx_to_set(golden_vtx_path)
 
-    logger.info("VTX comparison for %s:", current_vtx_path.name)
-    logger.info("Current IDs: %s, Golden IDs: %s", len(current_ids), len(golden_ids))
+    logger.info(f"VTX comparison for {current_vtx_path.name}:")
+    logger.info(f"Current IDs: {len(current_ids)}, Golden IDs: {len(golden_ids)}")
 
     # Handle empty VTX files
     if not current_ids and not golden_ids:
@@ -172,7 +172,7 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
 
         if not golden_coords or not current_coords:
             result = len(current_coords) == len(golden_coords)
-            logger.info("No valid coordinates - match: %s", result)
+            logger.info(f"No valid coordinates - match: {result}")
             return result
 
         tree = cKDTree(golden_coords)
@@ -183,9 +183,9 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
         num_within_tolerance = np.sum(distances <= tolerance)
 
         logger.info("Coordinate comparison:")
-        logger.info("Max distance: %.6f mm", max_distance)
-        logger.info("Mean distance: %.6f mm", mean_distance)
-        logger.info("Points within %s µm: %s/%s", tolerance, num_within_tolerance, len(distances))
+        logger.info(f"Max distance: {max_distance:.6f} mm")
+        logger.info(f"Mean distance: {mean_distance:.6f} mm")
+        logger.info(f"Points within {tolerance} µm: {num_within_tolerance}/{len(distances)}")
 
         # Require 95% of points to be within tolerance
         match_percentage = num_within_tolerance / len(distances)
@@ -202,7 +202,7 @@ def compare_vtx_by_coordinates(current_vtx_path: Path,
         return result
 
     except Exception as e:
-        logger.error("Error during coordinate comparison: %s", e)
+        logger.error(f"Error during coordinate comparison: {e}")
         return False
 
 
@@ -216,8 +216,8 @@ def compare_vtk_meshes_by_geometry(current_path: Path,
         current_mesh = pv.read(current_path)
         golden_mesh = pv.read(golden_path)
 
-        logger.info("VTK geometry comparison for %s:", current_path.name)
-        logger.info("Points: current=%s, golden=%s", current_mesh.n_points, golden_mesh.n_points)
+        logger.info(f"VTK geometry comparison for {current_path.name}:")
+        logger.info(f"Points: current={current_mesh.n_points}, golden={golden_mesh.n_points}")
 
         # Build KD-tree for nearest neighbor search
         tree = cKDTree(golden_mesh.points)
@@ -260,8 +260,8 @@ def compare_elem_files(current_path: Path,
         current_count = int(current_lines[0].strip())
         golden_count = int(golden_lines[0].strip())
 
-        logger.info("Elem file comparison for %s:", current_path.name)
-        logger.info("Elements: current=%s, golden=%s", current_count, golden_count)
+        logger.info(f"Elem file comparison for {current_path.name}:")
+        logger.info(f"Elements: current={current_count}, golden={golden_count}")
 
         diff_percent = abs(current_count - golden_count) / golden_count * 100
         logger.info(f"Difference: {diff_percent:.1f}%")
@@ -362,7 +362,7 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
         relative_path = golden_path.relative_to(golden_dir)
         current_path = current_dir / relative_path
 
-        logger.info("Comparing: %s against %s", current_path, golden_path)
+        logger.info(f"Comparing: {current_path} against {golden_path}")
 
         file_extension = golden_path.suffix
         file_name = golden_path.name
@@ -398,8 +398,8 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                         golden_mesh_path = find_mesh_file_for_vtx_comparison(golden_dir, golden_dir.parent)
 
                         logger.info("Using meshes for VTX comparison:")
-                        logger.info("Current: %s", current_mesh_path)
-                        logger.info("Golden: %s", golden_mesh_path)
+                        logger.info(f"Current: {current_mesh_path}")
+                        logger.info(f"Golden: {golden_mesh_path}")
 
                         if not compare_vtx_by_coordinates(current_path, golden_path, current_mesh_path,
                                                           golden_mesh_path):
@@ -407,7 +407,7 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
                             assert False, f"VTX coordinate mismatch in {file_name}"
 
                     except FileNotFoundError as e:
-                        logger.warning("Could not find mesh files for coordinate comparison: %s", e)
+                        logger.warning(f"Could not find mesh files for coordinate comparison: {e}")
                         logger.warning("Falling back to direct ID comparison")
 
                         golden_set = read_vtx_to_set(golden_path)
@@ -452,7 +452,7 @@ def compare_directories(current_dir: Path, golden_dir: Path, temp_input_dir: Pat
         except AssertionError:
             raise
         except Exception as e:
-            logger.error("Unexpected error comparing %s: %s", file_name, e)
+            logger.error(f"Unexpected error comparing {file_name}: {e}")
             raise
 
 
@@ -536,9 +536,9 @@ def test_la_cut_resample_pipeline_regression(tmp_path: Path):
         if current_result_dir.exists():
             shutil.copytree(current_result_dir, inspection_dir / "current_results", dirs_exist_ok=True)
             shutil.copytree(golden_comparison_dir, inspection_dir / "golden_results", dirs_exist_ok=True)
-            logger.info("Results saved for inspection in: %s", inspection_dir)
-            logger.info("Current results: %s", inspection_dir / "current_results")
-            logger.info("Golden results: %s", inspection_dir / "golden_results")
+            logger.info(f"Results saved for inspection in: {inspection_dir}")
+            logger.info(f"Current results: {inspection_dir / 'current_results'}")
+            logger.info(f"Golden results: {inspection_dir / 'golden_results'}")
 
         # Compare results
         compare_directories(current_result_dir, golden_comparison_dir, temp_input_dir)

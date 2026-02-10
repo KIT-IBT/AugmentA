@@ -48,10 +48,9 @@ import Methods_fit_to_clinical_LAT
 
 from sklearn.metrics import mean_squared_error
 try:
-    from augmentaupgrade.logging_setup import logger
+    from augmentaupgrade.logging_setup import logger, set_log_file
 except ImportError:
-    from logging_setup import logger
-
+    from logging_setup import logger, set_log_file
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -322,9 +321,9 @@ def run(args, job):
     try:
         os.makedirs(steady_state_dir)
     except OSError:
-        logger.warning("Could not create directory %s: %s", steady_state_dir, e)
+        logger.info(f"Creation of the directory {steady_state_dir} failed")
     else:
-        logger.info("Directory ready: %s", steady_state_dir)
+        logger.info(f"Successfully created the directory {steady_state_dir} ")
 
     if not os.path.isfile(
             steady_state_dir + f'/init_values_stab_bcl_{args.cell_bcl}_reg_{0}_numstim_{args.numstim}.sv'):
@@ -337,9 +336,9 @@ def run(args, job):
     try:
         os.makedirs(simid)
     except OSError:
-        logger.warning("Could not create directory %s: %s", simid, e)
+        logger.info(f"Creation of the directory {simid} failed")
     else:
-        logger.info("Directory ready: %s", simid)
+        logger.info(f"Successfully created the directory {simid} ")
 
     bilayer_n_cells, elements_in_fibrotic_reg, endo, endo_ids, centroids, LAT_map, min_LAT, el_to_clean, el_border, stim_pt, fit_LAT, healthy_endo = Methods_fit_to_clinical_LAT.low_vol_LAT(
         args, meshname + '_with_data_um.vtk')
@@ -357,8 +356,7 @@ def run(args, job):
 
     logger.info(f"Wanted LAT: {args.LaAT}")
     logger.info(f"Max LAT point id: {args.max_LAT_id}")
-    logger.info("fit_LAT: %s", fit_LAT)
-
+    logger.info(fit_LAT)
 
     # Find all not conductive elements belonging to the fibrotic tissue and not use them in the fitting
     tag = {}
@@ -642,8 +640,8 @@ def run(args, job):
                                               squared=False)
                 else:
                     RMSE = mean_squared_error(LAT_map[active_cells_band], lats_to_fit[active_cells_band], squared=False)
-                logger.info("RMSE: %s", RMSE)
-                logger.info("err: %s", err)
+                logger.info("RMSE: ", RMSE)
+                logger.info("err: ", err)
 
             if RMSE > args.tol and RMSE + args.tol * 0.25 < err:  # Stopping criteria: RMSE< tol or new RMSE + 0.25*tol > old RMSE
 
@@ -745,8 +743,7 @@ def run(args, job):
 
     final_diff.append(RMSE)
 
-    logger.info("RMSE: %s", RMSE)
-
+    logger.info(RMSE)
 
     logger.info(f"Final last ACT: {last_ACT}")
     logger.info(f"Final giL: {args.giL}")
