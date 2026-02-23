@@ -285,7 +285,36 @@ def ra_generate_fiber(model, args, job):
 
     CT_band_ids = vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
 
-    tao_RAA = np.max(vtk_to_numpy(CT_band.GetCellData().GetArray('phie_v2')))
+    # The median (not max) of v2 on CT_band is used to avoid sensitivity to outliers/noise.
+    v2_ct = float(np.median(vtk_to_numpy(CT_band.GetCellData().GetArray("phie_v2"))))
+    #read the v2 value at the RAA apex cell from this full array.
+    v2_full = vtk_to_numpy(model.GetCellData().GetArray("phie_v2"))
+
+    # Compute cell centers of the full mesh (one 3D point per cell). We need this because our "apex point" is a 3D coordinate, and we want the closest cell to it.
+    cc = vtk.vtkCellCenters()
+    cc.SetInputData(model)
+    cc.Update()
+    cell_centers = vtk_to_numpy(cc.GetOutput().GetPoints().GetData())
+    raa_ring_ids = np.loadtxt(f"{args.mesh}_surf/ids_RAA.vtx", skiprows=2, dtype=int)
+    raa_ring_ids = np.atleast_1d(raa_ring_ids).astype(int)
+
+    # Extract the coordinates of the RAA ring points using those indices. This stays N, 3 even if N= 1 because raa_ring_ids is forced to be 1D.
+    # Compute the centroid of the RAA ring points. This gives a stable 3D anatomical anchor point for the RAA location.
+    pts = vtk_to_numpy(model.GetPoints().GetData())
+    raa_pts = pts[raa_ring_ids, :]
+    raa_pt = raa_pts.mean(axis=0)
+    #ensure the centroid is a valid 3D vector.
+    raa_pt = np.asarray(raa_pt, dtype=float).reshape(-1)
+    if raa_pt.size != 3:
+        raise ValueError(f"RAA centroid is not 3D: shape={raa_pt.shape}, raa_pt={raa_pt}")
+    # Find the cell whose center is closest to the RAA centroid. This gives us a representative "apex cell" for the appendage in terms of the v2 field.
+    apex_cell_id = int(cKDTree(cell_centers).query(raa_pt)[1])
+
+    v2_apex = float(v2_full[apex_cell_id])
+    # the threshold between a robust CT reference (v2_ct) and the apex reference (v2_apex). alpha controls how close we move toward the apex value:
+    #Threshold
+    alpha_RAA = 0.30
+    tao_RAA = float(v2_ct + alpha_RAA * (v2_apex - v2_ct))
 
     IVC_CT_pt_id = find_closest_point(CT_band, np.array(IVC_CT_pt))
 
@@ -414,11 +443,47 @@ def ra_generate_fiber(model, args, job):
     k[CS_ids] = ab_grad[CS_ids]
 
     # tag = Method.assign_ra_appendage(model, SVC_s, np.array(df["RAA"]), tag, right_atrial_appendage_epi)
-    RAA_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v2", tao_RAA)
+    # RAA segmentation is based on the Laplace field "phie_v2" and a threshold tao_RAA
+
+    # Build two candidate regions and then pick the correct one using the known RAA apex.
+
+    # Candidate 0: keep cells with phie_v2 BELOW the threshold
+    RAA_s0 = vtk_thr(no_TV_s, 0, "CELLS", "phie_v2", tao_RAA)
+    # Candidate 1: keep cells with phie_v2 ABOVE the threshold
+    RAA_s1 = vtk_thr(no_TV_s, 1, "CELLS", "phie_v2", tao_RAA)
+
+    # pick the candidate that contains the apex cell (use Global_ids)
+    # We already computed apex_cell_id earlier as the cell whose centroid is closest to the RAA ring centroid
+    # Instead of relying on local cell indices (which can change after thresholding / extracting subsets),
+    # we use the stable per-cell identifier "Global_ids".
+    global_ids_full = vtk_to_numpy(model.GetCellData().GetArray("Global_ids"))
+    apex_gid = int(global_ids_full[apex_cell_id])
+    # Extract the Global_ids contained in each candidate (guard against empty candidates)
+    ids0 = vtk_to_numpy(RAA_s0.GetCellData().GetArray("Global_ids")) if RAA_s0.GetNumberOfCells() else np.array([], int)
+    ids1 = vtk_to_numpy(RAA_s1.GetCellData().GetArray("Global_ids")) if RAA_s1.GetNumberOfCells() else np.array([], int)
+
+    # The correct RAA region must contain the apex cell.
+    # This makes the method robust to v2 "direction flips".
+    RAA_s = RAA_s0 if apex_gid in set(ids0) else RAA_s1
+
+    # Remove over-coverage by using connectivity
+    # keep only the connected component closest to apex (prevents overcover/islands)
+    # "ClosestPointRegion" keep the single connected component whose geometry is closest to a given point
+    conn = vtk.vtkConnectivityFilter()
+    conn.SetInputData(RAA_s)
+    conn.SetExtractionModeToClosestPointRegion()
+    # Use the apex cell center as anchor point (guaranteed to be inside the true RAA component)
+    apex_pt = np.asarray(cell_centers[apex_cell_id], dtype=float).reshape(3, )
+    conn.SetClosestPoint(float(apex_pt[0]), float(apex_pt[1]), float(apex_pt[2]))
+
+    conn.Update()
+
+    # Final cleaned RAA segmentation: correct side + only the main connected component around the apex
+    RAA_s = conn.GetOutput()
 
     if args.debug:
         Method.writer_vtk(RAS_low, f'{args.mesh}_surf/' + "ras_low.vtk")
-        Method.writer_vtk(RAA_s, f'{args.mesh}_surf/' + "raa_s.vtk")  # Check here if RAA is correctly tagged
+        Method.writer_vtk(RAA_s, f'{args.mesh}_surf/' + "raa_s_030.vtk")  # Check here if RAA is correctly tagged
         Method.writer_vtk(RAW_low, f'{args.mesh}_surf/' + "raw_low.vtk")
 
     RAA_ids = vtk_to_numpy(RAA_s.GetCellData().GetArray('Global_ids'))
@@ -671,13 +736,14 @@ def ra_generate_fiber(model, args, job):
         if args.debug:
             Method.create_pts(pm, 'pm_' + str(i + 1) + '_downsampled', f'{args.mesh}_surf/')
 
-        logger.info("The ", i + 1, "th pm done")
+        logger.info(f"The {i+1}th pm done")
         if args.mesh_type == "bilayer":
 
             tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-            logger.info("The ", i + 1, "th pm's tag is done")
+            logger.info(f"The {i+1}th pm's tag is done")
             fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
-            logger.info("The ", i + 1, "th pm's fiber is done")
+            logger.info("The %sth pm's fiber is done", i + 1)
+
 
         elif args.mesh_type == "vol":
 
