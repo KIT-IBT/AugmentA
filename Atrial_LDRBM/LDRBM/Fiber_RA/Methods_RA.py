@@ -190,7 +190,7 @@ def generate_sheet_dir(args, model, job):
 
     fiber = np.where(fiber == [0, 0, 0], [1, 0, 0], fiber).astype("float32")
 
-    logger.info('reading done!')
+    logger.info(f"reading done!")
 
     '''
     extract the surface
@@ -210,8 +210,8 @@ def generate_sheet_dir(args, model, job):
     normal_vectors = vtk_to_numpy(normal_vectors)
 
     # print('Normal vectors: \n', normal_vectors, '\n')
-    logger.info('Number of normals: ', len(normal_vectors))
-    logger.info('2nd norm of vectors: ', np.linalg.norm(normal_vectors[0], ord=2), '\n')
+    logger.info(f'Number of normals:  {len(normal_vectors)}')
+    logger.info(f"2nd norm of vectors: {np.linalg.norm(normal_vectors[0], ord=2)}")
 
     if args.mesh_type == "vol":
 
@@ -223,7 +223,7 @@ def generate_sheet_dir(args, model, job):
         filter_cell_centers.Update()
         center_surface = filter_cell_centers.GetOutput().GetPoints()
         center_surface_array = vtk_to_numpy(center_surface.GetData())
-        logger.info('Number of center_surface: ', len(center_surface_array), '\n')
+        logger.info(f"Number of center_surface: {len(center_surface_array)}")
 
         '''
         calculate the centers of volume mesh cells
@@ -233,7 +233,7 @@ def generate_sheet_dir(args, model, job):
         filter_cell_centers.Update()
         center_volume = filter_cell_centers.GetOutput().GetPoints().GetData()
         center_volume = vtk_to_numpy(center_volume)
-        logger.info('Number of center_volume: ', len(center_volume), '\n')
+        logger.info(f"Number of center_volume: {len(center_volume)}")
 
         '''
         Mapping
@@ -248,7 +248,7 @@ def generate_sheet_dir(args, model, job):
             index = id_list.GetId(0)
             normals[i] = normal_vectors[index]
 
-        logger.info('Mapping done!')
+        logger.info(f"Mapping done!")
         '''
         calculate the sheet
         '''
@@ -264,14 +264,14 @@ def generate_sheet_dir(args, model, job):
     '''
     writing
     '''
-    logger.info('writing...')
+    logger.info(f"writing...")
 
     meshNew = dsa.WrapDataObject(model)
     meshNew.CellData.append(fiber, "fiber")
     meshNew.CellData.append(sheet_norm, "sheet")
     if args.debug:
         vtk_unstructured_grid_writer(job.ID + "/result_RA/model_with_sheet.vtk", meshNew.VTKObject)
-        logger.info('writing... done!')
+        logger.info(f"writing... done!")
 
     return meshNew.VTKObject
 
