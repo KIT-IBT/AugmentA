@@ -128,6 +128,74 @@ def extract_raa_region(no_TV_s, model, tao_raa: float, apex_cell_id: int, apex_p
     conn.SetClosestPoint(float(apex_pt[0]), float(apex_pt[1]), float(apex_pt[2]))
     conn.Update()
     return conn.GetOutput()
+
+def _sample_boundary_arc(surface, n_samples, start_ref, end_ref):
+    fe = vtk.vtkFeatureEdges()
+    fe.SetInputData(surface)
+    fe.BoundaryEdgesOn()
+    fe.FeatureEdgesOff()
+    fe.ManifoldEdgesOff()
+    fe.NonManifoldEdgesOff()
+    fe.Update()
+
+    stripper = vtk.vtkStripper()
+    stripper.SetInputData(fe.GetOutput())
+    stripper.Update()
+    stripped = stripper.GetOutput()
+
+    best_pts = None
+    best_score = np.inf
+    for i in range(stripped.GetNumberOfCells()):
+        cell = stripped.GetCell(i)
+        n_cp = cell.GetNumberOfPoints()
+        if n_cp < 3:
+            continue
+        cpts = np.array([stripped.GetPoint(cell.GetPointId(j)) for j in range(n_cp)])
+        t = cKDTree(cpts)
+        d1, _ = t.query(start_ref)
+        d2, _ = t.query(end_ref)
+        if d1 + d2 < best_score:
+            best_score = d1 + d2
+            best_pts = cpts
+
+    if best_pts is None or len(best_pts) < 3:
+        return np.linspace(np.asarray(start_ref, dtype=float),
+                           np.asarray(end_ref, dtype=float), n_samples)
+
+    t = cKDTree(best_pts)
+    _, si = t.query(start_ref)
+    _, ei = t.query(end_ref)
+    if si > ei:
+        si, ei = ei, si
+
+    arc_a = best_pts[si:ei + 1]
+    arc_b = np.vstack([best_pts[ei:], best_pts[:si + 1]])
+    arc = arc_a if len(arc_a) >= len(arc_b) else arc_b
+
+    if len(arc) < 2:
+        return np.linspace(np.asarray(start_ref, dtype=float),
+                           np.asarray(end_ref, dtype=float), n_samples)
+
+    diffs = np.diff(arc, axis=0)
+    seg_len = np.linalg.norm(diffs, axis=1)
+    cumul = np.concatenate([[0.0], np.cumsum(seg_len)])
+    total = cumul[-1]
+
+    if total < 1e-10:
+        return np.linspace(np.asarray(start_ref, dtype=float),
+                           np.asarray(end_ref, dtype=float), n_samples)
+
+    targets = np.linspace(0, total, n_samples)
+    out = np.zeros((n_samples, 3))
+    for i, tgt in enumerate(targets):
+        idx = int(np.searchsorted(cumul, tgt)) - 1
+        idx = max(0, min(idx, len(arc) - 2))
+        frac = (tgt - cumul[idx]) / max(seg_len[idx], 1e-12)
+        frac = min(frac, 1.0)
+        out[i] = arc[idx] + frac * (arc[idx + 1] - arc[idx])
+    return out
+
+
 def ra_generate_fiber(model, args, job):
     simid = job.ID + "/result_RA"
     try:
@@ -506,10 +574,14 @@ def ra_generate_fiber(model, args, job):
         Method.writer_vtk(RAW_low, f'{args.mesh}_surf/' + "raw_low.vtk")
 
     RAA_ids = vtk_to_numpy(RAA_s.GetCellData().GetArray('Global_ids'))
+    raa_pm_anchor = np.asarray(apex_pt, dtype=float).reshape(3, )
+
+    if args.debug:
+        Method.create_pts(np.asarray([raa_pm_anchor]), 'raa_pm_anchor', f'{args.mesh}_surf/')
 
     tag[RAA_ids] = right_atrial_appendage_epi
 
-    RAA_CT_pt = CT_band.GetPoint(find_closest_point(CT_band, np.array(df["RAA"])))
+    RAA_CT_pt = CT_band.GetPoint(find_closest_point(CT_band, raa_pm_anchor))
 
     CT = CT_band
 
@@ -628,8 +700,7 @@ def ra_generate_fiber(model, args, job):
     point2_id = find_closest_point(CT, SVC_CT_pt)
 
     point3_id = find_closest_point(TV_s, IVC_max_r_CT_pt)
-    RAA_on_tv_s = find_closest_point(TV_s,
-                                     np.array(df["RAA"]))  # this is also the id for Bachmann-Bundle on the right atrium
+    RAA_on_tv_s = find_closest_point(TV_s, raa_pm_anchor)  # this is also the id for Bachmann-Bundle on the right atrium
 
     CT = apply_vtk_geom_filter(CT)
 
@@ -665,6 +736,17 @@ def ra_generate_fiber(model, args, job):
 
     tv_points_data = Method.dijkstra_path(TV_lat, point3_id, RAA_on_tv_lat)
 
+    _TV_LAT_MIN_RATIO = 0.15
+    if len(tv_points_data) < max(_TV_LAT_MIN_RATIO * len(ct_points_data), 20):
+        logger.warning(f"TV_lat path short ({len(tv_points_data)} pts vs "
+                       f"{len(ct_points_data)} CT pts). Falling back to boundary arc.")
+        tv_points_data = _sample_boundary_arc(
+            TV_lat,
+            n_samples=len(ct_points_data),
+            start_ref=np.array(TV_lat.GetPoint(point3_id)),
+            end_ref=np.array(TV_lat.GetPoint(RAA_on_tv_lat))
+        )
+
     if args.debug:
         Method.create_pts(tv_points_data, 'tv_points_data', f'{args.mesh}_surf/')
 
@@ -694,7 +776,7 @@ def ra_generate_fiber(model, args, job):
     loc.SetDataSet(surface)
     loc.BuildLocator()
 
-    point_apx_id = loc.FindClosestPoint(np.array(df["RAA"]))
+    point_apx_id = loc.FindClosestPoint(raa_pm_anchor)
     pm_ct_id_list = []
     for i in range(len(ct_points_data)):
         pm_ct_id_list.append(loc.FindClosestPoint(ct_points_data[i]))
