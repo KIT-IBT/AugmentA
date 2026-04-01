@@ -132,7 +132,7 @@ def la_generate_fiber(model, args, job):
     lb = 0.6
     ub = 1
     tao_rpv = Method.find_tau(model, ub, lb, "up", "phie_v")
-    logger.info('Calculating tao_rpv done! tap_rpv = ', tao_rpv)
+    logger.info(f'Calculating tao_rpv done! tap_rpv = {tao_rpv}')
 
     thr = vtk_thr(model, 0, "CELLS", "phie_v", tao_rpv)
 
