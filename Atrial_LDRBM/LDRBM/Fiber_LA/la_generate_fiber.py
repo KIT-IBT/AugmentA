@@ -105,7 +105,7 @@ def la_generate_fiber(model, args, job):
     tao_lpv = Method.find_tau(model, ub, lb, "low", "phie_v")
     if tao_lpv == 0:
         logger.warning("tao_lpv == 0 could lead to no tags for LPVs")
-    logger.info('Calculating tao_lpv done! tap_lpv = ', tao_lpv)
+    logger.info(f'Calculating tao_lpv done! tap_lpv = {tao_lpv}')
 
     thr_phi_v = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
 
@@ -125,8 +125,8 @@ def la_generate_fiber(model, args, job):
     phie_ab_tau_lpv = vtk_to_numpy(thr_lpv.GetPointData().GetArray('phie_ab2'))
     max_phie_ab_tau_lpv = np.max(phie_ab_tau_lpv)
 
-    logger.info("max_phie_r2_tau_lpv ", max_phie_r2_tau_lpv)
-    logger.info("max_phie_ab_tau_lpv ", max_phie_ab_tau_lpv)
+    logger.info(f"max_phie_r2_tau_lpv {max_phie_r2_tau_lpv}")
+    logger.info(f"max_phie_ab_tau_lpv {max_phie_ab_tau_lpv}")
 
     # RPV
     lb = 0.6

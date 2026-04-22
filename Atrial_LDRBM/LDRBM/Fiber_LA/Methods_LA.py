@@ -819,9 +819,9 @@ def find_tau(model, ub, lb, low_up, scalar):
         connect = init_connectivity_filter(thresh.GetOutput(), ExtractionModes.ALL_REGIONS)
         num = connect.GetNumberOfExtractedRegions()
 
-        logger.info("Iteration: ", k)
-        logger.info("Value of tao: ", (ub + lb) / 2)
-        logger.info("Number of regions: ", num, "\n")
+        logger.info(f"Iteration: {k}")
+        logger.info(f"Value of tao: {(ub + lb) / 2}")
+        logger.info(f"Number of regions: {num}")
 
         if low_up == "low":
             if num == 1:
