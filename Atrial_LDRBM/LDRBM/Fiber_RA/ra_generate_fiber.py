@@ -52,6 +52,7 @@ from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 from Atrial_LDRBM.LDRBM.Fiber_RA.create_bridges import add_free_bridge
+from Atrial_LDRBM.LDRBM.Fiber_RA.ra_fiber_config import get_config
 
 try:
     from augmentaupgrade.logging_setup import logger
@@ -128,74 +129,6 @@ def extract_raa_region(no_TV_s, model, tao_raa: float, apex_cell_id: int, apex_p
     conn.SetClosestPoint(float(apex_pt[0]), float(apex_pt[1]), float(apex_pt[2]))
     conn.Update()
     return conn.GetOutput()
-
-def _sample_boundary_arc(surface, n_samples, start_ref, end_ref):
-    fe = vtk.vtkFeatureEdges()
-    fe.SetInputData(surface)
-    fe.BoundaryEdgesOn()
-    fe.FeatureEdgesOff()
-    fe.ManifoldEdgesOff()
-    fe.NonManifoldEdgesOff()
-    fe.Update()
-
-    stripper = vtk.vtkStripper()
-    stripper.SetInputData(fe.GetOutput())
-    stripper.Update()
-    stripped = stripper.GetOutput()
-
-    best_pts = None
-    best_score = np.inf
-    for i in range(stripped.GetNumberOfCells()):
-        cell = stripped.GetCell(i)
-        n_cp = cell.GetNumberOfPoints()
-        if n_cp < 3:
-            continue
-        cpts = np.array([stripped.GetPoint(cell.GetPointId(j)) for j in range(n_cp)])
-        t = cKDTree(cpts)
-        d1, _ = t.query(start_ref)
-        d2, _ = t.query(end_ref)
-        if d1 + d2 < best_score:
-            best_score = d1 + d2
-            best_pts = cpts
-
-    if best_pts is None or len(best_pts) < 3:
-        return np.linspace(np.asarray(start_ref, dtype=float),
-                           np.asarray(end_ref, dtype=float), n_samples)
-
-    t = cKDTree(best_pts)
-    _, si = t.query(start_ref)
-    _, ei = t.query(end_ref)
-    if si > ei:
-        si, ei = ei, si
-
-    arc_a = best_pts[si:ei + 1]
-    arc_b = np.vstack([best_pts[ei:], best_pts[:si + 1]])
-    arc = arc_a if len(arc_a) >= len(arc_b) else arc_b
-
-    if len(arc) < 2:
-        return np.linspace(np.asarray(start_ref, dtype=float),
-                           np.asarray(end_ref, dtype=float), n_samples)
-
-    diffs = np.diff(arc, axis=0)
-    seg_len = np.linalg.norm(diffs, axis=1)
-    cumul = np.concatenate([[0.0], np.cumsum(seg_len)])
-    total = cumul[-1]
-
-    if total < 1e-10:
-        return np.linspace(np.asarray(start_ref, dtype=float),
-                           np.asarray(end_ref, dtype=float), n_samples)
-
-    targets = np.linspace(0, total, n_samples)
-    out = np.zeros((n_samples, 3))
-    for i, tgt in enumerate(targets):
-        idx = int(np.searchsorted(cumul, tgt)) - 1
-        idx = max(0, min(idx, len(arc) - 2))
-        frac = (tgt - cumul[idx]) / max(seg_len[idx], 1e-12)
-        frac = min(frac, 1.0)
-        out[i] = arc[idx] + frac * (arc[idx + 1] - arc[idx])
-    return out
-
-
 def ra_generate_fiber(model, args, job):
     simid = job.ID + "/result_RA"
     try:
@@ -213,15 +146,19 @@ def ra_generate_fiber(model, args, job):
     else:
         logger.info(f"Successfully created the directory {simid} ")
 
+    cfg = get_config()
     # Riunet
-    tao_tv = 0.9
-    tao_icv = 0.95  # 0.05 # dk01 biatrial fit_both
-    tao_scv = 0.10
-    tao_ct_plus = -0.10
-    tao_ct_minus = -0.13
-    tao_ib = -0.06
-    tao_ras = 0.13
-    tao_raw = 0.55
+    # Riunet
+    tao_tv = cfg.thresholds.tao_tv
+    tao_icv = cfg.thresholds.tao_icv
+    tao_scv = cfg.thresholds.tao_scv
+    tao_ct_plus = cfg.thresholds.tao_ct_plus
+    tao_ct_minus = cfg.thresholds.tao_ct_minus
+    tao_ib = cfg.thresholds.tao_ib
+    tao_ras = cfg.thresholds.tao_ras
+    tao_raw = cfg.thresholds.tao_raw
+
+
     with open(os.path.join(EXAMPLE_DIR, '../../element_tag.csv')) as f:
         tag_dict = {}
         reader = csv.DictReader(f)
@@ -260,19 +197,19 @@ def ra_generate_fiber(model, args, job):
     sinus_node = int(tag_dict['sinus_node'])
 
     # number of pectinate muscles
-    pm_num = 15
+    pm_num = cfg.pm.pm_num
 
     # size(Radius) of crista terminalis in mm
-    w_ct = 4.62 * args.scale
+    w_ct = cfg.bundles.w_ct * args.scale
 
     # size(Radius) of pectinate muscle in mm
-    w_pm = 0.66 * args.scale
+    w_pm = cfg.bundles.w_pm * args.scale
 
     # size(Radius) of Bachmann Bundle in mm
-    w_bb = 2 * args.scale
+    w_bb = cfg.bundles.w_bb * args.scale
 
     # radius sinus node
-    r_SN = 2.5 * args.scale
+    r_SN = cfg.bundles.r_sn * args.scale
 
     # ab
     ab = model.GetCellData().GetArray('phie_ab')
@@ -326,7 +263,7 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.create_pts(rings_pts, 'TV_ring', f'{args.mesh}_surf/')
 
-    TV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
+    TV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, cfg.bundles.tv_ring_radius * args.scale)
 
     TV_s = get_cells_with_ids(model, TV_ids)
 
@@ -352,7 +289,7 @@ def ra_generate_fiber(model, args, job):
 
     IVC_s = extract_largest_region(IVC_s)  # Added
 
-    max_phie_r_ivc = np.max(vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r'))) + 0.2
+    max_phie_r_ivc = np.max(vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r'))) + cfg.thresholds.ivc_phie_r_offset
 
     RAW_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_r", max_phie_r_ivc)  # Added +0.03 fro dk01
 
@@ -409,7 +346,7 @@ def ra_generate_fiber(model, args, job):
 
     tree = cKDTree(centroids_array)
 
-    ii = tree.query_ball_point(CT_ub_pts, r=7 * args.scale)  # , n_jobs=-1)
+    ii = tree.query_ball_point(CT_ub_pts, r=cfg.bundles.ct_band_query_radius * args.scale)
 
     ii = set([item for sublist in ii for item in sublist])
 
@@ -420,7 +357,7 @@ def ra_generate_fiber(model, args, job):
 
     CT_band_ids = vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
 
-    alpha_RAA = 0.30
+    alpha_RAA = cfg.thresholds.alpha_RAA
     tao_RAA, apex_cell_id, apex_pt, cell_centers = compute_tao_raa(
         model=model,
         CT_band=CT_band,
@@ -549,7 +486,7 @@ def ra_generate_fiber(model, args, job):
 
     rings_pts = vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
 
-    CS_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
+    CS_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, cfg.bundles.cs_ring_radius * args.scale)
 
     tag[CS_ids] = coronary_sinus
     k[CS_ids] = ab_grad[CS_ids]
@@ -700,7 +637,7 @@ def ra_generate_fiber(model, args, job):
     point2_id = find_closest_point(CT, SVC_CT_pt)
 
     point3_id = find_closest_point(TV_s, IVC_max_r_CT_pt)
-    RAA_on_tv_s = find_closest_point(TV_s, raa_pm_anchor)  # this is also the id for Bachmann-Bundle on the right atrium
+    RAA_on_tv_s = find_closest_point(TV_s, raa_pm_anchor)
 
     CT = apply_vtk_geom_filter(CT)
 
@@ -729,23 +666,24 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.create_pts(ct_points_data, 'ct_points_data', f'{args.mesh}_surf/')
 
-    point3_id = find_closest_point(TV_lat, TV_s.GetPoint(point3_id))
+    tv_lat_pts = vtk_to_numpy(TV_lat.GetPoints().GetData())
+    tv_lat_center = tv_lat_pts.mean(axis=0)
+    dists_from_center = np.linalg.norm(tv_lat_pts - tv_lat_center, axis=1)
+    anchor_a = int(np.argmax(dists_from_center))
+    dists_from_a = np.linalg.norm(tv_lat_pts - tv_lat_pts[anchor_a], axis=1)
+    anchor_b = int(np.argmax(dists_from_a))
 
-    # this is also the id for Bachmann-Bundle on the right atrium
-    RAA_on_tv_lat = find_closest_point(TV_lat, TV_s.GetPoint(RAA_on_tv_s))
-
+    # Ensure TV anchors match CT path direction
+    ct_start = ct_points_data[0]  # IVC end of CT
+    dist_a_to_start = np.linalg.norm(tv_lat_pts[anchor_a] - ct_start)
+    dist_b_to_start = np.linalg.norm(tv_lat_pts[anchor_b] - ct_start)
+    if dist_a_to_start <= dist_b_to_start:
+        point3_id = anchor_a
+        RAA_on_tv_lat = anchor_b
+    else:
+        point3_id = anchor_b
+        RAA_on_tv_lat = anchor_a
     tv_points_data = Method.dijkstra_path(TV_lat, point3_id, RAA_on_tv_lat)
-
-    _TV_LAT_MIN_RATIO = 0.15
-    if len(tv_points_data) < max(_TV_LAT_MIN_RATIO * len(ct_points_data), 20):
-        logger.warning(f"TV_lat path short ({len(tv_points_data)} pts vs "
-                       f"{len(ct_points_data)} CT pts). Falling back to boundary arc.")
-        tv_points_data = _sample_boundary_arc(
-            TV_lat,
-            n_samples=len(ct_points_data),
-            start_ref=np.array(TV_lat.GetPoint(point3_id)),
-            end_ref=np.array(TV_lat.GetPoint(RAA_on_tv_lat))
-        )
 
     if args.debug:
         Method.create_pts(tv_points_data, 'tv_points_data', f'{args.mesh}_surf/')
@@ -776,7 +714,7 @@ def ra_generate_fiber(model, args, job):
     loc.SetDataSet(surface)
     loc.BuildLocator()
 
-    point_apx_id = loc.FindClosestPoint(raa_pm_anchor)
+    point_apx_id = loc.FindClosestPoint(np.array(df["RAA"]))
     pm_ct_id_list = []
     for i in range(len(ct_points_data)):
         pm_ct_id_list.append(loc.FindClosestPoint(ct_points_data[i]))
@@ -798,7 +736,7 @@ def ra_generate_fiber(model, args, job):
     # Pectinate muscle going from the septum spurius to the RAA apex
     pm = Method.dijkstra_path(surface, RAA_CT_id, point_apx_id)
 
-    pm = Method.downsample_path(pm, int(len(pm) * 0.1))
+    pm = Method.downsample_path(pm, int(len(pm) * cfg.pm.pm1_downsample_fraction))
     if args.debug:
         Method.create_pts(pm, 'pm_0_downsampled', f'{args.mesh}_surf/')
 
@@ -824,15 +762,23 @@ def ra_generate_fiber(model, args, job):
 
         el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
 
-    for i in range(3, pm_num - 1):  # skip the first 3 pm as they will be in the IVC side
+    for i in range(cfg.pm.pm_skip_first, pm_num - cfg.pm.pm_skip_last):  # skip the first 3 pm as they will be in the IVC side
         pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
         pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
         pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
 
-        # skip first 3% of the points since they will be on the roof of the RA
-        pm = pm[int(len(pm) * 0.03):, :]  #
+        # skip first 3% of the points since they will be on the roof of the RAT
+        # his does not solve the anatomical PM placement itself,
+        # it only prevents unstable behavior when a clipped PM path is too short.
+        # Guard against very short PM paths
 
-        pm = Method.downsample_path(pm, int(len(pm) * 0.065))
+        pm = pm[int(len(pm) * cfg.pm.pm_trim_fraction):, :]
+        step = max(1, int(len(pm) * cfg.pm.pm_downsample_fraction))
+        if len(pm) >= cfg.pm.pm_min_path_length:
+            pm = Method.downsample_path(pm, step)
+        else:
+            logger.warning(f"PM {i + 1} path too short ({len(pm)} pts), skipping")
+            continue
 
         if args.debug:
             Method.create_pts(pm, 'pm_' + str(i + 1) + '_downsampled', f'{args.mesh}_surf/')
@@ -967,7 +913,7 @@ def ra_generate_fiber(model, args, job):
 
     np.savetxt(job.ID + '/bb.txt', bachmann_bundle_points_data, fmt='%.5f')  # Change directory
 
-    bb_step = int(len(bachmann_bundle_points_data) * 0.1)
+    bb_step = int(len(bachmann_bundle_points_data) * cfg.bb.bb_downsample_fraction)
     bb_points = downsample_path(bachmann_bundle_points_data, bb_step)
 
     tag = Method.assign_element_tag_around_path_within_radius(model, bb_points, w_bb, tag, bachmann_bundel_right)
@@ -1025,7 +971,7 @@ def ra_generate_fiber(model, args, job):
 
         la_appendage_basis_point = np.asarray(df["LAA_basis_inf"])
         length = len(bachmann_bundle_points_data)
-        ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
+        ra_bb_center = bachmann_bundle_points_data[int(length * cfg.bb.bb_center_fraction)]
 
         la_epi = apply_vtk_geom_filter(la_epi)
 
@@ -1044,7 +990,7 @@ def ra_generate_fiber(model, args, job):
         path_2 = Method.dijkstra_path(la_epi, la_c_id, la_d_id)
         path_all_temp = np.vstack((path_1, path_2))
         # down sampling to smooth the path
-        step = 20
+        step = cfg.bb.bb_step
         # step = int(len(path_all_temp)*0.1)
         path_all = np.asarray(
             [path_all_temp[i] for i in range(len(path_all_temp)) if i % step == 0 or i == len(path_all_temp) - 1])
@@ -1058,8 +1004,8 @@ def ra_generate_fiber(model, args, job):
         # BB tube
 
         bb_tube = Method.creat_tube_around_spline(path_all, 2 * args.scale)
-        sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * 1.02 * args.scale)
-        sphere_b = Method.creat_sphere(ra_bb_center, 2 * 1.02 * args.scale)
+        sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * cfg.bundles.bb_sphere_factor * args.scale)
+        sphere_b = Method.creat_sphere(ra_bb_center, 2 * cfg.bundles.bb_sphere_factor * args.scale)
         Method.smart_bridge_writer(bb_tube, sphere_a, sphere_b, "BB_intern_bridges", job)
 
         df = pd.read_csv(args.mesh + "_surf/rings_centroids.csv")
