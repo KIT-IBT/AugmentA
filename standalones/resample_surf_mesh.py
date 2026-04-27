@@ -189,12 +189,14 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
             mesh_curv = pv.read(f'{meshname}.obj')
 
         apex = mesh_curv.points[np.argmax(curv), :]
-        apex = pick_point_with_preselection(meshin, "appendage apex", apex)
+        s_atrium = "LA" if atrium == "LA_RA" else atrium
+        apex = pick_point_with_preselection(meshin, f"{s_atrium} appendage apex", apex)
         logger.info(f"Apex coordinates: {apex}")
 
 
     elif find_apex_with_curv == 0 and apex_id == -1:
-        apex = pick_point(meshin, "appendage apex")
+        s_atrium = "LA" if atrium == "LA_RA" else atrium
+        apex = pick_point(meshin, f"{s_atrium} appendage apex")
         logger.info(f"Apex coordinates: {apex}")
 
 
