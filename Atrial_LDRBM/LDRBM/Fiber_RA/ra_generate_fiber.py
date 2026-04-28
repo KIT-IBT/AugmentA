@@ -742,8 +742,7 @@ def ra_generate_fiber(model, args, job):
 
     if args.mesh_type == "bilayer":
 
-        tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-        fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
+        logger.info("PM0 generated but not assigned as pectinate muscle.")
 
     elif args.mesh_type == "vol":
 
@@ -754,13 +753,7 @@ def ra_generate_fiber(model, args, job):
 
         tree = cKDTree(centroids_array)
 
-        ii = tree.query_ball_point(pm, r=w_pm, workers=-1)
-
-        ii = list(set([item for sublist in ii for item in sublist]))
-
-        tag[ii] = pectinate_muscle
-
-        el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
+        logger.info("PM0 generated but not assigned as pectinate muscle.")
 
     for i in range(cfg.pm.pm_skip_first, pm_num - cfg.pm.pm_skip_last):  # skip the first 3 pm as they will be in the IVC side
         pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]

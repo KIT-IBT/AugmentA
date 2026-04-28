@@ -34,8 +34,8 @@ class BundleSizes:
 class PectinateMuscleConfig:
     """Parameters controlling pectinate muscle generation."""
     pm_num: int = 15  # total number of pectinate muscles
-    pm_skip_first: int = 3  # skip first N PMs (IVC side)
-    pm_skip_last: int = 1  # skip last N PMs (edge artifacts)
+    pm_skip_first: int = 2  # skip first N PMs (IVC side)
+    pm_skip_last: int = 2  # skip last N PMs (edge artifacts)
     pm_trim_fraction: float = 0.03  # trim first X% of path (roof of RA)
     pm_downsample_fraction: float = 0.065  # downsample step as fraction of path length
     pm1_downsample_fraction: float = 0.1  # first PM (to RAA apex)
