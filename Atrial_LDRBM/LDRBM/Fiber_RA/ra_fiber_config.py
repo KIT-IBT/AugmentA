@@ -66,5 +66,10 @@ _instance: Optional[RAFiberConfig] = None
 def get_config() -> RAFiberConfig:
     global _instance
     if _instance is None:
-        _instance = RAFiberConfig()
+        # Try to get from main config first
+        try:
+            from main_config import get_config as get_main_config
+            _instance = get_main_config().ra
+        except ImportError:
+            _instance = RAFiberConfig()
     return _instance

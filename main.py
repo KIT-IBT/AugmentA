@@ -38,6 +38,7 @@ from pathlib import Path
 
 from pipeline import AugmentA
 from logging_setup import logger, set_log_file
+from main_config import get_config as get_main_config
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -144,6 +145,8 @@ def main():
 
 
     set_log_file(_default_log_path(args.mesh))
+    cfg = get_main_config()
+    logger.info(f"Loaded main config: RA thresholds tao_tv={cfg.ra.thresholds.tao_tv}")
 
 
     console_level = logging.DEBUG if int(getattr(args, "debug", 0)) == 1 else logging.INFO
