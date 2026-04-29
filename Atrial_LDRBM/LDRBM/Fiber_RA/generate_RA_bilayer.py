@@ -16,6 +16,10 @@ from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_e
 from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy, numpy_to_vtk
 from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer
 from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, get_vtk_geom_filter_port, vtk_append
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 parser = argparse.ArgumentParser(description='Create Right Atrium.')
 
@@ -146,7 +150,8 @@ def write_bilayer(bilayer):
     write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
     write_to_lon(f'{file_name}.lon', el_epi, sheet_epi)
 
-    print('Generated Bilayer RA')
+    logger.info('Generated Bilayer RA')
+
 
 
 if __name__ == '__main__':

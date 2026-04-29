@@ -43,6 +43,10 @@ from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, 
     get_feature_edges
 from vtk_openCARP_methods_ibt.vtk_methods.init_objects import init_connectivity_filter, ExtractionModes
 
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 pv.set_plot_theme('dark')
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -129,8 +133,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         Mass.SetInputData(reader.GetOutput())
         Mass.Update()
 
-        print("Volume = ", Mass.GetVolume())
-        print("Surface = ", Mass.GetSurfaceArea())
+        logger.info(f"Volume = {Mass.GetVolume()}")
+        logger.info(f"Surface = {Mass.GetSurfaceArea()}")
 
         bd_ids = find_elements_around_path_within_radius(reader.GetOutput(), boundary_pts, 0.5 * scale)
 
@@ -185,12 +189,16 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
             mesh_curv = pv.read(f'{meshname}.obj')
 
         apex = mesh_curv.points[np.argmax(curv), :]
-        apex = pick_point_with_preselection(meshin, "appendage apex", apex)
-        print("Apex coordinates: ", apex)
+        s_atrium = "LA" if atrium == "LA_RA" else atrium
+        apex = pick_point_with_preselection(meshin, f"{s_atrium} appendage apex", apex)
+        logger.info(f"Apex coordinates: {apex}")
+
 
     elif find_apex_with_curv == 0 and apex_id == -1:
-        apex = pick_point(meshin, "appendage apex")
-        print("Apex coordinates: ", apex)
+        s_atrium = "LA" if atrium == "LA_RA" else atrium
+        apex = pick_point(meshin, f"{s_atrium} appendage apex")
+        logger.info(f"Apex coordinates: {apex}")
+
 
     tree = cKDTree(meshin.points.astype(np.double))
     dist, apex_id = tree.query(apex)
@@ -204,7 +212,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         atrium = 'RA'
 
         apex = pick_point(meshin, "RA appendage apex")
-        print("Apex coordinates: ", apex)
+        logger.info(f"Apex coordinates: {apex}")
+
 
         tree = cKDTree(meshin.points.astype(np.double))
         dist, apex_id = tree.query(apex)
@@ -219,8 +228,8 @@ def resample_surf_mesh(meshname, target_mesh_resolution=0.4, find_apex_with_curv
         Mass.SetInputData(reader.GetOutput())
         Mass.Update()
 
-        print("Volume = ", Mass.GetVolume())
-        print("Surface = ", Mass.GetSurfaceArea())
+        logger.info(f"Volume = {Mass.GetVolume()}")
+        logger.info(f"Surface = {Mass.GetSurfaceArea()}")
         mesh_data["vol_bi"] = Mass.GetVolume()  # Biatrial volume
 
     fname = f'{meshname}_res_mesh_data.csv'
@@ -241,14 +250,16 @@ def resample_mesh_set(mesh_set, out_dict, scale, target_mesh_resolution, tgt_edg
     """
     import random
     import numpy as np
+
+
     random.seed(42)
     np.random.seed(42)
 
     avg_edge_length = out_dict['avg_edge_length']
     loc_tgt_edge_length = target_mesh_resolution * scale
     it = 1
-    print(f"Current resolution: {avg_edge_length / scale} mm")
-    print(f"Target resolution: {tgt_edge_length / scale} mm")
+    logger.info(f"Current resolution: {avg_edge_length / scale} mm")
+    logger.info(f"Target resolution: {tgt_edge_length / scale} mm")
     while avg_edge_length > tgt_edge_length * 1.05 or avg_edge_length < tgt_edge_length * 0.95 or it < 3:
 
         mesh_set.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(loc_tgt_edge_length))
@@ -257,13 +268,13 @@ def resample_mesh_set(mesh_set, out_dict, scale, target_mesh_resolution, tgt_edg
         out_dict = mesh_set.get_geometric_measures()
 
         avg_edge_length = out_dict['avg_edge_length']
-        print(f"Current resolution: {avg_edge_length / scale} mm")
+        logger.info(f"Current resolution: {avg_edge_length / scale} mm")
         if avg_edge_length > tgt_edge_length * 1.05:
             loc_tgt_edge_length = tgt_edge_length * 0.95
-            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
+            logger.info(f"New target resolution: {loc_tgt_edge_length / scale} mm")
         elif avg_edge_length < tgt_edge_length * 0.95:
             loc_tgt_edge_length = tgt_edge_length * 1.05
-            print(f"New target resolution: {loc_tgt_edge_length / scale} mm")
+            logger.info(f"New target resolution: {loc_tgt_edge_length / scale} mm")
         else:
             break
         it += 1

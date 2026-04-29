@@ -18,6 +18,11 @@ from vtk_openCARP_methods_ibt.vtk_methods.mapper import point_array_mapper
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import extract_largest_region
 
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
+
 # Use dark theme for PyVista plots
 pv.set_plot_theme("dark")
 
@@ -40,10 +45,13 @@ def _save_orifice_coordinates(coords_list, output_path):
             for coord in coords_list:
                 writer.writerow(coord)
 
-        print(f"Saved orifice coordinates to: {output_path}")
+
+        logger.info(f"Saved orifice coordinates to: {output_path}")
+
 
     except Exception as e:
-        print(f"Warning: Could not save coordinates: {e}")
+        logger.warning(f"Could not save orifice coordinates to {output_path}: {e}")
+
 
 
 def _load_orifice_coordinates(filepath: str) -> dict:
@@ -59,12 +67,12 @@ def _load_orifice_coordinates(filepath: str) -> dict:
     import pandas as pd
 
     if not os.path.exists(filepath):
-        print(f"Warning: Orifice file {filepath} does not exist")
+        logger.warning(f"Orifice file {filepath} does not exist")
         return {}
 
     try:
         if os.path.getsize(filepath) == 0:
-            print(f"Warning: Orifice file {filepath} is empty")
+            logger.warning(f"Orifice file {filepath} is empty")
             return {}
 
         df = pd.read_csv(filepath)
@@ -72,21 +80,21 @@ def _load_orifice_coordinates(filepath: str) -> dict:
         # Check if required columns exist
         required_cols = ['orifice_name', 'x', 'y', 'z']
         if not all(col in df.columns for col in required_cols):
-            print(f"Warning: Orifice file {filepath} missing required columns: {required_cols}")
+            logger.warning(f"Orifice file {filepath} missing required columns: {required_cols}")
             return {}
 
         if df.empty:
-            print(f"Warning: Orifice file {filepath} has no data rows")
+            logger.warning(f"Orifice file {filepath} has no data rows")
             return {}
 
     except pd.errors.EmptyDataError:
-        print(f"Warning: Orifice file {filepath} has no columns to parse (likely empty or malformed)")
+        logger.warning(f"Orifice file {filepath} has no columns to parse (likely empty or malformed)")
         return {}
     except pd.errors.ParserError:
-        print(f"Warning: Orifice file {filepath} contains malformed data")
+        logger.warning(f"Orifice file {filepath} contains malformed data")
         return {}
     except Exception as error:
-        print(f"Warning: Could not read orifice file {filepath}: {error}")
+        logger.warning(f"Could not read orifice file {filepath}: {error}")
         return {}
 
     coords = {}
@@ -98,6 +106,7 @@ def _load_orifice_coordinates(filepath: str) -> dict:
 
 def parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Cut veins manually')
+    parser.add_argument('--orifice-file', type=str, default=None, help='CSV with saved orifice centers')
     parser.add_argument('--mesh', type=str, default="", help='path to mesh')
     parser.add_argument('--atrium', type=str, default="", help='write LA or RA')
     parser.add_argument('--min_cutting_radius', type=float, default=7.5, help='radius to cut veins/valves in mm')
@@ -180,7 +189,7 @@ def _map_mesh(meshpath: str, clean_path: str) -> Any:
     if not os.path.isfile(clean_path):
         raise FileNotFoundError(f"Cleaned mesh file not found: {clean_path}")
 
-    print(f"Mapping data from {meshpath} to {clean_path}")
+    logger.info(f"Mapping data from {meshpath} to {clean_path}")
 
     try:
         # Read both original and cleaned meshes
@@ -268,7 +277,7 @@ def open_orifices_manually(
     if min_cutting_radius > max_cutting_radius:
         raise ValueError(f"min_cutting_radius ({min_cutting_radius}) cannot be greater than max_cutting_radius ({max_cutting_radius})")
 
-    print(f"\n--- Starting Manual Orifice Opening for {atrium} ---")
+    logger.info(f"\n--- Starting Manual Orifice Opening for {atrium} ---")
 
     # Clean the mesh and obtain the cleaned VTK file
     try:
@@ -294,13 +303,13 @@ def open_orifices_manually(
     orifice_coords = {}
     if orifice_coordinates_file and os.path.exists(orifice_coordinates_file):
         orifice_coords = _load_orifice_coordinates(orifice_coordinates_file)
-        print(f"Loaded {len(orifice_coords)} orifice coordinates from {orifice_coordinates_file}")
+        logger.info(f"Loaded {len(orifice_coords)} orifice coordinates from {orifice_coordinates_file}")
 
     # Collect coordinates for saving
     picked_coordinates = []
 
     for r_idx, r_name in enumerate(orifices):
-        print(f"Processing orifice {r_idx + 1}/{len(orifices)}: {r_name}")
+        logger.info(f"Processing orifice {r_idx + 1}/{len(orifices)}: {r_name}")
         try:
             mesh_pv_for_picking = pv.PolyData(current_mesh_vtk)
 
@@ -310,7 +319,7 @@ def open_orifices_manually(
             # Use stored coordinates if available, otherwise interactive picking
             if r_name in orifice_coords:
                 picked_pt = orifice_coords[r_name]
-                print(f"Using stored coordinate for {r_name}: {picked_pt}")
+                logger.info(f"Using stored coordinate for {r_name}: {picked_pt}")
             else:
                 picked_pt = pick_point(mesh_pv_for_picking, f"center of the {r_name}")
                 if picked_pt is None:
@@ -332,7 +341,7 @@ def open_orifices_manually(
             selected_radius = max_cutting_radius
         else:
             selected_radius = min_cutting_radius
-        print(f"Cutting '{r_name}' with radius of {selected_radius} at {picked_pt}")
+        logger.info(f"Cutting '{r_name}' with radius of {selected_radius} at {picked_pt}")
 
         # Cutting the hole
         try:
@@ -351,11 +360,11 @@ def open_orifices_manually(
 
         _save_orifice_coordinates(picked_coordinates, orifice_csv_path)
 
-        print(f"File: {orifice_csv_path}")
+        logger.info(f"File: {orifice_csv_path}")
         for coord in picked_coordinates:
-            print(f"{coord['orifice_name']}: ({coord['x']:.6f}, {coord['y']:.6f}, {coord['z']:.6f})")
+            logger.info(f"{coord['orifice_name']}: ({coord['x']:.6f}, {coord['y']:.6f}, {coord['z']:.6f})")
 
-        print(f"Note: If using --save-test-data=1, this data will be auto-copied to tests/test_data/")
+        logger.info(f"Note: If using --save-test-data=1, this data will be auto-copied to tests/test_data/")
 
     try:
         model_final_vtk = extract_largest_region(current_mesh_vtk)
@@ -366,7 +375,7 @@ def open_orifices_manually(
 
     # Define final output path
     cutted_path = os.path.join(full_path, f"{atrium}_cutted.vtk")
-    print(f"Saving final cut mesh to: {cutted_path}")
+    logger.info(f"Saving final cut mesh to: {cutted_path}")
     try:
         vtk_polydata_writer(cutted_path, model_final_vtk)
     except Exception as e:
@@ -388,11 +397,12 @@ def run_standalone():
             args.max_cutting_radius,
             "",
             "",
-            args.debug
+            args.debug,
+            orifice_coordinates_file = args.orifice_file
         )
-        print(f"Standalone run complete. Cut mesh: {cut_mesh}, Apex ID: {final_apex_id}")
-    except Exception as e:
-        print(f"Standalone execution failed: {e}")
+        logger.info(f"Standalone run complete. Cut mesh: {cut_mesh}, Apex ID: {final_apex_id}")
+    except Exception:
+        logger.exception("Standalone execution failed")
         sys.exit(1)
 
 

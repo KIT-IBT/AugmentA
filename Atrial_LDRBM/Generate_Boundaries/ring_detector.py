@@ -19,7 +19,10 @@ from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import g
 from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_lower_threshold, get_threshold_between
 
 from Atrial_LDRBM.Generate_Boundaries.mesh import Mesh
-
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
 
 class Ring:
     """
@@ -58,7 +61,7 @@ class RingDetector:
     def __init__(self, surface: vtk.vtkPolyData, apex: tuple, outdir: str):
         # Validate the input surface. If it lacks the required 'Ids' array, try to generate it.
         if not self._validate_vtk_data(surface, check_ids=True):
-            print("Warning: Input surface missing 'Ids'. Generating IDs...")
+            logger.warning("Input surface missing 'Ids'. Generating IDs...")
             surface = generate_ids(surface, "Ids", "CellIds")
 
             if not self._validate_vtk_data(surface, check_ids=True):
@@ -133,8 +136,8 @@ class RingDetector:
                 ring_obj = self._process_detected_ring_region(connect_filter, region_index, debug)
                 if ring_obj:
                     detected_rings.append(ring_obj)
-            except Exception as e:
-                print(f"Error processing ring region {region_index}: {e}")
+            except Exception:
+                logger.exception(f"Error processing ring region {region_index}")
 
             connect_filter.DeleteSpecifiedRegion(region_index)
             connect_filter.Update()
@@ -160,8 +163,7 @@ class RingDetector:
             region_pd = clean_polydata(region_pd)
 
             if region_pd is None or region_pd.GetNumberOfPoints() == 0:
-                if debug:
-                    print(f"Region {region_index} is empty after cleaning.")
+                logger.debug(f"Region {region_index} is empty after cleaning.")
                 return None
 
             if debug:
@@ -180,9 +182,8 @@ class RingDetector:
             ring_obj = Ring(region_index, "", num_pts, center, distance, ring_poly_copy)
             return ring_obj
 
-        except Exception as e:
-            if debug:
-                print(f"Error processing region {region_index}: {e}")
+        except Exception:
+            logger.exception(f"Error processing region {region_index}")
             return None
 
     @staticmethod
@@ -403,16 +404,17 @@ class RingDetector:
         mv_ant = set(bnd_ids).intersection(mv_ids)
         mv_post = mv_ids - mv_ant
 
-        print(f"DEBUG UAC: MV ring has {len(mv_ids)} total points")
-        print(f"DEBUG UAC: Boundary edges have {len(bnd_ids)} points")
-        print(f"DEBUG UAC: MV anterior has {len(mv_ant)} points")
-        print(f"DEBUG UAC: MV posterior has {len(mv_post)} points")
-        print(f"DEBUG UAC: Working directory: {os.getcwd()}")
+        logger.debug(f"UAC: MV ring has {len(mv_ids)} total points")
+        logger.debug(f"UAC: Boundary edges have {len(bnd_ids)} points")
+        logger.debug(f"UAC: MV anterior has {len(mv_ant)} points")
+        logger.debug(f"UAC: MV posterior has {len(mv_post)} points")
+        logger.debug(f"UAC: Working directory: {os.getcwd()}")
 
         if len(mv_post) == 0:
-            print(f"ERROR: MV posterior is empty! This will create a broken VTX file.")
-            print(f"DEBUG: mv_ids sample: {list(mv_ids)[:5] if mv_ids else 'EMPTY'}")
-            print(f"DEBUG: bnd_ids sample: {list(bnd_ids)[:5] if len(bnd_ids) > 0 else 'EMPTY'}")
+            logger.error("UAC: MV posterior is empty. This will create a broken VTX file.")
+
+            logger.debug(f"UAC: mv_ids sample: {list(mv_ids)[:5] if mv_ids else 'EMPTY'}")
+            logger.debug(f"UAC: bnd_ids sample: {list(bnd_ids)[:5] if len(bnd_ids) > 0 else 'EMPTY'}")
 
         write_to_vtx(os.path.join(self.outdir, "ids_MV_ant.vtx"), list(mv_ant))
         write_to_vtx(os.path.join(self.outdir, "ids_MV_post.vtx"), list(mv_post))
@@ -547,8 +549,7 @@ class RingDetector:
         ids_s = vtk_to_numpy(tv_s.GetPointData().GetArray("Ids"))
         write_to_vtx(os.path.join(self.outdir, "ids_TV_S.vtx"), ids_s)
 
-        if debug:
-            print(f"Split TV: {len(ids_f)} free‐wall pts, {len(ids_s)} septal‐wall pts.")
+        logger.debug(f"Split TV: {len(ids_f)} free-wall pts, {len(ids_s)} septal-wall pts.")
 
     # -------------------- Boundary Loop and Region Extraction --------------------
     def _find_top_boundary_loop(self, boundary_edges_polydata: vtk.vtkPolyData,
@@ -559,13 +560,11 @@ class RingDetector:
         points from both the IVC and SVC rings.
         """
         if not self._validate_vtk_data(boundary_edges_polydata, check_points=True, check_ids=True):
-            if debug:
-                print("_find_top_boundary_loop: Invalid input data.")
+            logger.debug("_find_top_boundary_loop: Invalid input data.")
             return None
 
         if ivc_ring_ids.size == 0 or svc_ring_ids.size == 0:
-            if debug:
-                print("_find_top_boundary_loop: Empty IVC or SVC IDs provided.")
+            logger.debug("_find_top_boundary_loop: Empty IVC or SVC IDs provided.")
             return None
 
         connect_filter = init_connectivity_filter(boundary_edges_polydata, ExtractionModes.SPECIFIED_REGIONS)
@@ -574,8 +573,7 @@ class RingDetector:
         top_cut_loop = None
         ivc_ids_set = set(ivc_ring_ids)
         svc_ids_set = set(svc_ring_ids)
-        if debug:
-            print(f"_find_top_boundary_loop: Evaluating {num_regions} regions.")
+        logger.debug(f"_find_top_boundary_loop: Evaluating {num_regions} regions.")
 
         # Iterate through each connected region to find one that contains points from both rings.
         for region_index in range(num_regions):
@@ -587,15 +585,14 @@ class RingDetector:
             if self._validate_vtk_data(loop_pd, check_points=True, check_ids=True):
                 loop_ids = set(vtk_to_numpy(loop_pd.GetPointData().GetArray("Ids")))
                 if loop_ids.intersection(ivc_ids_set) and loop_ids.intersection(svc_ids_set):
-                    if debug:
-                        print(f"Found connecting loop in region {region_index}.")
+                    logger.debug(f"Found connecting loop in region {region_index}.")
                     top_cut_loop = vtk.vtkPolyData()
                     top_cut_loop.DeepCopy(loop_pd)
                     connect_filter.DeleteSpecifiedRegion(region_index)
                     break
             connect_filter.DeleteSpecifiedRegion(region_index)
-        if top_cut_loop is None and debug:
-            print("Warning: No connecting boundary loop found.")
+        if top_cut_loop is None:
+            logger.warning("No connecting boundary loop found.")
         return top_cut_loop
 
     @staticmethod
@@ -867,8 +864,7 @@ class RingDetector:
                                      debug=debug)
 
         if loop.GetNumberOfPoints() == 0:
-            if debug:
-                print(f"[{surface_name}] No loop found – skipping.")
+            logger.debug(f"[{surface_name}] No loop found – skipping.")
             return None
 
         pts_ids = vtk_to_numpy(loop.GetPointData().GetArray("Ids"))

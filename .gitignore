@@ -1,3 +1,21 @@
+# logs
+*.log
+
+# generated meshes/results
+mesh/
+mesh_orig_result/
+
+# common generated formats
+*.vtk
+*.vtu
+*.vtp
+*.obj
+*.csv
+*.dat
+
+# common pipeline output folders
+*_fibers/
+*_surf/
 # Misc
 *.pyc
 **.DS_Store

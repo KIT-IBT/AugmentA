@@ -30,9 +30,15 @@ EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
 import argparse
 import os
+import sys
+
+import logging
+
+from pathlib import Path
 
 from pipeline import AugmentA
-
+from logging_setup import logger, set_log_file
+from main_config import get_config as get_main_config
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -127,13 +133,33 @@ def parser():
 
     return parser
 
+def _default_log_path(mesh_path: str) -> str:
+    if mesh_path:
+        p = Path(mesh_path)
+        return str(p.with_suffix("")) + "AugmentA.log"
+    return "AugmentA.log"
+
 
 def main():
     args = parser().parse_args()
 
+
+    set_log_file(_default_log_path(args.mesh))
+    cfg = get_main_config()
+    logger.info(f"Loaded main config: RA thresholds tao_tv={cfg.ra.thresholds.tao_tv}")
+
+
+    console_level = logging.DEBUG if int(getattr(args, "debug", 0)) == 1 else logging.INFO
+    for h in logger.handlers:
+        if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout:
+            h.setLevel(console_level)
+
+
+
+
     # In case both atria and closed surface are given process LA first and RA later
     if args.atrium == 'LA_RA' and args.closed_surface:
-        print("Current no support for biatrial volumetric bridge generation. Annotating LA and RA separately")
+        logger.warning("Current no support for biatrial volumetric bridge generation. Annotating LA and RA separately")
         args.atrium = 'LA'
         AugmentA(args)
         args.atrium = 'RA'
@@ -144,3 +170,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

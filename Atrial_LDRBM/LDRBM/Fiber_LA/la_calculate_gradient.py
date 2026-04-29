@@ -30,6 +30,10 @@ import vtk
 
 from vtk_openCARP_methods_ibt.vtk_methods.converters import convert_point_to_cell_data
 from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_unstructured_grid_writer
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 
 def la_calculate_gradient(args, model, job):
@@ -40,7 +44,7 @@ def la_calculate_gradient(args, model, job):
     model_cell_data = convert_point_to_cell_data(model, None)
 
     for var in name_list:
-        print('Calculating the gradient of ' + str(var) + '...')
+        logger.info('Calculating the gradient of ' + str(var) + '...')
         if var == 'phi':
             # using the vtkGradientFilter to calculate the gradient
             if args.mesh_type == "vol":
@@ -70,7 +74,7 @@ def la_calculate_gradient(args, model, job):
             gradientFilter.Update()
             LA_gradient = gradientFilter.GetOutput()
 
-        print('Calculating the gradient of ' + str(var) + '... Done!')
+        logger.info('Calculating the gradient of ' + str(var) + '... Done!')
 
     output = vtk.vtkUnstructuredGrid()
     output.DeepCopy(LA_gradient)
@@ -80,9 +84,9 @@ def la_calculate_gradient(args, model, job):
         try:
             os.makedirs(simid)
         except OSError:
-            print(f"Creation of the directory {simid} failed")
+            logger.info(f"Creation of the directory {simid} failed")
         else:
-            print(f"Successfully created the directory {simid} ")
+            logger.info(f"Successfully created the directory {simid} ")
         # write the file as vtk 
         vtk_unstructured_grid_writer(simid + "/LA_with_lp_res_gradient.vtk", output)
     return output

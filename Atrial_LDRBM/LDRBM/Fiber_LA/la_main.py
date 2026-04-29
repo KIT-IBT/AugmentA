@@ -38,6 +38,10 @@ from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_e
 from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 def parser():
     # Generate the standard command line parser
@@ -91,14 +95,14 @@ def run(args, job):
     start_time = datetime.datetime.now()
     init_start_time = datetime.datetime.now()
 
-    print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
+    logger.info('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
     try:
         output_laplace = la_laplace(args, job, LA)
         end_time = datetime.datetime.now()
         running_time = end_time - start_time
-        print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+        logger.info('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
     except MemoryError as e:
-        print(f"Out of memory during Laplace solution: {e}")
+        logger.error(f"Out of memory during Laplace solution: {e}")
         raise MemoryError("Laplace solution failed due to insufficient memory.")
     except Exception as e:
         traceback.print_exc()
@@ -106,12 +110,12 @@ def run(args, job):
 
     start_time = datetime.datetime.now()
 
-    print('[Step 2] Generating fibers... ' + str(start_time))
+    logger.info('[Step 2] Generating fibers... ' + str(start_time))
     try:
         la_generate_fiber(output_laplace, args, job)
         end_time = datetime.datetime.now()
         running_time = end_time - start_time
-        print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+        logger.info('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
     except MemoryError as e:
         raise MemoryError("Fiber generation failed due to insufficient memory.")
     except Exception as e:
@@ -120,7 +124,7 @@ def run(args, job):
 
     fin_end_time = datetime.datetime.now()
     tot_running_time = fin_end_time - init_start_time
-    print('Total running time: ' + str(tot_running_time))
+    logger.info('Total running time: ' + str(tot_running_time))
 
 
 def init_mesh_and_fibers(args, atrium):

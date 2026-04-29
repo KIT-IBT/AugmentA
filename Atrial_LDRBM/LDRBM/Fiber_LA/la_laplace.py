@@ -34,6 +34,10 @@ from carputils.carpio import igb
 from carputils import tools
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_calculate_gradient import la_calculate_gradient
 from vtk.numpy_interface import dataset_adapter as dsa
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
 
 
 def la_laplace(args, job, model):
@@ -132,9 +136,9 @@ def la_laplace(args, job, model):
         try:
             os.makedirs(simid)
         except OSError:
-            print(f"Creation of the directory {simid} failed")
+            logger.info(f"Creation of the directory {simid} failed")
         else:
-            print(f"Successfully created the directory {simid} ")
+            logger.info(f"Successfully created the directory {simid} ")
         if args.mesh_type == "vol":
             vtk_xml_unstructured_grid_writer(simid + "/LA_with_laplace.vtu", meshNew.VTKObject)
         else:
@@ -184,9 +188,9 @@ def laplace_0_1(args, job, model, name1, name2, outname):
         try:
             os.makedirs(simid)
         except OSError:
-            print(f"Creation of the directory {simid} failed")
+            logger.info(f"Creation of the directory {simid} failed")
         else:
-            print(f"Successfully created the directory {simid} ")
+            logger.info(f"Successfully created the directory {simid} ")
 
         vtk_xml_unstructured_grid_writer(simid + "/LA_with_laplace.vtu", meshNew.VTKObject)
     return meshNew.VTKObject

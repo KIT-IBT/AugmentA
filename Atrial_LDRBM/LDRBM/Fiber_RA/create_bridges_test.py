@@ -47,6 +47,10 @@ from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_
 from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
     apply_extract_cell_filter, get_cells_with_ids
 from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -91,11 +95,11 @@ def run(args, job):
 
     CS_p = np.array(df["CS"])
 
-    print('[Step 3] Generate Bridges and Bilayer... ')
+    logger.info('[Step 3] Generate Bridges and Bilayer... ')
 
     add_free_bridge(args, la_epi, model, CS_p, df, job)
 
-    print('[Step 3] Generate Bilayer...done! ')
+    logger.info('[Step 3] Generate Bilayer...done! ')
 
 
 def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
@@ -231,12 +235,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     la_ra_usg = append_filter.GetOutput()  # this has already elemTag
 
-    print('reading done!')
+    logger.info('reading done!')
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     earth_cell_ids_list = []
     for var in bridge_list:
-        print(var)
+        logger.info(var)
 
         reader = vtk.vtkUnstructuredGridReader()
         reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
@@ -272,7 +276,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         vtk_obj_writer(job.ID + "/bridges/" + str(var) + "_earth.obj", earth)
         # Here
 
-        print("Extracted earth")
+        logger.info("Extracted earth")
         cell_id_all = []
         for i in range(la_ra_usg.GetNumberOfCells()):
             cell_id_all.append(i)
@@ -294,7 +298,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     bb_fiber_points_data = vtk_to_numpy(generate_spline_points(bb_fiber).GetPoints().GetData())
 
-    print("Union between earth and bridges")
+    logger.info("Union between earth and bridges")
     for var in bridge_list:
 
         mesh_D = pymesh.load_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj")
@@ -310,7 +314,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
             output_mesh_2 = pymesh.boolean(mesh_D, mesh_E, operation="union", engine="corefinement")
             pymesh.save_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj", output_mesh_2, ascii=True)
 
-        print("Union between earth and bridges in " + var)
+        logger.info("Union between earth and bridges in " + var)
 
         ms = pymeshlab.MeshSet()
         ms.load_new_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj")

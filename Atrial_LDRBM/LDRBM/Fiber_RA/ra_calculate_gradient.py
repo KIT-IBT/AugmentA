@@ -31,6 +31,10 @@ import vtk
 from vtk_openCARP_methods_ibt.vtk_methods.converters import convert_point_to_cell_data
 from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_grid_writer
 
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 def ra_calculate_gradient(args, model, job):
     name_list = ['phi', 'r', 'v', 'ab', 'w']
@@ -40,7 +44,7 @@ def ra_calculate_gradient(args, model, job):
     model_with_cell_data = convert_point_to_cell_data(model)
 
     for var in name_list:
-        print('Calculating the gradient of ' + str(var) + '...')
+        logger.info('Calculating the gradient of ' + str(var) + '...')
         if var == 'phi':
             # using the vtkGradientFilter to calculate the gradient
             if args.mesh_type == "vol":
@@ -69,7 +73,7 @@ def ra_calculate_gradient(args, model, job):
             gradientFilter.Update()
             RA_gradient = gradientFilter.GetOutput()
 
-    print('Calculating the gradient of ' + str(var) + '... Done!')
+    logger.info('Calculating the gradient of ' + str(var) + '... Done!')
 
     output = vtk.vtkUnstructuredGrid()
     output.DeepCopy(RA_gradient)
@@ -80,9 +84,9 @@ def ra_calculate_gradient(args, model, job):
         try:
             os.makedirs(simid)
         except OSError:
-            print(f"Creation of the directory {simid} failed")
+            logger.info(f"Creation of the directory {simid} failed")
         else:
-            print(f"Successfully created the directory {simid} ")
+            logger.info(f"Successfully created the directory {simid} ")
         # write the file as vtk 
         vtk_xml_unstructured_grid_writer(simid + "/RA_with_lp_res_gradient.vtu", output)
     return output
