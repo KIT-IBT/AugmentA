@@ -54,8 +54,8 @@ def ra_laplace(args, job, model):
         simid = job.ID + '/Lp_phi'
         cmd += ['-simID', simid,
                 '-meshname', meshdir,
-                '-stimulus[0].vtx_file', surfdir + 'ids_ENDO',
-                '-stimulus[1].vtx_file', surfdir + 'ids_EPI']
+                '-stim[0].elec.vtx_file', surfdir + 'ids_ENDO',
+                '-stim[1].elec.vtx_file', surfdir + 'ids_EPI']
 
         # Run simulation
         job.carp(cmd)
@@ -67,11 +67,11 @@ def ra_laplace(args, job, model):
     simid = job.ID + '/Lp_ab'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_SVC',
-            '-stimulus[1].vtx_file', surfdir + 'ids_IVC',
-            '-stimulus[2].vtx_file', surfdir + 'ids_TV_S',
-            '-stimulus[3].vtx_file', surfdir + 'ids_TV_F',
-            '-stimulus[4].vtx_file', surfdir + 'ids_RAA']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_SVC',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_IVC',
+            '-stim[2].elec.vtx_file', surfdir + 'ids_TV_S',
+            '-stim[3].elec.vtx_file', surfdir + 'ids_TV_F',
+            '-stim[4].elec.vtx_file', surfdir + 'ids_RAA']
 
     # Run simulation
     job.carp(cmd)
@@ -83,9 +83,9 @@ def ra_laplace(args, job, model):
     simid = job.ID + '/Lp_v'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_SVC',
-            '-stimulus[1].vtx_file', surfdir + 'ids_RAA',
-            '-stimulus[2].vtx_file', surfdir + 'ids_IVC']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_SVC',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_RAA',
+            '-stim[2].elec.vtx_file', surfdir + 'ids_IVC']
 
     # Run simulation
     job.carp(cmd)
@@ -97,8 +97,8 @@ def ra_laplace(args, job, model):
     simid = job.ID + '/Lp_v2'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_IVC',
-            '-stimulus[1].vtx_file', surfdir + 'ids_RAA']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_IVC',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_RAA']
 
     # Run simulation
     job.carp(cmd)
@@ -111,10 +111,10 @@ def ra_laplace(args, job, model):
         simid = job.ID + '/Lp_r'
         cmd += ['-simID', simid,
                 '-meshname', meshdir,
-                '-stimulus[0].vtx_file', surfdir + 'ids_TOP_ENDO',
-                '-stimulus[1].vtx_file', surfdir + 'ids_TOP_EPI',
-                '-stimulus[2].vtx_file', surfdir + 'ids_TV_F',
-                '-stimulus[3].vtx_file', surfdir + 'ids_TV_S']
+                '-stim[0].elec.vtx_file', surfdir + 'ids_TOP_ENDO',
+                '-stim[1].elec.vtx_file', surfdir + 'ids_TOP_EPI',
+                '-stim[2].elec.vtx_file', surfdir + 'ids_TV_F',
+                '-stim[3].elec.vtx_file', surfdir + 'ids_TV_S']
 
         # Run simulation
         job.carp(cmd)
@@ -124,9 +124,9 @@ def ra_laplace(args, job, model):
         simid = job.ID + '/Lp_r'
         cmd += ['-simID', simid,
                 '-meshname', meshdir,
-                '-stimulus[0].vtx_file', surfdir + 'ids_TOP_ENDO',
-                '-stimulus[1].vtx_file', surfdir + 'ids_TV_F',
-                '-stimulus[2].vtx_file', surfdir + 'ids_TV_S']
+                '-stim[0].elec.vtx_file', surfdir + 'ids_TOP_ENDO',
+                '-stim[1].elec.vtx_file', surfdir + 'ids_TV_F',
+                '-stim[2].elec.vtx_file', surfdir + 'ids_TV_S']
 
         # Run simulation
         job.carp(cmd)
@@ -138,8 +138,8 @@ def ra_laplace(args, job, model):
     simid = job.ID + '/Lp_w'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_TV_S',
-            '-stimulus[1].vtx_file', surfdir + 'ids_TV_F']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_TV_S',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_TV_F']
 
     # Run simulation
     job.carp(cmd)
