@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Optional
-
+import os
+from dataclasses import dataclass, field, asdict
 
 @dataclass
 class RAThresholds:
@@ -61,15 +62,43 @@ class RAFiberConfig:
 
 
 _instance: Optional[RAFiberConfig] = None
+config_file_location = 'ra_fiber_config.yaml'
 
 
 def get_config() -> RAFiberConfig:
-    global _instance
+    global _instance, config_file_location
     if _instance is None:
-        # Try to get from main config first
-        try:
-            from main_config import get_config as get_main_config
-            _instance = get_main_config().ra
-        except ImportError:
+        if os.path.exists(config_file_location):
+            load_config()
+        else:
             _instance = RAFiberConfig()
     return _instance
+
+def save_config(filepath=None):
+    global _instance
+    if filepath is None:
+        filepath = config_file_location
+    from ruamel.yaml import YAML
+    config_dic = asdict(_instance)
+    _yaml = YAML()
+    with open(filepath, 'w') as f:
+        _yaml.dump(config_dic, f)
+
+def load_config(filepath=None):
+    global _instance, config_file_location
+    if filepath is None:
+        filepath = config_file_location
+    from ruamel.yaml import YAML
+    _yaml = YAML()
+    with open(filepath, 'r') as f:
+        config_dic = _yaml.load(f)
+    _instance = RAFiberConfig(
+        thresholds=RAThresholds(**config_dic.pop('thresholds', {})),
+        bundles=BundleSizes(**config_dic.pop('bundles', {})),
+        pm=PectinateMuscleConfig(**config_dic.pop('pm', {})),
+        bb=BachmannBundleConfig(**config_dic.pop('bb', {}))
+    )
+
+def change_config_location(new_location):
+    global config_file_location
+    config_file_location = new_location

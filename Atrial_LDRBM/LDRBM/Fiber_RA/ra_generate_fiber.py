@@ -147,7 +147,20 @@ def ra_generate_fiber(model, args, job):
         logger.info(f"Successfully created the directory {simid} ")
 
     cfg = get_config()
-    # Riunet
+    # Save config to patient folder if it doesn't exist yet
+    config_dir = f'{args.mesh}_configs'
+    os.makedirs(config_dir, exist_ok=True)
+    patient_config_path = f'{config_dir}/ra_fiber_config.yaml'
+    if not os.path.exists(patient_config_path):
+        from Atrial_LDRBM.LDRBM.Fiber_RA.ra_fiber_config import save_config
+        save_config(patient_config_path)
+    else:
+        from Atrial_LDRBM.LDRBM.Fiber_RA.ra_fiber_config import change_config_location, load_config
+        change_config_location(patient_config_path)
+        load_config()
+        cfg = get_config()
+
+
     # Riunet
     tao_tv = cfg.thresholds.tao_tv
     tao_icv = cfg.thresholds.tao_icv
