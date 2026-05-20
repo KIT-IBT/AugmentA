@@ -1,7 +1,3 @@
-#simID = /home/jbayer/Fibers/LPS/L_EPI
-
-#meshname = /home/jbayer/Fibers/Mesh/Heart_R3_i
-
 num_gregions = 1
 
 gregion[0].g_et = 1 # when solving a laplacian, all conductivities should be 1
@@ -10,27 +6,24 @@ gregion[0].g_en = 1
 gregion[0].g_il = 1
 gregion[0].g_it = 1
 gregion[0].g_in = 1
-#gregion[0].num_IDs = 1
-#gregion[0].ID[0] = 2
 
 experiment = 2 # 2 == laplacian solve.
 bidomain = 1 # this option must be set or the code segfaults.  The laplacian solve takes place on the extracellular grid.
 
-#Stimulus setup
+#stim setup
 num_stim = 2
 
-stimulus[0].start = 0
-stimulus[0].duration = 1
-stimulus[0].strength = 1.0
-stimulus[0].stimtype = 2
+stim[0].ptcl.start = 0
+stim[0].ptcl.duration = 1
+stim[0].pulse.strength = 1.0
+stim[0].crct.type = 2
 # should be tv_s
 
-stimulus[1].start = 0
-stimulus[1].duration = 1
-stimulus[1].strength = -1.0
-stimulus[1].stimtype = 2
+stim[1].ptcl.start = 0
+stim[1].ptcl.duration = 1
+stim[1].pulse.strength = -1.0
+stim[1].crct.type = 2
 # should be tv_f
 
-#I/0 parameters
-#timedt = 1
-#spacedt = 1
+cg_maxit_ellip 1000
+cg_maxit_parab 1000
