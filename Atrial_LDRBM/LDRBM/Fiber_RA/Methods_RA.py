@@ -45,7 +45,7 @@ from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
 from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane, init_connectivity_filter, \
     ExtractionModes
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
-from Atrial_LDRBM.LDRBM.Fiber_RA.ra_fiber_config import get_config
+from main_config import get_config
 
 try:
     from augmentaupgrade.logging_setup import logger, set_log_file
@@ -348,7 +348,7 @@ def dijkstra_path_on_a_plane(polydata, args, StartVertex, EndVertex, plane_point
 
     extracted_mesh_1 = get_elements_above_plane(polydata, plane)
 
-    cfg = get_config()
+    cfg = get_config().ra
     endpoint_dist = np.linalg.norm(point_end - point_start)
     band_width = max(2 * args.scale, cfg.pm.band_width_fraction * endpoint_dist)
     point_moved = point_start - band_width * norm_1
