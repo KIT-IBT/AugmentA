@@ -7,7 +7,6 @@ services:
       - "6901:6901" #VNC Port browser/web
       - "55146:55146" #Debug Port intelij
     volumes: #Replace with your data directory
-      - /Users/kg711l/PycharmProjects/augmentaupgrade/mesh:/headless/mesh #LocalFolder:Docker_container
-      - /Users/kg711l/IBT_kg711_pm930_HIWI/data:/headless/data
+      - /Branch/To/Your/Data:/headless/data
       - ../:/headless/augmenta
 
