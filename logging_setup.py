@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 
@@ -25,6 +26,7 @@ logger.addHandler(file_handler)
 def set_log_file(path: str):
     """Add or update a rotating file handler"""
     global file_handler
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     if file_handler:
         logger.removeHandler(file_handler)
     file_handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=3)
