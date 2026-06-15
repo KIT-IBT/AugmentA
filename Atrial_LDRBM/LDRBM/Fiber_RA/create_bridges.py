@@ -45,6 +45,11 @@ from vtk_openCARP_methods_ibt.vtk_methods.exporting import vtk_xml_unstructured_
 from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, clean_polydata, vtk_append, \
     apply_extract_cell_filter, get_cells_with_ids
 from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
+from main_config import get_config
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -57,7 +62,8 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         for row in reader:
             tag_dict[row['name']] = row['tag']
 
-    bridge_radius = 1.65 * args.scale
+    cfg = get_config().bridges
+    bridge_radius = cfg.bridge_radius * args.scale
 
     bachmann_bundel_internal = int(tag_dict['bachmann_bundel_internal'])
     middle_posterior_bridge_left = int(tag_dict['middle_posterior_bridge_left'])
@@ -90,10 +96,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     if args.debug:
         Method.create_pts(SVC_IVC_septum_path, 'SVC_IVC_septum_path', f'{args.mesh}_surf/')
 
-    middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path) * 0.6),
+    middle_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path) * cfg.mpb_position),
                                     :]  # Can happen that the 0.6 is where the BB is
 
-    upper_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path) * 0.4), :]
+    upper_posterior_bridge_point = SVC_IVC_septum_path[int(len(SVC_IVC_septum_path) * cfg.upb_position), :]
 
     mpb_tube, mpb_sphere_1, mpb_sphere_2, mpb_fiber = Method.create_free_bridge_semi_auto(la_epi_surface,
                                                                                           ra_epi_surface,
@@ -110,7 +116,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     # Coronary sinus bridge point
 
     # it happened that the point is too close to the edge and the heart is not found
-    point_CS_on_MV = mv_la.GetPoint(find_closest_point(mv_la, CS_p + TV_p * 0.1))  # adapt this value if CS is too low
+    point_CS_on_MV = mv_la.GetPoint(find_closest_point(mv_la, CS_p + TV_p * cfg.cs_tv_offset))  # adapt this value if CS is too low
 
     point_CS_bridge = ra_septum.GetPoint(find_closest_point(ra_septum, point_CS_on_MV))
 
@@ -159,7 +165,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         # add the mesh to the MeshSet
         ms.add_mesh(m, "bridge_mesh")
         # apply filter
-        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(0.4 * args.scale), adaptive=True)
+        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(cfg.remesh_target_length * args.scale), adaptive=True)
         ms.save_current_mesh(job.ID + "/bridges/" + str(var) + "_bridge_resampled.obj", \
                              save_vertex_color=False, save_vertex_normal=False, save_face_color=False,
                              save_wedge_texcoord=False, save_wedge_normal=False)
@@ -176,12 +182,12 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     if args.debug:
         vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_usg.vtu", la_ra_usg)
-    print('reading done!')
+    logger.info('reading done!')
 
     bridge_list = ['BB_intern_bridges', 'coronary_sinus_bridge', 'middle_posterior_bridge', 'upper_posterior_bridge']
     earth_cell_ids_list = []
     for var in bridge_list:
-        print(var)
+        logger.info(var)
 
         reader = vtk.vtkUnstructuredGridReader()
         reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
@@ -198,7 +204,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         earth_point_ids_temp = vtk.vtkIdList()
         earth_point_ids = vtk.vtkIdList()
         for i in range(len(intersection_points)):
-            locator.FindPointsWithinRadius(0.7 * args.scale, intersection_points[i], earth_point_ids_temp)
+            locator.FindPointsWithinRadius(cfg.intersection_radius * args.scale, intersection_points[i], earth_point_ids_temp)
             for j in range(earth_point_ids_temp.GetNumberOfIds()):
                 earth_point_ids.InsertNextId(earth_point_ids_temp.GetId(j))
 
@@ -217,7 +223,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         vtk_obj_writer(job.ID + "/bridges/" + str(var) + "_earth.obj", earth)
         # Here
 
-        print("Extracted earth")
+        logger.info("Extracted earth")
         cell_id_all = []
         for i in range(la_ra_usg.GetNumberOfCells()):
             cell_id_all.append(i)
@@ -241,7 +247,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
     earth_cell_ids_list = []
 
     for var in bridge_list:
-        print(var)
+        logger.info(var)
 
         reader = vtk.vtkUnstructuredGridReader()
         reader.SetFileName(job.ID + "/bridges/" + str(var) + '_bridge_resampled.vtk')
@@ -258,7 +264,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         earth_point_ids_temp = vtk.vtkIdList()
         earth_point_ids = vtk.vtkIdList()
         for i in range(len(intersection_points)):
-            locator.FindPointsWithinRadius(0.7 * args.scale, intersection_points[i], earth_point_ids_temp)
+            locator.FindPointsWithinRadius(cfg.intersection_radius * args.scale, intersection_points[i], earth_point_ids_temp)
             for j in range(earth_point_ids_temp.GetNumberOfIds()):
                 earth_point_ids.InsertNextId(earth_point_ids_temp.GetId(j))
 
@@ -273,7 +279,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         earth = apply_vtk_geom_filter(apply_extract_cell_filter(la_endo, earth_cell_ids))
         earth = clean_polydata(earth)
 
-        print("Extracted earth")
+        logger.info("Extracted earth")
         cell_id_all = []
         for i in range(la_endo.GetNumberOfCells()):
             cell_id_all.append(i)
@@ -292,7 +298,7 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
 
     bb_fiber_points_data = vtk_to_numpy(generate_spline_points(bb_fiber).GetPoints().GetData())
 
-    print("Union between earth and bridges")
+    logger.info("Union between earth and bridges")
     for var in bridge_list:
 
         # if args.mesh_type == "vol":
@@ -308,13 +314,13 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         # Use difference if the endo normals are pointing inside
         output_mesh_2 = pymesh.boolean(mesh_E, mesh_D, operation="difference", engine="corefinement")
         pymesh.save_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj", output_mesh_2, ascii=True)
-        print("Union between earth and bridges in " + var)
+        logger.info("Union between earth and bridges in " + var)
 
         ms = pymeshlab.MeshSet()
         # if args.just_bridges and var == 'BB_intern_bridges':
         # job.ID='../'+job.ID# Change if you enter from ra_main and not from pipeline.py, otherwise comment the line
         ms.load_new_mesh(job.ID + "/bridges/" + str(var) + "_union_to_resample.obj")
-        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(0.4 * args.scale), adaptive=True)
+        ms.meshing_isotropic_explicit_remeshing(iterations=5, targetlen=pymeshlab.PureValue(cfg.remesh_target_length * args.scale), adaptive=True)
         ms.save_current_mesh(job.ID + "/bridges/" + str(var) + "_union.obj", save_vertex_color=False,
                              save_vertex_normal=False, save_face_color=False, save_wedge_texcoord=False,
                              save_wedge_normal=False)
@@ -439,11 +445,10 @@ def add_free_bridge(args, la_epi, ra_epi, CS_p, df, job):
         vtk_xml_unstructured_grid_writer(
             job.ID + "/result_RA/append_LA_endo_RA_endo.vtu", bilayer_endo)
         # Has elemTag!
-        endo = Method.move_surf_along_normals(bilayer_endo, 0.1 * args.scale,
-                                              1)  # # Warning: set -1 if pts normals are pointing outside
+        endo = Method.move_surf_along_normals(bilayer_endo, cfg.bilayer_normal_offset * args.scale, 1)  # # Warning: set -1 if pts normals are pointing outside
 
         vtk_xml_unstructured_grid_writer(job.ID + "/result_RA/la_ra_endo.vtu", endo)  # Has elemTag! :,
-        bilayer = Method.generate_bilayer(args, job, endo, epi, 0.12 * args.scale)  # Does not have elemTag :(!
+        bilayer = Method.generate_bilayer(args, job, endo, epi, cfg.bilayer_max_dist * args.scale)  # Does not have elemTag :(!
 
         Method.write_bilayer(bilayer, args, job)
 

@@ -50,6 +50,11 @@ from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
 from vtk_openCARP_methods_ibt.vtk_methods.thresholding import get_lower_threshold, get_upper_threshold, \
     get_threshold_between
 
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
+
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
@@ -171,7 +176,7 @@ def write_bilayer(bilayer, args, job):
     write_to_pts(f'{file_name}.pts', pts)
     write_to_elem(f'{file_name}.elem', bilayer, tag_epi)
     write_to_lon(f'{file_name}.lon', el_epi, sheet_epi)
-    print('Done..')
+    logger.info('Done..')
 
 
 def creat_tube_around_spline(points_data, radius):
@@ -512,11 +517,11 @@ def assign_ra_appendage(model, SCV, appex_point, tag):
     SCV_id = locator2.FindClosestPoint(appex_point)
     SCV_closed_point = SCV.GetPoint(SCV_id)
     radius = np.linalg.norm(appex_point - SCV_closed_point)
-    print(radius)
+    logger.info(radius)
 
     mesh_point_temp_id_list = vtk.vtkIdList()
     locator.FindPointsWithinRadius(radius, appex_point, mesh_point_temp_id_list)
-    print(mesh_point_temp_id_list.GetNumberOfIds())
+    logger.info(mesh_point_temp_id_list.GetNumberOfIds())
     mesh_cell_id_list = vtk.vtkIdList()
     mesh_cell_temp_id_list = vtk.vtkIdList()
     for i in range(mesh_point_temp_id_list.GetNumberOfIds()):
@@ -553,7 +558,7 @@ def get_endo_ct_intersection_cells(endo, ct):
         endo.GetPointCells(endo_id_list[i], endo_cell_temp_id_list)
         for j in range(endo_cell_temp_id_list.GetNumberOfIds()):
             endo_cell_id_list.InsertNextId(endo_cell_temp_id_list.GetId(j))
-    print(endo_cell_id_list.GetNumberOfIds())
+    logger.info(endo_cell_id_list.GetNumberOfIds())
 
     endo_ct = apply_extract_cell_filter(endo, endo_cell_id_list)
 
@@ -814,9 +819,9 @@ def find_tau(model, ub, lb, low_up, scalar):
         connect = init_connectivity_filter(thresh.GetOutput(), ExtractionModes.ALL_REGIONS)
         num = connect.GetNumberOfExtractedRegions()
 
-        print("Iteration: ", k)
-        print("Value of tao: ", (ub + lb) / 2)
-        print("Number of regions: ", num, "\n")
+        logger.info(f"Iteration: {k}")
+        logger.info(f"Value of tao: {(ub + lb) / 2}")
+        logger.info(f"Number of regions: {num}")
 
         if low_up == "low":
             if num == 1:

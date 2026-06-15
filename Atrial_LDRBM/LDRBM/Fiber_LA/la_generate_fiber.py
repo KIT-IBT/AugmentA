@@ -31,7 +31,7 @@ import os
 import numpy as np
 import pandas as pd
 import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
+from vtkmodules.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
@@ -46,6 +46,13 @@ from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, 
     get_elements_above_plane
 from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane_with_points, init_connectivity_filter, \
     ExtractionModes
+from main_config import get_config, save_config, load_config, change_config_location
+
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
+
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -53,16 +60,19 @@ vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
 
 def la_generate_fiber(model, args, job):
+    cfg_all = get_config()
+    cfg = cfg_all.la
+
     # size(Radius) of Bachmann Bundle in mm
-    w_bb = 2 * args.scale
+    w_bb = cfg.bundles.w_bb * args.scale
 
     simid = job.ID + "/result_LA"
     try:
         os.makedirs(simid)
     except OSError:
-        print(f"Creation of the directory {simid} failed")
+        logger.info(f"Creation of the directory {simid} failed")
     else:
-        print(f"Successfully created the directory {simid} ")
+        logger.info(f"Successfully created the directory {simid} ")
 
     with open(os.path.join(EXAMPLE_DIR, '../../element_tag.csv')) as f:
         tag_dict = {}
@@ -95,12 +105,12 @@ def la_generate_fiber(model, args, job):
     df = pd.read_csv(args.mesh + "_surf/rings_centroids.csv")
 
     # LPV
-    lb = 0
-    ub = 0.4
+    lb = cfg.thresholds.lpv_lb
+    ub = cfg.thresholds.lpv_ub
     tao_lpv = Method.find_tau(model, ub, lb, "low", "phie_v")
     if tao_lpv == 0:
-        print("WARNING tao_lpv == 0 could lead to no tags for LPVs")
-    print('Calculating tao_lpv done! tap_lpv = ', tao_lpv)
+        logger.warning("tao_lpv == 0 could lead to no tags for LPVs")
+    logger.info(f'Calculating tao_lpv done! tap_lpv = {tao_lpv}')
 
     thr_phi_v = vtk_thr(model, 1, "CELLS", "phie_v", tao_lpv)
 
@@ -120,14 +130,14 @@ def la_generate_fiber(model, args, job):
     phie_ab_tau_lpv = vtk_to_numpy(thr_lpv.GetPointData().GetArray('phie_ab2'))
     max_phie_ab_tau_lpv = np.max(phie_ab_tau_lpv)
 
-    print("max_phie_r2_tau_lpv ", max_phie_r2_tau_lpv)
-    print("max_phie_ab_tau_lpv ", max_phie_ab_tau_lpv)
+    logger.info(f"max_phie_r2_tau_lpv {max_phie_r2_tau_lpv}")
+    logger.info(f"max_phie_ab_tau_lpv {max_phie_ab_tau_lpv}")
 
     # RPV
-    lb = 0.6
-    ub = 1
+    lb = cfg.thresholds.rpv_lb
+    ub = cfg.thresholds.rpv_ub
     tao_rpv = Method.find_tau(model, ub, lb, "up", "phie_v")
-    print('Calculating tao_rpv done! tap_rpv = ', tao_rpv)
+    logger.info(f'Calculating tao_rpv done! tap_rpv = {tao_rpv}')
 
     thr = vtk_thr(model, 0, "CELLS", "phie_v", tao_rpv)
 
@@ -137,7 +147,7 @@ def la_generate_fiber(model, args, job):
     PVs = Method.distinguish_PVs(connect, PVs, df, "RIPV", "RSPV")
 
     start_time = datetime.datetime.now()
-    print('Calculating fibers... ' + str(start_time))
+    logger.info('Calculating fibers... ' + str(start_time))
 
     # Bilayer mesh
     if args.mesh_type == 'bilayer':
@@ -152,7 +162,7 @@ def la_generate_fiber(model, args, job):
     else:  # Volume mesh
         tag = np.ones(len(r), dtype=int) * tag_dict['left_atrial_wall_epi']
 
-        epi = vtk_thr(model, 0, "CELLS", "phie_phi", 0.5)
+        epi = vtk_thr(model, 0, "CELLS", "phie_phi", cfg.thresholds.epi_endo_thr)
 
         epi_ids = vtk_to_numpy(epi.GetCellData().GetArray('Global_ids'))
 
@@ -164,7 +174,7 @@ def la_generate_fiber(model, args, job):
 
     ## Optimize shape of LAA solving a laplacian with 0 in LAA and 1 in the boundary of LAA_s
 
-    LAA_bb = vtk_thr(model, 2, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - 0.03, max_phie_ab_tau_lpv + 0.01)
+    LAA_bb = vtk_thr(model, 2, "POINTS", "phie_ab2", max_phie_ab_tau_lpv - cfg.thresholds.laa_bb_offset_low, max_phie_ab_tau_lpv + cfg.thresholds.laa_bb_offset_high)
 
     LAA_bb_ids = vtk_to_numpy(LAA_bb.GetPointData().GetArray('Global_ids'))
 
@@ -176,13 +186,13 @@ def la_generate_fiber(model, args, job):
 
     LAA_s = laplace_0_1(args, job, model, "LAA", "LAA_bb", "phie_ab3")
 
-    LAA_s = vtk_thr(LAA_s, 1, "POINTS", "phie_ab3", 0.95)
+    LAA_s = vtk_thr(LAA_s, 1, "POINTS", "phie_ab3", cfg.thresholds.laa_shape_thr)
 
     ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_MV.vtx', skiprows=2, dtype=int)
 
     rings_pts = vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
 
-    MV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
+    MV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, cfg.bundles.mv_ring_radius * args.scale)
 
     LAA_ids = vtk_to_numpy(LAA_s.GetCellData().GetArray('Global_ids'))
 
@@ -272,17 +282,17 @@ def la_generate_fiber(model, args, job):
         ##### Local coordinate system #####
         # et
         et = phie_grad_norm
-        print('############### et ###############')
+        logger.info('############### et ###############')
 
         en_endo = get_normalized_orthogonality(et, ab_grad)
 
         en_epi = get_normalized_orthogonality(et, ab_grad_epi)
 
-        print('############### en ###############')
+        logger.info('############### en ###############')
         # el
         el_endo = np.cross(en_endo, et)
         el_epi = np.cross(en_epi, et)
-        print('############### el ###############')
+        logger.info('############### el ###############')
 
         v_grad_norm = normalize_vectors(v_grad)
         ### Subendo PVs bundle selection
@@ -317,7 +327,7 @@ def la_generate_fiber(model, args, job):
 
         running_time = end_time - start_time
 
-        print('Calculating fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
+        logger.info('Calculating fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
     else:
         ab_grad[band_cell_ids] = r_grad[band_cell_ids]
@@ -328,13 +338,13 @@ def la_generate_fiber(model, args, job):
         ##### Local coordinate system #####
         # et
         et = phie_grad_norm
-        print('############### et ###############')
+        logger.info('############### et ###############')
 
         en = get_normalized_orthogonality(et, ab_grad)
-        print('############### en ###############')
+        logger.info('############### en ###############')
         # el
         el = np.cross(en, et)
-        print('############### el ###############')
+        logger.info('############### el ###############')
 
         v_grad_norm = normalize_vectors(v_grad)
 
@@ -352,9 +362,9 @@ def la_generate_fiber(model, args, job):
 
         running_time = end_time - start_time
 
-        print('Calculating fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
+        logger.info('Calculating fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
-    print("Creating bachmann bundles...")
+    logger.info("Creating bachmann bundles...")
     # Bachmann Bundle
 
     if args.mesh_type == "vol":  # Extract epicardial surface
@@ -391,12 +401,12 @@ def la_generate_fiber(model, args, job):
     df["LAA_far_from_LIPV"] = LAA_far_from_LIPV
 
     df.to_csv(args.mesh + "_surf/rings_centroids.csv", float_format="%.2f", index=False)
-    print("Creating bachmann bundles... done")
+    logger.info("Creating bachmann bundles... done")
     if args.mesh_type == "bilayer":
         el_epi = np.where(el_epi == [0, 0, 0], [1, 0, 0], el_epi).astype("float32")
         #### save the result into vtk ####
         start_time = datetime.datetime.now()
-        print('Writinga as LA_with_fiber... ' + str(start_time))
+        logger.info('Writinga as LA_with_fiber... ' + str(start_time))
 
         sheet_epi = np.cross(el_epi, et)
         sheet_epi = np.where(sheet_epi == [0, 0, 0], [1, 0, 0], sheet_epi).astype("float32")
@@ -422,9 +432,9 @@ def la_generate_fiber(model, args, job):
 
         end_time = datetime.datetime.now()
         running_time = end_time - start_time
-        print('Writing as LA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
+        logger.info('Writing as LA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
-        endo = Method.move_surf_along_normals(endo, 0.1 * args.scale,
+        endo = Method.move_surf_along_normals(endo, cfg.bundles.bilayer_normal_offset * args.scale,
                                               1)  # Warning: set -1 if pts normals are pointing outside
         bilayer = Method.generate_bilayer(endo, epi)
 
@@ -435,7 +445,7 @@ def la_generate_fiber(model, args, job):
 
         #### save the result into vtk ####
         start_time = datetime.datetime.now()
-        print('Writinga as LA_with_fiber... ' + str(start_time))
+        logger.info('Writinga as LA_with_fiber... ' + str(start_time))
 
         sheet = np.cross(el, et)
         sheet = np.where(sheet == [0, 0, 0], [1, 0, 0], sheet).astype("float32")
@@ -459,7 +469,7 @@ def la_generate_fiber(model, args, job):
 
         end_time = datetime.datetime.now()
         running_time = end_time - start_time
-        print('Writing as LA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
+        logger.info('Writing as LA_with_fiber... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
 
 def get_normalized_orthogonality(reference_vector, input_vectors):

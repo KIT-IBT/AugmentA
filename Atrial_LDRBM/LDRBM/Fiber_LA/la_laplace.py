@@ -34,6 +34,10 @@ from carputils.carpio import igb
 from carputils import tools
 from Atrial_LDRBM.LDRBM.Fiber_LA.la_calculate_gradient import la_calculate_gradient
 from vtk.numpy_interface import dataset_adapter as dsa
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
 
 
 def la_laplace(args, job, model):
@@ -49,8 +53,8 @@ def la_laplace(args, job, model):
         simid = job.ID + '/Lp_phi'
         cmd += ['-simID', simid,
                 '-meshname', meshdir,
-                '-stimulus[0].vtx_file', surfdir + 'ids_ENDO',
-                '-stimulus[1].vtx_file', surfdir + 'ids_EPI']
+                '-stim[0].elec.vtx_file', surfdir + 'ids_ENDO',
+                '-stim[1].elec.vtx_file', surfdir + 'ids_EPI']
 
         # Run simulation
         job.carp(cmd)
@@ -62,10 +66,10 @@ def la_laplace(args, job, model):
     simid = job.ID + '/Lp_ab'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_LPV',
-            '-stimulus[1].vtx_file', surfdir + 'ids_RPV',
-            '-stimulus[2].vtx_file', surfdir + 'ids_MV',
-            '-stimulus[3].vtx_file', surfdir + 'ids_LAA']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_LPV',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_RPV',
+            '-stim[2].elec.vtx_file', surfdir + 'ids_MV',
+            '-stim[3].elec.vtx_file', surfdir + 'ids_LAA']
 
     # Run simulation
     job.carp(cmd)
@@ -77,8 +81,8 @@ def la_laplace(args, job, model):
     simid = job.ID + '/Lp_v'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_LPV',
-            '-stimulus[1].vtx_file', surfdir + 'ids_RPV']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_LPV',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_RPV']
 
     # Run simulation
     job.carp(cmd)
@@ -90,10 +94,10 @@ def la_laplace(args, job, model):
     simid = job.ID + '/Lp_r'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_LPV',
-            '-stimulus[1].vtx_file', surfdir + 'ids_RPV',
-            '-stimulus[2].vtx_file', surfdir + 'ids_LAA',
-            '-stimulus[3].vtx_file', surfdir + 'ids_MV']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_LPV',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_RPV',
+            '-stim[2].elec.vtx_file', surfdir + 'ids_LAA',
+            '-stim[3].elec.vtx_file', surfdir + 'ids_MV']
 
     # Run simulation
     job.carp(cmd)
@@ -105,9 +109,9 @@ def la_laplace(args, job, model):
     simid = job.ID + '/Lp_r2'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + 'ids_LPV',
-            '-stimulus[1].vtx_file', surfdir + 'ids_RPV',
-            '-stimulus[2].vtx_file', surfdir + 'ids_MV']
+            '-stim[0].elec.vtx_file', surfdir + 'ids_LPV',
+            '-stim[1].elec.vtx_file', surfdir + 'ids_RPV',
+            '-stim[2].elec.vtx_file', surfdir + 'ids_MV']
 
     # Run simulation
     job.carp(cmd)
@@ -132,9 +136,9 @@ def la_laplace(args, job, model):
         try:
             os.makedirs(simid)
         except OSError:
-            print(f"Creation of the directory {simid} failed")
+            logger.info(f"Creation of the directory {simid} failed")
         else:
-            print(f"Successfully created the directory {simid} ")
+            logger.info(f"Successfully created the directory {simid} ")
         if args.mesh_type == "vol":
             vtk_xml_unstructured_grid_writer(simid + "/LA_with_laplace.vtu", meshNew.VTKObject)
         else:
@@ -159,18 +163,18 @@ def laplace_0_1(args, job, model, name1, name2, outname):
     simid = job.ID + '/Lp_ab'
     cmd += ['-simID', simid,
             '-meshname', meshdir,
-            '-stimulus[0].vtx_file', surfdir + f'ids_{name1}',
-            '-stimulus[1].vtx_file', surfdir + f'ids_{name2}']
+            '-stim[0].elec.vtx_file', surfdir + f'ids_{name1}',
+            '-stim[1].elec.vtx_file', surfdir + f'ids_{name2}']
 
     if name1 == "4":
         cmd = tools.carp_cmd(parfdir + '/la_lps_phi_0_1_4.par')
         simid = job.ID + '/Lp_ab'
         cmd += ['-simID', simid,
                 '-meshname', meshdir,
-                '-stimulus[0].vtx_file', surfdir + 'ids_LSPV',
-                '-stimulus[1].vtx_file', surfdir + 'ids_LIPV',
-                '-stimulus[2].vtx_file', surfdir + 'ids_RSPV',
-                '-stimulus[3].vtx_file', surfdir + 'ids_RIPV']
+                '-stim[0].elec.vtx_file', surfdir + 'ids_LSPV',
+                '-stim[1].elec.vtx_file', surfdir + 'ids_LIPV',
+                '-stim[2].elec.vtx_file', surfdir + 'ids_RSPV',
+                '-stim[3].elec.vtx_file', surfdir + 'ids_RIPV']
     # Run simulation
     job.carp(cmd)
 
@@ -184,9 +188,9 @@ def laplace_0_1(args, job, model, name1, name2, outname):
         try:
             os.makedirs(simid)
         except OSError:
-            print(f"Creation of the directory {simid} failed")
+            logger.info(f"Creation of the directory {simid} failed")
         else:
-            print(f"Successfully created the directory {simid} ")
+            logger.info(f"Successfully created the directory {simid} ")
 
         vtk_xml_unstructured_grid_writer(simid + "/LA_with_laplace.vtu", meshNew.VTKObject)
     return meshNew.VTKObject

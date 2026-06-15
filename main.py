@@ -24,14 +24,22 @@ KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.  
 """
+from argparse import Namespace
 
 EXAMPLE_DESCRIPTIVE_NAME = 'AugmentA: Patient-specific Augmented Atrial model Generation Tool'
 EXAMPLE_AUTHOR = 'Luca Azzolin <luca.azzolin@kit.edu>'
 
 import argparse
 import os
+import sys
+
+import logging
+
+from pathlib import Path
 
 from pipeline import AugmentA
+from logging_setup import logger, set_log_file
+from main_config import get_config as get_main_config, change_config_location, save_config
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -124,22 +132,47 @@ def parser():
                         type=int,
                         default=0,
                         help='Save test data to tests/ directories for automated testing (1=yes, 0=no)')
+    parser.add_argument('--config_dir', type=str, default="augmenta_config.yaml", help='path to config file')
 
     return parser
 
 
+def _default_log_path(mesh_path: str) -> str:
+    if mesh_path:
+        p = Path(mesh_path)
+        return str(p.with_suffix("")) + "AugmentA.log"
+    return "AugmentA.log"
+
+
 def main():
     args = parser().parse_args()
+    set_log_file(_default_log_path(args.mesh))
+    change_config_location(args.config_dir)
+    get_main_config()
+    _save_config_for_patient(args)
+
+    console_level = logging.DEBUG if int(getattr(args, "debug", 0)) == 1 else logging.INFO
+    for h in logger.handlers:
+        if isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) is sys.stdout:
+            h.setLevel(console_level)
 
     # In case both atria and closed surface are given process LA first and RA later
     if args.atrium == 'LA_RA' and args.closed_surface:
-        print("Current no support for biatrial volumetric bridge generation. Annotating LA and RA separately")
+        logger.warning("Current no support for biatrial volumetric bridge generation. Annotating LA and RA separately")
         args.atrium = 'LA'
         AugmentA(args)
         args.atrium = 'RA'
         AugmentA(args)
     else:
         AugmentA(args)
+
+
+def _save_config_for_patient(args: Namespace):
+    mesh_dir = os.path.dirname(args.mesh)
+    config_dir = f'{mesh_dir}/_configs'
+    os.makedirs(config_dir, exist_ok=True)
+    patient_config_path = f'{config_dir}/augmenta_config.yaml'
+    save_config(patient_config_path)
 
 
 if __name__ == '__main__':

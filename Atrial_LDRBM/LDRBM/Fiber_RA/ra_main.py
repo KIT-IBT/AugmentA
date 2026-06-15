@@ -41,6 +41,10 @@ from Atrial_LDRBM.LDRBM.Fiber_RA.ra_laplace import ra_laplace
 from vtk_openCARP_methods_ibt.openCARP.exporting import write_to_pts, write_to_elem, write_to_lon
 from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
 from vtk_openCARP_methods_ibt.vtk_methods.reader import smart_reader
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
 
 
 def parser():
@@ -102,19 +106,19 @@ def run(args, job):
     RA = init_mesh_and_fibers(args, "RA")
 
     start_time = datetime.datetime.now()
-    print('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
+    logger.info('[Step 1] Solving laplace-dirichlet... ' + str(start_time))
     if args.laplace:
         output_laplace = ra_laplace(args, job, RA)
     else:
         output_laplace = Method.smart_reader(job.ID + "/gradient/RA_with_lp_res_gradient.vtu")
-        print("Reading Laplace: " + job.ID + "/gradient/RA_with_lp_res_gradient.vtu")
+        logger.info("Reading Laplace: " + job.ID + "/gradient/RA_with_lp_res_gradient.vtu")
 
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
-    print('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    logger.info('[Step 1] Solving laplace-dirichlet...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
 
     start_time = datetime.datetime.now()
-    print('[Step 2] Generating fibers... ' + str(start_time))
+    logger.info('[Step 2] Generating fibers... ' + str(start_time))
 
     if args.just_bridges:
         la_epi = Method.smart_reader(job.ID + "/result_LA/LA_epi_with_fiber.vtu")
@@ -135,7 +139,7 @@ def run(args, job):
 
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
-    print('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
+    logger.info('[Step 2] Generating fibers...done! ' + str(end_time) + '\nRunning time: ' + str(running_time) + '\n')
 
 
 if __name__ == '__main__':

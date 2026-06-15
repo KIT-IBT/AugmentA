@@ -54,6 +54,10 @@ pv.set_plot_theme('dark')
 
 sys.path.append('./Atrial_LDRBM/Generate_Boundaries')
 from Atrial_LDRBM.Generate_Boundaries.extract_rings import label_atrial_orifices
+try:
+    from augmentaupgrade.logging_setup import logger, set_log_file
+except ImportError:
+    from logging_setup import logger, set_log_file
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
@@ -154,7 +158,7 @@ def open_orifices_with_curvature(meshpath,
         valve = vtk_thr(model, 0, "POINTS", "valve", 0.5)
         if valve.GetPoints() is None or valve.GetNumberOfPoints() == 0:
             # do manually orifice opening when automatically does not find valves
-            warnings.warn("No points for valve found. Should default to manual assignment")
+            logger.warning("No points for valve found. Falling back to manual assignment")
             return open_orifices_manually(meshpath, atrium, MRI, scale, size, min_cutting_radius, max_cutting_radius,
                                           LAA, RAA,
                                           debug)
@@ -165,7 +169,7 @@ def open_orifices_with_curvature(meshpath,
         max_dist = get_maximum_distance_of_points(valve, valve_center)
 
         if max_dist > max_cutting_radius * 2:
-            print(f"Valve bigger than {max_cutting_radius * 2} cm")
+            logger.info(f"Valve bigger than {max_cutting_radius * 2} cm")
 
         model = cut_mesh_with_radius(model, valve_center, max_cutting_radius)
 
@@ -224,7 +228,7 @@ def open_orifices_with_curvature(meshpath,
     if MRI:
         if apex_coordinate is not None:
             apex = apex_coordinate
-            print(f"Using provided apex coordinate: {apex}")
+            logger.info(f"Using provided apex coordinate: {apex}")
         else:
             cc = pv.PolyData(valve_center)
             apex = pick_point_with_preselection(meshfix.mesh, "appendage apex", cc)

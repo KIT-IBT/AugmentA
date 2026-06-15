@@ -33,12 +33,6 @@ import numpy as np
 import pandas as pd
 import vtk
 from scipy.spatial import cKDTree
-from vtk.numpy_interface import dataset_adapter as dsa
-
-import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
-from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
-from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import get_normalized_orthogonality
-from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
 from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import normalize_vectors
 from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
@@ -48,12 +42,98 @@ from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, 
     get_cells_with_ids, apply_extract_cell_filter, get_elements_above_plane
 from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
 from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane
+from vtkmodules.numpy_interface import dataset_adapter as dsa
+
+import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import get_normalized_orthogonality
+from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 from Atrial_LDRBM.LDRBM.Fiber_RA.create_bridges import add_free_bridge
+from main_config import get_config
+
+try:
+    from augmentaupgrade.logging_setup import logger
+except ImportError:
+    from logging_setup import logger
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
+
+
+def _load_vtx_ids(vtx_path: str) -> np.ndarray:
+    ids_ = np.loadtxt(vtx_path, skiprows=2, dtype=int)
+    ids_ = np.atleast_1d(ids_).astype(int)
+    if ids_.size == 0:
+        raise ValueError(f"Empty vtx id list: {vtx_path}")
+    return ids_
+
+
+def _compute_cell_centers(model) -> np.ndarray:
+    cc = vtk.vtkCellCenters()
+    cc.SetInputData(model)
+    cc.Update()
+    return vtk_to_numpy(cc.GetOutput().GetPoints().GetData())
+
+
+def _ring_centroid_from_vtx(model, vtx_path: str) -> np.ndarray:
+    ring_ids = _load_vtx_ids(vtx_path)
+    pts = vtk_to_numpy(model.GetPoints().GetData())
+    ring_pts = pts[ring_ids, :]
+    c = ring_pts.mean(axis=0)
+    c = np.asarray(c, dtype=float).reshape(-1)
+    if c.size != 3:
+        raise ValueError(f"Ring centroid is not 3D: shape={c.shape}, centroid={c}")
+    return c
+
+
+def compute_tao_raa(model, CT_band, mesh_base: str, alpha_raa: float = 0.30):
+    # robust CT reference
+    v2_ct = float(np.median(vtk_to_numpy(CT_band.GetCellData().GetArray("phie_v2"))))
+
+    # full v2 + cell centers
+    v2_full = vtk_to_numpy(model.GetCellData().GetArray("phie_v2"))
+    cell_centers = _compute_cell_centers(model)
+
+    # RAA ring centroid -> closest cell
+    raa_pt = _ring_centroid_from_vtx(model, f"{mesh_base}_surf/ids_RAA.vtx")
+    apex_cell_id = int(cKDTree(cell_centers).query(raa_pt)[1])
+    v2_apex = float(v2_full[apex_cell_id])
+
+    tao_raa = float(v2_ct + alpha_raa * (v2_apex - v2_ct))
+    apex_pt = np.asarray(cell_centers[apex_cell_id], dtype=float).reshape(3, )
+    return tao_raa, apex_cell_id, apex_pt, cell_centers
+
+
+def extract_raa_region(no_TV_s, model, tao_raa: float, apex_cell_id: int, apex_pt: np.ndarray):
+    # two candidates
+    RAA_s0 = vtk_thr(no_TV_s, 0, "CELLS", "phie_v2", tao_raa)
+    RAA_s1 = vtk_thr(no_TV_s, 1, "CELLS", "phie_v2", tao_raa)
+
+    n0, n1 = RAA_s0.GetNumberOfCells(), RAA_s1.GetNumberOfCells()
+    if n0 == 0 and n1 == 0:
+        raise ValueError("Both RAA candidates are empty. tao_RAA likely wrong or phie_v2 broken.")
+    if n0 == 0:
+        chosen = RAA_s1
+    elif n1 == 0:
+        chosen = RAA_s0
+    else:
+        # choose side containing apex cell (Global_ids is stable)
+        global_ids_full = vtk_to_numpy(model.GetCellData().GetArray("Global_ids"))
+        apex_gid = int(global_ids_full[apex_cell_id])
+
+        ids0 = vtk_to_numpy(RAA_s0.GetCellData().GetArray("Global_ids")) if RAA_s0.GetNumberOfCells() else np.array([],
+                                                                                                                    int)
+        chosen = RAA_s0 if apex_gid in set(ids0.tolist()) else RAA_s1
+
+    # keep only connected component closest to apex (kills overcover/islands)
+    conn = vtk.vtkConnectivityFilter()
+    conn.SetInputData(chosen)
+    conn.SetExtractionModeToClosestPointRegion()
+    conn.SetClosestPoint(float(apex_pt[0]), float(apex_pt[1]), float(apex_pt[2]))
+    conn.Update()
+    return conn.GetOutput()
 
 
 def ra_generate_fiber(model, args, job):
@@ -61,27 +141,21 @@ def ra_generate_fiber(model, args, job):
     try:
         os.makedirs(simid)
     except OSError:
-        print(f"Creation of the directory {simid} failed")
+        logger.info(f"Creation of the directory {simid} failed")
     else:
-        print(f"Successfully created the directory {simid} ")
+        logger.info(f"Successfully created the directory {simid} ")
 
     simid = job.ID + "/bridges"
     try:
         os.makedirs(simid)
     except OSError:
-        print(f"Creation of the directory {simid} failed")
+        logger.info(f"Creation of the directory {simid} failed")
     else:
-        print(f"Successfully created the directory {simid} ")
+        logger.info(f"Successfully created the directory {simid} ")
 
-    # Riunet
-    tao_tv = 0.9
-    tao_icv = 0.95  # 0.05 # dk01 biatrial fit_both
-    tao_scv = 0.10
-    tao_ct_plus = -0.10
-    tao_ct_minus = -0.13
-    tao_ib = -0.06
-    tao_ras = 0.13
-    tao_raw = 0.55
+    cfg_all = get_config()
+    cfg = cfg_all.ra
+
     with open(os.path.join(EXAMPLE_DIR, '../../element_tag.csv')) as f:
         tag_dict = {}
         reader = csv.DictReader(f)
@@ -94,24 +168,15 @@ def ra_generate_fiber(model, args, job):
     crista_terminalis = int(tag_dict['crista_terminalis'])
     inter_caval_bundle_epi = int(tag_dict['inter_caval_bundle_epi'])
     right_atrial_lateral_wall_epi = int(tag_dict['right_atrial_wall_epi'])
-    isthmus_epi = int(tag_dict['isthmus_epi'])
     right_atrial_septum_epi = int(tag_dict['right_atrial_septum_epi'])
     pectinate_muscle = int(tag_dict['pectinate_muscle'])
     right_atrial_appendage_epi = int(tag_dict['right_atrial_appendage_epi'])
 
     # load endo tags
-    tricuspid_valve_endo = int(tag_dict['tricuspid_valve_endo'])
-    superior_vena_cava_endo = int(tag_dict['superior_vena_cava_endo'])
-    inferior_vena_cava_endo = int(tag_dict['inferior_vena_cava_endo'])
-    inter_caval_bundle_endo = int(tag_dict['inter_caval_bundle_endo'])
-    right_atrial_lateral_wall_endo = int(tag_dict['right_atrial_wall_endo'])
-    isthmus_endo = int(tag_dict['isthmus_endo'])
-    right_atrial_septum_endo = int(tag_dict['right_atrial_septum_endo'])
     coronary_sinus = int(tag_dict['coronary_sinus'])
 
     # load bridges tag
     bachmann_bundel_right = int(tag_dict['bachmann_bundel_right'])
-    bachmann_bundel_internal = int(tag_dict['bachmann_bundel_internal'])
 
     # load left atrial wall epi
     left_atrial_wall_epi = int(tag_dict['left_atrial_wall_epi'])
@@ -120,19 +185,19 @@ def ra_generate_fiber(model, args, job):
     sinus_node = int(tag_dict['sinus_node'])
 
     # number of pectinate muscles
-    pm_num = 15
+    pm_num = cfg.pm.pm_num
 
     # size(Radius) of crista terminalis in mm
-    w_ct = 4.62 * args.scale
+    w_ct = cfg.bundles.w_ct * args.scale
 
     # size(Radius) of pectinate muscle in mm
-    w_pm = 0.66 * args.scale
+    w_pm = cfg.bundles.w_pm * args.scale
 
     # size(Radius) of Bachmann Bundle in mm
-    w_bb = 2 * args.scale
+    w_bb = cfg.bundles.w_bb * args.scale
 
     # radius sinus node
-    r_SN = 2.5 * args.scale
+    r_SN = cfg.bundles.r_sn * args.scale
 
     # ab
     ab = model.GetCellData().GetArray('phie_ab')
@@ -141,32 +206,23 @@ def ra_generate_fiber(model, args, job):
     ab_grad = vtk_to_numpy(ab_grad)
 
     # v
-    v = model.GetCellData().GetArray('phie_v')
     v_grad = model.GetCellData().GetArray('grad_v')
-    v = vtk_to_numpy(v)
     v_grad = vtk_to_numpy(v_grad)
 
     # r
-    r = model.GetCellData().GetArray('phie_r')
     r_grad = model.GetCellData().GetArray('grad_r')
-    r = vtk_to_numpy(r)
     r_grad = vtk_to_numpy(r_grad)
 
     # w
-    w = model.GetCellData().GetArray('phie_w')
     w_grad = model.GetCellData().GetArray('grad_w')
-    w = vtk_to_numpy(w)
     w_grad = vtk_to_numpy(w_grad)
 
     # phie
-    if args.mesh_type == "vol":
-        phie = model.GetCellData().GetArray('phie_phi')
-        phie = vtk_to_numpy(phie)
     phie_grad = model.GetCellData().GetArray('grad_phi')
     phie_grad = vtk_to_numpy(phie_grad)
 
     start_time = datetime.datetime.now()
-    print('Calculating fibers... ' + str(start_time))
+    logger.info('Calculating fibers... ' + str(start_time))
 
     model = generate_ids(model, "Global_ids", "Global_ids")
 
@@ -186,7 +242,7 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.create_pts(rings_pts, 'TV_ring', f'{args.mesh}_surf/')
 
-    TV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
+    TV_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, cfg.bundles.tv_ring_radius * args.scale)
 
     TV_s = get_cells_with_ids(model, TV_ids)
 
@@ -201,23 +257,22 @@ def ra_generate_fiber(model, args, job):
         Method.writer_vtk(TV_s, f'{args.mesh}_surf/' + "tv_s.vtk")
         Method.writer_vtk(no_TV_s, f'{args.mesh}_surf/' + "no_tv_s.vtk")
 
-    # del ra_TV, ra_diff, ra_no_TV
-
     tag[TV_ids] = tricuspid_valve_epi
 
     k[TV_ids] = r_grad[TV_ids]
 
-    IVC_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v", tao_icv)  # Changed 0-1 because ICV and SVC are inverted
-    no_IVC_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_v", tao_icv)  # Changed 1-0
+    IVC_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v",
+                    cfg.thresholds.tao_icv)  # Changed 0-1 because ICV and SVC are inverted
+    no_IVC_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_v", cfg.thresholds.tao_icv)  # Changed 1-0
 
     IVC_s = extract_largest_region(IVC_s)  # Added
 
-    max_phie_r_ivc = np.max(vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r'))) + 0.2
+    max_phie_r_ivc = np.max(vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_r'))) + cfg.thresholds.ivc_phie_r_offset
 
     RAW_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_r", max_phie_r_ivc)  # Added +0.03 fro dk01
 
-    SVC_s = vtk_thr(RAW_s, 1, "CELLS", "phie_v", tao_scv)  # Changed 1->0
-    no_SVC_s = vtk_thr(RAW_s, 0, "CELLS", "phie_v", tao_scv)  # Changed 0->1
+    SVC_s = vtk_thr(RAW_s, 1, "CELLS", "phie_v", cfg.thresholds.tao_scv)  # Changed 1->0
+    no_SVC_s = vtk_thr(RAW_s, 0, "CELLS", "phie_v", cfg.thresholds.tao_scv)  # Changed 0->1
 
     SVC_s = extract_largest_region(SVC_s)
 
@@ -231,8 +286,6 @@ def ra_generate_fiber(model, args, job):
     tao_ct_plus = np.min(vtk_to_numpy(SVC_s.GetCellData().GetArray('phie_w')))
 
     SVC_CT_pt = SVC_s.GetPoint(np.argmin(vtk_to_numpy(SVC_s.GetPointData().GetArray('phie_w'))))
-
-    tao_ct_minus = np.min(vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_w')))
 
     IVC_CT_pt = IVC_s.GetPoint(np.argmin(vtk_to_numpy(IVC_s.GetPointData().GetArray('phie_w'))))
 
@@ -269,7 +322,7 @@ def ra_generate_fiber(model, args, job):
 
     tree = cKDTree(centroids_array)
 
-    ii = tree.query_ball_point(CT_ub_pts, r=7 * args.scale)  # , n_jobs=-1)
+    ii = tree.query_ball_point(CT_ub_pts, r=cfg.bundles.ct_band_query_radius * args.scale)
 
     ii = set([item for sublist in ii for item in sublist])
 
@@ -280,7 +333,13 @@ def ra_generate_fiber(model, args, job):
 
     CT_band_ids = vtk_to_numpy(CT_band.GetCellData().GetArray('Global_ids'))
 
-    tao_RAA = np.max(vtk_to_numpy(CT_band.GetCellData().GetArray('phie_v2')))
+    alpha_RAA = cfg.thresholds.alpha_RAA
+    tao_RAA, apex_cell_id, apex_pt, cell_centers = compute_tao_raa(
+        model=model,
+        CT_band=CT_band,
+        mesh_base=args.mesh,
+        alpha_raa=alpha_RAA
+    )
 
     IVC_CT_pt_id = find_closest_point(CT_band, np.array(IVC_CT_pt))
 
@@ -313,8 +372,8 @@ def ra_generate_fiber(model, args, job):
 
     CT_plus = vtk_thr(RAW_s, 0, "CELLS", "phie_w", tao_ct_plus)
 
-    RAW_S = vtk_thr(CT_plus, 2, "CELLS", "phie_v", tao_scv,
-                    tao_icv)  # IB_S grad_v Changed order tao_scv, tao_icv
+    RAW_S = vtk_thr(CT_plus, 2, "CELLS", "phie_v", cfg.thresholds.tao_scv,
+                    cfg.thresholds.tao_icv)  # IB_S grad_v Changed order tao_scv, tao_icv
 
     RAW_S_ids = vtk_to_numpy(RAW_S.GetCellData().GetArray('Global_ids'))
 
@@ -396,31 +455,44 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.writer_vtk(septal_surf, f'{args.mesh}_surf/' + "septal_surf_2.vtk")
 
-    CS_ids = vtk_to_numpy(septal_surf.GetCellData().GetArray('Global_ids'))
-
     # if len(CS_ids) == 0:
     ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_CS.vtx', skiprows=2, dtype=int)
 
     rings_pts = vtk_to_numpy(model.GetPoints().GetData())[ring_ids, :]
 
-    CS_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, 4 * args.scale)
+    CS_ids = Method.get_element_ids_around_path_within_radius(model, rings_pts, cfg.bundles.cs_ring_radius * args.scale)
 
     tag[CS_ids] = coronary_sinus
     k[CS_ids] = ab_grad[CS_ids]
 
     # tag = Method.assign_ra_appendage(model, SVC_s, np.array(df["RAA"]), tag, right_atrial_appendage_epi)
-    RAA_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v2", tao_RAA)
+    # RAA segmentation is based on the Laplace field "phie_v2" and a threshold tao_RAA
+
+    # Build two candidate regions and then pick the correct one using the known RAA apex.
+
+    # Candidate 0: keep cells with phie_v2 BELOW the threshold
+    RAA_s = extract_raa_region(
+        no_TV_s=no_TV_s,
+        model=model,
+        tao_raa=tao_RAA,
+        apex_cell_id=apex_cell_id,
+        apex_pt=apex_pt
+    )
 
     if args.debug:
         Method.writer_vtk(RAS_low, f'{args.mesh}_surf/' + "ras_low.vtk")
-        Method.writer_vtk(RAA_s, f'{args.mesh}_surf/' + "raa_s.vtk")  # Check here if RAA is correctly tagged
+        Method.writer_vtk(RAA_s, f'{args.mesh}_surf/' + "raa_s_030.vtk")  # Check here if RAA is correctly tagged
         Method.writer_vtk(RAW_low, f'{args.mesh}_surf/' + "raw_low.vtk")
 
     RAA_ids = vtk_to_numpy(RAA_s.GetCellData().GetArray('Global_ids'))
+    raa_pm_anchor = np.asarray(apex_pt, dtype=float).reshape(3, )
+
+    if args.debug:
+        Method.create_pts(np.asarray([raa_pm_anchor]), 'raa_pm_anchor', f'{args.mesh}_surf/')
 
     tag[RAA_ids] = right_atrial_appendage_epi
 
-    RAA_CT_pt = CT_band.GetPoint(find_closest_point(CT_band, np.array(df["RAA"])))
+    RAA_CT_pt = CT_band.GetPoint(find_closest_point(CT_band, raa_pm_anchor))
 
     CT = CT_band
 
@@ -452,21 +524,21 @@ def ra_generate_fiber(model, args, job):
 
     tag[SN_ids] = sinus_node
 
-    print('Bundles selection...done')
+    logger.info('Bundles selection...done')
     phie_grad_norm = normalize_vectors(phie_grad)
 
     ##### Local coordinate system #####
     # et
     et = phie_grad_norm
-    print('############### et ###############')
+    logger.info('############### et ###############')
     # print(et)
 
     # k
     # k = ab_grad
-    print('############### k ###############')
+    logger.info('############### k ###############')
 
     en = get_normalized_orthogonality(et, k)
-    print('############### en ###############')
+    logger.info('############### en ###############')
     # el
     el = np.cross(en, et)
 
@@ -474,11 +546,11 @@ def ra_generate_fiber(model, args, job):
 
     el = np.where(el == [0, 0, 0], [1, 0, 0], el).astype("float32")
 
-    print('############### el ###############')
+    logger.info('############### el ###############')
     # print(el)
     end_time = datetime.datetime.now()
     running_time = end_time - start_time
-    print('Calculating epicardial fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
+    logger.info('Calculating epicardial fibers... done! ' + str(end_time) + '\nIt takes: ' + str(running_time) + '\n')
 
     if args.mesh_type == "bilayer":
         sheet = np.cross(el, et)
@@ -527,7 +599,6 @@ def ra_generate_fiber(model, args, job):
             meshNew.CellData.append(tag, "elemTag")
             meshNew.CellData.append(el, "fiber")
 
-            writer = vtk.vtkUnstructuredGridWriter()
             if args.ofmt == 'vtk':
                 vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtk", meshNew.VTKObject,
                                              store_binary=True)
@@ -537,10 +608,6 @@ def ra_generate_fiber(model, args, job):
 
     point1_id = find_closest_point(CT, IVC_max_r_CT_pt)
     point2_id = find_closest_point(CT, SVC_CT_pt)
-
-    point3_id = find_closest_point(TV_s, IVC_max_r_CT_pt)
-    RAA_on_tv_s = find_closest_point(TV_s,
-                                     np.array(df["RAA"]))  # this is also the id for Bachmann-Bundle on the right atrium
 
     CT = apply_vtk_geom_filter(CT)
 
@@ -569,17 +636,29 @@ def ra_generate_fiber(model, args, job):
     if args.debug:
         Method.create_pts(ct_points_data, 'ct_points_data', f'{args.mesh}_surf/')
 
-    point3_id = find_closest_point(TV_lat, TV_s.GetPoint(point3_id))
+    tv_lat_pts = vtk_to_numpy(TV_lat.GetPoints().GetData())
+    tv_lat_center = tv_lat_pts.mean(axis=0)
+    dists_from_center = np.linalg.norm(tv_lat_pts - tv_lat_center, axis=1)
+    anchor_a = int(np.argmax(dists_from_center))
+    dists_from_a = np.linalg.norm(tv_lat_pts - tv_lat_pts[anchor_a], axis=1)
+    anchor_b = int(np.argmax(dists_from_a))
 
-    # this is also the id for Bachmann-Bundle on the right atrium
-    RAA_on_tv_lat = find_closest_point(TV_lat, TV_s.GetPoint(RAA_on_tv_s))
-
+    # Ensure TV anchors match CT path direction
+    ct_start = ct_points_data[0]  # IVC end of CT
+    dist_a_to_start = np.linalg.norm(tv_lat_pts[anchor_a] - ct_start)
+    dist_b_to_start = np.linalg.norm(tv_lat_pts[anchor_b] - ct_start)
+    if dist_a_to_start <= dist_b_to_start:
+        point3_id = anchor_a
+        RAA_on_tv_lat = anchor_b
+    else:
+        point3_id = anchor_b
+        RAA_on_tv_lat = anchor_a
     tv_points_data = Method.dijkstra_path(TV_lat, point3_id, RAA_on_tv_lat)
 
     if args.debug:
         Method.create_pts(tv_points_data, 'tv_points_data', f'{args.mesh}_surf/')
 
-    print("Creating Pectinate muscle...")
+    logger.info("Creating Pectinate muscle...")
 
     if args.mesh_type == "vol":
 
@@ -618,7 +697,7 @@ def ra_generate_fiber(model, args, job):
     pm_tv_dis = int(len(tv_points_data) / pm_num)
 
     # Pectinate muscle
-    print("Creating Pectinate muscle 1")
+    logger.info("Creating Pectinate muscle 1")
     # the first PM is the one to the appendage
     # pm = Method.dijkstra_path(surface, pm_ct_id_list[-1], point_apx_id)
 
@@ -627,14 +706,13 @@ def ra_generate_fiber(model, args, job):
     # Pectinate muscle going from the septum spurius to the RAA apex
     pm = Method.dijkstra_path(surface, RAA_CT_id, point_apx_id)
 
-    pm = Method.downsample_path(pm, int(len(pm) * 0.1))
+    pm = Method.downsample_path(pm, int(len(pm) * cfg.pm.pm1_downsample_fraction))
     if args.debug:
         Method.create_pts(pm, 'pm_0_downsampled', f'{args.mesh}_surf/')
 
     if args.mesh_type == "bilayer":
 
-        tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-        fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
+        logger.info("PM0 generated but not assigned as pectinate muscle.")
 
     elif args.mesh_type == "vol":
 
@@ -645,34 +723,38 @@ def ra_generate_fiber(model, args, job):
 
         tree = cKDTree(centroids_array)
 
-        ii = tree.query_ball_point(pm, r=w_pm, workers=-1)
+        logger.info("PM0 generated but not assigned as pectinate muscle.")
 
-        ii = list(set([item for sublist in ii for item in sublist]))
-
-        tag[ii] = pectinate_muscle
-
-        el = Method.assign_element_fiber_around_path_within_radius(model, pm, w_pm, el, smooth=False)
-
-    for i in range(3, pm_num - 1):  # skip the first 3 pm as they will be in the IVC side
+    for i in range(cfg.pm.pm_skip_first,
+                   pm_num - cfg.pm.pm_skip_last):  # skip the first 3 pm as they will be in the IVC side
         pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
         pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
         pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
 
-        # skip first 3% of the points since they will be on the roof of the RA
-        pm = pm[int(len(pm) * 0.03):, :]  #
+        # skip first 3% of the points since they will be on the roof of the RAT
+        # his does not solve the anatomical PM placement itself,
+        # it only prevents unstable behavior when a clipped PM path is too short.
+        # Guard against very short PM paths
 
-        pm = Method.downsample_path(pm, int(len(pm) * 0.065))
+        pm = pm[int(len(pm) * cfg.pm.pm_trim_fraction):, :]
+        step = max(1, int(len(pm) * cfg.pm.pm_downsample_fraction))
+        if len(pm) >= cfg.pm.pm_min_path_length:
+            pm = Method.downsample_path(pm, step)
+        else:
+            logger.warning(f"PM {i + 1} path too short ({len(pm)} pts), skipping")
+            continue
 
         if args.debug:
             Method.create_pts(pm, 'pm_' + str(i + 1) + '_downsampled', f'{args.mesh}_surf/')
 
-        print("The ", i + 1, "th pm done")
+        logger.info(f"The {i + 1}th pm done")
         if args.mesh_type == "bilayer":
 
             tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-            print("The ", i + 1, "th pm's tag is done")
+            logger.info(f"The {i + 1}th pm's tag is done")
             fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
-            print("The ", i + 1, "th pm's fiber is done")
+            logger.info("The %sth pm's fiber is done", i + 1)
+
 
         elif args.mesh_type == "vol":
 
@@ -686,13 +768,13 @@ def ra_generate_fiber(model, args, job):
 
     if args.mesh_type == "bilayer":
 
-        print("Creating Pectinate muscle... done!")
+        logger.info("Creating Pectinate muscle... done!")
 
         # Crista Terminalis
-        print("Creating Crista Terminalis...")
+        logger.info("Creating Crista Terminalis...")
         tag_endo[CT_ids] = tag[CT_ids]
         fiber_endo[CT_ids] = el[CT_ids]
-        print("Creating Crista Terminalis... done!")
+        logger.info("Creating Crista Terminalis... done!")
 
         """
         overwrite the pm on the TV
@@ -736,13 +818,13 @@ def ra_generate_fiber(model, args, job):
 
     elif args.mesh_type == "vol":
 
-        print("Creating Pectinate muscle... done!")
+        logger.info("Creating Pectinate muscle... done!")
 
         # Crista Terminalis
-        print("Creating Crista Terminalis...")
+        logger.info("Creating Crista Terminalis...")
         tag[CT_ids] = tag_old[CT_ids]
         el[CT_ids] = el_old[CT_ids]
-        print("Creating Crista Terminalis... done!")
+        logger.info("Creating Crista Terminalis... done!")
 
         """
         overwrite the pm on the TV
@@ -769,7 +851,6 @@ def ra_generate_fiber(model, args, job):
             meshNew.CellData.append(el, "fiber")
             meshNew.CellData.append(sheet, "sheet")
 
-            writer = vtk.vtkUnstructuredGridWriter()
             if args.ofmt == 'vtk':
                 vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_endo_with_fiber.vtk", meshNew.VTKObject,
                                              store_binary=True)
@@ -795,7 +876,7 @@ def ra_generate_fiber(model, args, job):
 
     np.savetxt(job.ID + '/bb.txt', bachmann_bundle_points_data, fmt='%.5f')  # Change directory
 
-    bb_step = int(len(bachmann_bundle_points_data) * 0.1)
+    bb_step = int(len(bachmann_bundle_points_data) * cfg.bb.bb_downsample_fraction)
     bb_points = downsample_path(bachmann_bundle_points_data, bb_step)
 
     tag = Method.assign_element_tag_around_path_within_radius(model, bb_points, w_bb, tag, bachmann_bundel_right)
@@ -853,7 +934,7 @@ def ra_generate_fiber(model, args, job):
 
         la_appendage_basis_point = np.asarray(df["LAA_basis_inf"])
         length = len(bachmann_bundle_points_data)
-        ra_bb_center = bachmann_bundle_points_data[int(length * 0.45)]
+        ra_bb_center = bachmann_bundle_points_data[int(length * cfg.bb.bb_center_fraction)]
 
         la_epi = apply_vtk_geom_filter(la_epi)
 
@@ -872,7 +953,7 @@ def ra_generate_fiber(model, args, job):
         path_2 = Method.dijkstra_path(la_epi, la_c_id, la_d_id)
         path_all_temp = np.vstack((path_1, path_2))
         # down sampling to smooth the path
-        step = 20
+        step = cfg.bb.bb_step
         # step = int(len(path_all_temp)*0.1)
         path_all = np.asarray(
             [path_all_temp[i] for i in range(len(path_all_temp)) if i % step == 0 or i == len(path_all_temp) - 1])
@@ -886,8 +967,8 @@ def ra_generate_fiber(model, args, job):
         # BB tube
 
         bb_tube = Method.creat_tube_around_spline(path_all, 2 * args.scale)
-        sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * 1.02 * args.scale)
-        sphere_b = Method.creat_sphere(ra_bb_center, 2 * 1.02 * args.scale)
+        sphere_a = Method.creat_sphere(la_appendage_basis_point, 2 * cfg.bundles.bb_sphere_factor * args.scale)
+        sphere_b = Method.creat_sphere(ra_bb_center, 2 * cfg.bundles.bb_sphere_factor * args.scale)
         Method.smart_bridge_writer(bb_tube, sphere_a, sphere_b, "BB_intern_bridges", job)
 
         df = pd.read_csv(args.mesh + "_surf/rings_centroids.csv")
@@ -896,7 +977,7 @@ def ra_generate_fiber(model, args, job):
             CS_p = np.array(df["CS"])
         except KeyError:
             CS_p = IVC_SEPT_CT_pt
-            print("No CS found, use last CT point instead")
+            logger.info("No CS found, use last CT point instead")
 
         if args.mesh_type == "bilayer":
             add_free_bridge(args, la_epi, model, CS_p, df, job)
