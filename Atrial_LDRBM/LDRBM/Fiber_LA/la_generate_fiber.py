@@ -63,15 +63,6 @@ def la_generate_fiber(model, args, job):
     cfg_all = get_config()
     cfg = cfg_all.la
 
-    config_dir = f'{args.mesh}_configs'
-    os.makedirs(config_dir, exist_ok=True)
-    patient_config_path = f'{config_dir}/augmenta_config.yaml'
-    if not os.path.exists(patient_config_path):
-        save_config(patient_config_path)
-    else:
-        change_config_location(patient_config_path)
-        load_config()
-        cfg = get_config().la
     # size(Radius) of Bachmann Bundle in mm
     w_bb = cfg.bundles.w_bb * args.scale
 

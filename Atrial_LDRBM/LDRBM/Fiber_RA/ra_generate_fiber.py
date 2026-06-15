@@ -61,6 +61,7 @@ except ImportError:
 
 vtk_version = vtk.vtkVersion.GetVTKSourceVersion().split()[-1].split('.')[0]
 
+
 def _load_vtx_ids(vtx_path: str) -> np.ndarray:
     ids_ = np.loadtxt(vtx_path, skiprows=2, dtype=int)
     ids_ = np.atleast_1d(ids_).astype(int)
@@ -68,11 +69,13 @@ def _load_vtx_ids(vtx_path: str) -> np.ndarray:
         raise ValueError(f"Empty vtx id list: {vtx_path}")
     return ids_
 
+
 def _compute_cell_centers(model) -> np.ndarray:
     cc = vtk.vtkCellCenters()
     cc.SetInputData(model)
     cc.Update()
     return vtk_to_numpy(cc.GetOutput().GetPoints().GetData())
+
 
 def _ring_centroid_from_vtx(model, vtx_path: str) -> np.ndarray:
     ring_ids = _load_vtx_ids(vtx_path)
@@ -83,6 +86,7 @@ def _ring_centroid_from_vtx(model, vtx_path: str) -> np.ndarray:
     if c.size != 3:
         raise ValueError(f"Ring centroid is not 3D: shape={c.shape}, centroid={c}")
     return c
+
 
 def compute_tao_raa(model, CT_band, mesh_base: str, alpha_raa: float = 0.30):
     # robust CT reference
@@ -98,8 +102,9 @@ def compute_tao_raa(model, CT_band, mesh_base: str, alpha_raa: float = 0.30):
     v2_apex = float(v2_full[apex_cell_id])
 
     tao_raa = float(v2_ct + alpha_raa * (v2_apex - v2_ct))
-    apex_pt = np.asarray(cell_centers[apex_cell_id], dtype=float).reshape(3,)
+    apex_pt = np.asarray(cell_centers[apex_cell_id], dtype=float).reshape(3, )
     return tao_raa, apex_cell_id, apex_pt, cell_centers
+
 
 def extract_raa_region(no_TV_s, model, tao_raa: float, apex_cell_id: int, apex_pt: np.ndarray):
     # two candidates
@@ -118,8 +123,10 @@ def extract_raa_region(no_TV_s, model, tao_raa: float, apex_cell_id: int, apex_p
         global_ids_full = vtk_to_numpy(model.GetCellData().GetArray("Global_ids"))
         apex_gid = int(global_ids_full[apex_cell_id])
 
-        ids0 = vtk_to_numpy(RAA_s0.GetCellData().GetArray("Global_ids")) if RAA_s0.GetNumberOfCells() else np.array([], int)
-        ids1 = vtk_to_numpy(RAA_s1.GetCellData().GetArray("Global_ids")) if RAA_s1.GetNumberOfCells() else np.array([], int)
+        ids0 = vtk_to_numpy(RAA_s0.GetCellData().GetArray("Global_ids")) if RAA_s0.GetNumberOfCells() else np.array([],
+                                                                                                                    int)
+        ids1 = vtk_to_numpy(RAA_s1.GetCellData().GetArray("Global_ids")) if RAA_s1.GetNumberOfCells() else np.array([],
+                                                                                                                    int)
         chosen = RAA_s0 if apex_gid in set(ids0.tolist()) else RAA_s1
 
     # keep only connected component closest to apex (kills overcover/islands)
@@ -129,6 +136,8 @@ def extract_raa_region(no_TV_s, model, tao_raa: float, apex_cell_id: int, apex_p
     conn.SetClosestPoint(float(apex_pt[0]), float(apex_pt[1]), float(apex_pt[2]))
     conn.Update()
     return conn.GetOutput()
+
+
 def ra_generate_fiber(model, args, job):
     simid = job.ID + "/result_RA"
     try:
@@ -149,27 +158,8 @@ def ra_generate_fiber(model, args, job):
     cfg_all = get_config()
     cfg = cfg_all.ra
 
-    config_dir = f'{args.mesh}_configs'
-    os.makedirs(config_dir, exist_ok=True)
-    patient_config_path = f'{config_dir}/augmenta_config.yaml'
-    if not os.path.exists(patient_config_path):
-        save_config(patient_config_path)
-    else:
-        change_config_location(patient_config_path)
-        load_config()
-        cfg = get_config().ra
-
-
-    # Riunet
-    tao_tv = cfg.thresholds.tao_tv
     tao_icv = cfg.thresholds.tao_icv
     tao_scv = cfg.thresholds.tao_scv
-    tao_ct_plus = cfg.thresholds.tao_ct_plus
-    tao_ct_minus = cfg.thresholds.tao_ct_minus
-    tao_ib = cfg.thresholds.tao_ib
-    tao_ras = cfg.thresholds.tao_ras
-    tao_raw = cfg.thresholds.tao_raw
-
 
     with open(os.path.join(EXAMPLE_DIR, '../../element_tag.csv')) as f:
         tag_dict = {}
@@ -767,7 +757,8 @@ def ra_generate_fiber(model, args, job):
 
         logger.info("PM0 generated but not assigned as pectinate muscle.")
 
-    for i in range(cfg.pm.pm_skip_first, pm_num - cfg.pm.pm_skip_last):  # skip the first 3 pm as they will be in the IVC side
+    for i in range(cfg.pm.pm_skip_first,
+                   pm_num - cfg.pm.pm_skip_last):  # skip the first 3 pm as they will be in the IVC side
         pm_point_1 = pm_ct_id_list[(i + 1) * pm_ct_dis]
         pm_point_2 = pm_tv_id_list[(i + 1) * pm_tv_dis]
         pm = Method.dijkstra_path_on_a_plane(surface, args, pm_point_1, pm_point_2, center)
@@ -788,11 +779,11 @@ def ra_generate_fiber(model, args, job):
         if args.debug:
             Method.create_pts(pm, 'pm_' + str(i + 1) + '_downsampled', f'{args.mesh}_surf/')
 
-        logger.info(f"The {i+1}th pm done")
+        logger.info(f"The {i + 1}th pm done")
         if args.mesh_type == "bilayer":
 
             tag_endo = Method.assign_element_tag_around_path_within_radius(endo, pm, w_pm, tag_endo, pectinate_muscle)
-            logger.info(f"The {i+1}th pm's tag is done")
+            logger.info(f"The {i + 1}th pm's tag is done")
             fiber_endo = Method.assign_element_fiber_around_path_within_radius(endo, pm, w_pm, fiber_endo, smooth=False)
             logger.info("The %sth pm's fiber is done", i + 1)
 
