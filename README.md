@@ -70,6 +70,17 @@ Example using a closed surface derived from a MRI segmentation to produce a volu
 python main.py --mesh mesh/mwk05_bi.vtp --closed_surface 1 --use_curvature_to_open 0 --atrium LA_RA
 ```
 
+## Config and logging
+
+With the newest version of AugmentA, a logging and config module was implemented.
+### Logging
+The logging module is used to log the progress of the pipeline. 
+It's saved into the main folder as `{meshname}AugmentA.log`.
+### Config
+The config module is used to store important parameters of the pipeline.
+You can use the default version by not adding any parameter or change the config by using the --config_dir parameter.
+Nevertheless, the current config setting will be stored to `{main_dir}/_configs/augmenta_config.yaml`.
+
 ## Q&A
 
 - Selection of appendage apex: the selected point will be used as boundary condition for a Laplacian problem. Therefore,
