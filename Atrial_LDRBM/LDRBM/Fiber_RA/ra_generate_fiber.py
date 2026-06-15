@@ -33,12 +33,6 @@ import numpy as np
 import pandas as pd
 import vtk
 from scipy.spatial import cKDTree
-from vtk.numpy_interface import dataset_adapter as dsa
-
-import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
-from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
-from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import get_normalized_orthogonality
-from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 from vtk_openCARP_methods_ibt.AugmentA_methods.vtk_operations import vtk_thr, extract_largest_region
 from vtk_openCARP_methods_ibt.mathematical_operations.vector_operations import normalize_vectors
 from vtk_openCARP_methods_ibt.vtk_methods.converters import vtk_to_numpy
@@ -48,11 +42,17 @@ from vtk_openCARP_methods_ibt.vtk_methods.filters import apply_vtk_geom_filter, 
     get_cells_with_ids, apply_extract_cell_filter, get_elements_above_plane
 from vtk_openCARP_methods_ibt.vtk_methods.finder import find_closest_point
 from vtk_openCARP_methods_ibt.vtk_methods.init_objects import initialize_plane
+from vtkmodules.numpy_interface import dataset_adapter as dsa
+
+import Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA as Method
+from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
+from Atrial_LDRBM.LDRBM.Fiber_LA.la_generate_fiber import get_normalized_orthogonality
+from Atrial_LDRBM.LDRBM.Fiber_RA.Methods_RA import downsample_path
 
 EXAMPLE_DIR = os.path.dirname(os.path.realpath(__file__))
 
 from Atrial_LDRBM.LDRBM.Fiber_RA.create_bridges import add_free_bridge
-from main_config import get_config, save_config, load_config, change_config_location
+from main_config import get_config
 
 try:
     from augmentaupgrade.logging_setup import logger
@@ -125,8 +125,6 @@ def extract_raa_region(no_TV_s, model, tao_raa: float, apex_cell_id: int, apex_p
 
         ids0 = vtk_to_numpy(RAA_s0.GetCellData().GetArray("Global_ids")) if RAA_s0.GetNumberOfCells() else np.array([],
                                                                                                                     int)
-        ids1 = vtk_to_numpy(RAA_s1.GetCellData().GetArray("Global_ids")) if RAA_s1.GetNumberOfCells() else np.array([],
-                                                                                                                    int)
         chosen = RAA_s0 if apex_gid in set(ids0.tolist()) else RAA_s1
 
     # keep only connected component closest to apex (kills overcover/islands)
@@ -158,9 +156,6 @@ def ra_generate_fiber(model, args, job):
     cfg_all = get_config()
     cfg = cfg_all.ra
 
-    tao_icv = cfg.thresholds.tao_icv
-    tao_scv = cfg.thresholds.tao_scv
-
     with open(os.path.join(EXAMPLE_DIR, '../../element_tag.csv')) as f:
         tag_dict = {}
         reader = csv.DictReader(f)
@@ -173,24 +168,15 @@ def ra_generate_fiber(model, args, job):
     crista_terminalis = int(tag_dict['crista_terminalis'])
     inter_caval_bundle_epi = int(tag_dict['inter_caval_bundle_epi'])
     right_atrial_lateral_wall_epi = int(tag_dict['right_atrial_wall_epi'])
-    isthmus_epi = int(tag_dict['isthmus_epi'])
     right_atrial_septum_epi = int(tag_dict['right_atrial_septum_epi'])
     pectinate_muscle = int(tag_dict['pectinate_muscle'])
     right_atrial_appendage_epi = int(tag_dict['right_atrial_appendage_epi'])
 
     # load endo tags
-    tricuspid_valve_endo = int(tag_dict['tricuspid_valve_endo'])
-    superior_vena_cava_endo = int(tag_dict['superior_vena_cava_endo'])
-    inferior_vena_cava_endo = int(tag_dict['inferior_vena_cava_endo'])
-    inter_caval_bundle_endo = int(tag_dict['inter_caval_bundle_endo'])
-    right_atrial_lateral_wall_endo = int(tag_dict['right_atrial_wall_endo'])
-    isthmus_endo = int(tag_dict['isthmus_endo'])
-    right_atrial_septum_endo = int(tag_dict['right_atrial_septum_endo'])
     coronary_sinus = int(tag_dict['coronary_sinus'])
 
     # load bridges tag
     bachmann_bundel_right = int(tag_dict['bachmann_bundel_right'])
-    bachmann_bundel_internal = int(tag_dict['bachmann_bundel_internal'])
 
     # load left atrial wall epi
     left_atrial_wall_epi = int(tag_dict['left_atrial_wall_epi'])
@@ -220,27 +206,18 @@ def ra_generate_fiber(model, args, job):
     ab_grad = vtk_to_numpy(ab_grad)
 
     # v
-    v = model.GetCellData().GetArray('phie_v')
     v_grad = model.GetCellData().GetArray('grad_v')
-    v = vtk_to_numpy(v)
     v_grad = vtk_to_numpy(v_grad)
 
     # r
-    r = model.GetCellData().GetArray('phie_r')
     r_grad = model.GetCellData().GetArray('grad_r')
-    r = vtk_to_numpy(r)
     r_grad = vtk_to_numpy(r_grad)
 
     # w
-    w = model.GetCellData().GetArray('phie_w')
     w_grad = model.GetCellData().GetArray('grad_w')
-    w = vtk_to_numpy(w)
     w_grad = vtk_to_numpy(w_grad)
 
     # phie
-    if args.mesh_type == "vol":
-        phie = model.GetCellData().GetArray('phie_phi')
-        phie = vtk_to_numpy(phie)
     phie_grad = model.GetCellData().GetArray('grad_phi')
     phie_grad = vtk_to_numpy(phie_grad)
 
@@ -280,14 +257,13 @@ def ra_generate_fiber(model, args, job):
         Method.writer_vtk(TV_s, f'{args.mesh}_surf/' + "tv_s.vtk")
         Method.writer_vtk(no_TV_s, f'{args.mesh}_surf/' + "no_tv_s.vtk")
 
-    # del ra_TV, ra_diff, ra_no_TV
-
     tag[TV_ids] = tricuspid_valve_epi
 
     k[TV_ids] = r_grad[TV_ids]
 
-    IVC_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v", tao_icv)  # Changed 0-1 because ICV and SVC are inverted
-    no_IVC_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_v", tao_icv)  # Changed 1-0
+    IVC_s = vtk_thr(no_TV_s, 0, "CELLS", "phie_v",
+                    cfg.thresholds.tao_icv)  # Changed 0-1 because ICV and SVC are inverted
+    no_IVC_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_v", cfg.thresholds.tao_icv)  # Changed 1-0
 
     IVC_s = extract_largest_region(IVC_s)  # Added
 
@@ -295,8 +271,8 @@ def ra_generate_fiber(model, args, job):
 
     RAW_s = vtk_thr(no_TV_s, 1, "CELLS", "phie_r", max_phie_r_ivc)  # Added +0.03 fro dk01
 
-    SVC_s = vtk_thr(RAW_s, 1, "CELLS", "phie_v", tao_scv)  # Changed 1->0
-    no_SVC_s = vtk_thr(RAW_s, 0, "CELLS", "phie_v", tao_scv)  # Changed 0->1
+    SVC_s = vtk_thr(RAW_s, 1, "CELLS", "phie_v", cfg.thresholds.tao_scv)  # Changed 1->0
+    no_SVC_s = vtk_thr(RAW_s, 0, "CELLS", "phie_v", cfg.thresholds.tao_scv)  # Changed 0->1
 
     SVC_s = extract_largest_region(SVC_s)
 
@@ -310,8 +286,6 @@ def ra_generate_fiber(model, args, job):
     tao_ct_plus = np.min(vtk_to_numpy(SVC_s.GetCellData().GetArray('phie_w')))
 
     SVC_CT_pt = SVC_s.GetPoint(np.argmin(vtk_to_numpy(SVC_s.GetPointData().GetArray('phie_w'))))
-
-    tao_ct_minus = np.min(vtk_to_numpy(IVC_s.GetCellData().GetArray('phie_w')))
 
     IVC_CT_pt = IVC_s.GetPoint(np.argmin(vtk_to_numpy(IVC_s.GetPointData().GetArray('phie_w'))))
 
@@ -398,8 +372,8 @@ def ra_generate_fiber(model, args, job):
 
     CT_plus = vtk_thr(RAW_s, 0, "CELLS", "phie_w", tao_ct_plus)
 
-    RAW_S = vtk_thr(CT_plus, 2, "CELLS", "phie_v", tao_scv,
-                    tao_icv)  # IB_S grad_v Changed order tao_scv, tao_icv
+    RAW_S = vtk_thr(CT_plus, 2, "CELLS", "phie_v", cfg.thresholds.tao_scv,
+                    cfg.thresholds.tao_icv)  # IB_S grad_v Changed order tao_scv, tao_icv
 
     RAW_S_ids = vtk_to_numpy(RAW_S.GetCellData().GetArray('Global_ids'))
 
@@ -480,8 +454,6 @@ def ra_generate_fiber(model, args, job):
 
     if args.debug:
         Method.writer_vtk(septal_surf, f'{args.mesh}_surf/' + "septal_surf_2.vtk")
-
-    CS_ids = vtk_to_numpy(septal_surf.GetCellData().GetArray('Global_ids'))
 
     # if len(CS_ids) == 0:
     ring_ids = np.loadtxt(f'{args.mesh}_surf/' + 'ids_CS.vtx', skiprows=2, dtype=int)
@@ -627,7 +599,6 @@ def ra_generate_fiber(model, args, job):
             meshNew.CellData.append(tag, "elemTag")
             meshNew.CellData.append(el, "fiber")
 
-            writer = vtk.vtkUnstructuredGridWriter()
             if args.ofmt == 'vtk':
                 vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_epi_with_fiber.vtk", meshNew.VTKObject,
                                              store_binary=True)
@@ -637,9 +608,6 @@ def ra_generate_fiber(model, args, job):
 
     point1_id = find_closest_point(CT, IVC_max_r_CT_pt)
     point2_id = find_closest_point(CT, SVC_CT_pt)
-
-    point3_id = find_closest_point(TV_s, IVC_max_r_CT_pt)
-    RAA_on_tv_s = find_closest_point(TV_s, raa_pm_anchor)
 
     CT = apply_vtk_geom_filter(CT)
 
@@ -883,7 +851,6 @@ def ra_generate_fiber(model, args, job):
             meshNew.CellData.append(el, "fiber")
             meshNew.CellData.append(sheet, "sheet")
 
-            writer = vtk.vtkUnstructuredGridWriter()
             if args.ofmt == 'vtk':
                 vtk_unstructured_grid_writer(job.ID + "/result_RA/RA_endo_with_fiber.vtk", meshNew.VTKObject,
                                              store_binary=True)
