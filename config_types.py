@@ -5,14 +5,8 @@ from dataclasses import dataclass, field
 @dataclass
 class RAThresholds:
     """Laplace field thresholds for RA region segmentation."""
-    tao_tv: float = 0.9                # tricuspid valve threshold
     tao_icv: float = 0.95              # inferior vena cava threshold
     tao_scv: float = 0.10              # superior vena cava threshold
-    tao_ct_plus: float = -0.10         # crista terminalis upper bound
-    tao_ct_minus: float = -0.13        # crista terminalis lower bound
-    tao_ib: float = -0.06              # inter-caval bundle threshold
-    tao_ras: float = 0.13              # right atrial septum threshold
-    tao_raw: float = 0.55              # right atrial wall threshold
     alpha_RAA: float = 0.30            # interpolation factor for RAA segmentation
     ivc_phie_r_offset: float = 0.2     # offset added to max phie_r of IVC
 
