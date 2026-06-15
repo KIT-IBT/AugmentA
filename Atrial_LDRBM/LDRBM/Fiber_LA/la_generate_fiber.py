@@ -31,7 +31,7 @@ import os
 import numpy as np
 import pandas as pd
 import vtk
-from vtk.numpy_interface import dataset_adapter as dsa
+from vtkmodules.numpy_interface import dataset_adapter as dsa
 
 import Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA as Method
 from Atrial_LDRBM.LDRBM.Fiber_LA.Methods_LA import clean_all_data
