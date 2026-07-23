@@ -8,4 +8,4 @@ numpy==1.24.0,
 matplotlib==3.7.2,
 matplotlib-inline==0.1.6,
 fonttools >=4.43.0,
-pillow>=10.3.0
+pillow>=12.3.0
