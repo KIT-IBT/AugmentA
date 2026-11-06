@@ -96,8 +96,8 @@ When using this work, please cite
 > *AugmentA: Patient-specific Augmented Atrial model Generation Tool*
 >
 > Luca Azzolin, Martin Eichenlaub, Claudia Nagel, Deborah Nairn, Jorge Sánchez, Laura Unger, Olaf Dössel, Amir Jadidi,
-> Axel Loewe
-> [doi:10.1101/2022.02.13.22270835](https://doi.org/10.1101/2022.02.13.22270835)
+> Axel Loewe; Computerized Medical Imaging and Graphics 2023;108:102265
+> [doi:10.1016/j.compmedimag.2023.102265](https://doi.org/10.1016/j.compmedimag.2023.102265)
 
 ## License
 
