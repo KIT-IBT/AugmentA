@@ -1,0 +1,163 @@
+# Lightweight, headless AugmentA image (no VNC / desktop) - native ARM64 build (e.g. Apple Silicon).
+# Use this when AugmentA runs without user input (e.g. pre-selected points / config driven runs).
+#
+# Differences to Dockerfile-headless / Dockerfile-x64 (the pinned versions have no ARM64 builds):
+#   vtk        9.3.1          -> 9.5.2
+#   pymeshlab  2023.12.post2  -> 2025.7
+#   pymesh2    0.3.1 wheel    -> compiled from source (nuvolos-cloud/PyMesh)
+# All other dependency versions are identical.
+#
+#   docker build -f Dockerfile-headless-arm64 -t augmenta_headless_arm64_image .
+
+# Same Python version (3.10.12) and Debian release (12, gcc 12, PETSc 3.18) as Dockerfile-x64
+ARG PYTHON_IMAGE=python:3.10.12-slim-bookworm
+
+########################################################################################
+# Stage 1: builder - compiles openCARP and assembles the Python virtual environment
+########################################################################################
+FROM ${PYTHON_IMAGE} AS builder
+
+ARG OPENCARP_REF=master
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN if [ "$(uname -m)" != "aarch64" ]; then \
+        echo "This Dockerfile is for ARM64 only. On x86_64 use Dockerfile-headless." >&2; exit 1; fi
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    cmake \
+    gengetopt \
+    gfortran \
+    git \
+    libfftw3-dev \
+    libjpeg-dev \
+    pkg-config \
+    petsc-dev \
+    zlib1g-dev \
+    libboost-dev \
+    libboost-thread-dev \
+    libeigen3-dev \
+    libgmp-dev \
+    libmpfr-dev \
+    libtbb-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# openCARP (Release build, installed to /opt/opencarp)
+RUN git clone --depth 1 --branch ${OPENCARP_REF} https://git.opencarp.org/openCARP/openCARP.git /src/openCARP
+WORKDIR /src/openCARP
+RUN cmake -S. -B build \
+        -DCMAKE_PREFIX_PATH=/usr/lib/gcc/$(gcc -dumpmachine)/$(gcc -dumpversion)/ \
+        -DDLOPEN=OFF \
+        -DLIB_hdf5=/usr/lib/$(gcc -dumpmachine)/hdf5/openmpi/libhdf5.so \
+        -DBUILD_EXTERNAL=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/opt/opencarp \
+ && cmake --build build -j $(nproc) \
+ && cmake --install build \
+ && mkdir -p /opt/opencarp/bin \
+ && cp -rn build/bin/. /opt/opencarp/bin/ \
+ && rm -rf build
+
+# Python virtual environment
+ENV VIRTUAL_ENV=/venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN python -m venv $VIRTUAL_ENV && pip install --no-cache-dir --upgrade pip wheel setuptools
+
+COPY requirements.txt /tmp/requirements.txt
+COPY constraints.txt /tmp/constraints-x64.txt
+# Pin every package (incl. transitive ones) to the versions of the Dockerfile-x64 image,
+# except vtk, which has no ARM64 build of 9.3.1
+RUN grep -v '^vtk==' /tmp/constraints-x64.txt > /tmp/constraints.txt
+ENV PIP_CONSTRAINT=/tmp/constraints.txt
+
+# Same packages and install order as Dockerfile-x64; vtk and pymeshlab bumped (no ARM64 builds of the old pins)
+RUN pip install --no-cache-dir matplotlib numpy pandas scipy tables \
+ && pip install --no-cache-dir vtk==9.5.2 \
+ && pip install --no-cache-dir -r /tmp/requirements.txt \
+ && pip install --no-cache-dir pymeshfix \
+ && pip install --no-cache-dir pymeshlab==2025.7 \
+ && pip install --no-cache-dir /src/openCARP/external/carputils/
+
+# PyMesh: no ARM64 wheel available -> compile from source
+# Its third-party code (e.g. draco) misses standard includes that gcc 12 no longer pulls in implicitly
+ENV PYMESH_CXXFLAGS="-include cstddef -include cstdint -include limits"
+# CGAL/libigl units need up to ~3-4 GB RAM each -> limit parallel jobs (2 fits into 8 GB Docker memory)
+ARG PYMESH_NUM_CORES=2
+RUN export CXXFLAGS="$PYMESH_CXXFLAGS" NUM_CORES=${PYMESH_NUM_CORES} \
+ && git clone --recursive https://github.com/nuvolos-cloud/PyMesh /src/PyMesh \
+ && cd /src/PyMesh \
+ && pip install --no-cache-dir -r python/requirements.txt \
+ && python setup.py bdist_wheel \
+ && pip install --no-cache-dir dist/*.whl \
+ && pip install --no-cache-dir vtk-openCARP-methods-ibt \
+ && rm -rf /src/PyMesh
+
+# carputils settings (generated here because cusettings needs git, which the runtime image does not have)
+RUN PATH="/opt/opencarp/bin:$PATH" HOME=/headless \
+    sh -c 'mkdir -p /headless/.config/carputils && cusettings /headless/.config/carputils/settings.yaml'
+
+########################################################################################
+# Stage 2: runtime - only shared libraries, openCARP binaries and the venv
+########################################################################################
+FROM ${PYTHON_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Runtime libraries: PETSc/MPI + FFTW for openCARP, GL/X libs required to import vtk/pymeshlab
+# (no display server is installed), gmp/mpfr/tbb/boost for PyMesh
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpetsc-real3.18 \
+    libhdf5-openmpi-103-1 \
+    libfftw3-double3 \
+    libgfortran5 \
+    libgomp1 \
+    libjpeg62-turbo \
+    libgl1 \
+    libglu1-mesa \
+    libopengl0 \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    libice6 \
+    libsm6 \
+    libx11-xcb1 \
+    libfontconfig1 \
+    libfreetype6 \
+    libharfbuzz0b \
+    libgmp10 \
+    libgmpxx4ldbl \
+    libmpfr6 \
+    libtbb12 \
+    libboost-thread1.74.0 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/opencarp /opt/opencarp
+COPY --from=builder /venv /venv
+
+ENV VIRTUAL_ENV=/venv
+ENV PATH="/venv/bin:/opt/opencarp/bin:$PATH"
+ENV LD_LIBRARY_PATH="/opt/opencarp/lib"
+ENV OPENCARP_DOCKER="1"
+# No display available: render matplotlib off-screen
+ENV MPLBACKEND=Agg
+# pymeshlab is Qt based: run Qt without a display server
+ENV QT_QPA_PLATFORM=offscreen
+
+# Fail the build early if a binary is missing a shared library
+RUN if ldd /opt/opencarp/bin/* 2>/dev/null | grep "not found"; then \
+        echo "Missing shared libraries for openCARP binaries" >&2; exit 1; fi \
+ && python -c "import vtk, pymeshlab, pymeshfix, pymesh, carputils, vtk_openCARP_methods_ibt"
+
+# Same layout as the VNC image: data in /headless/data, AugmentA in /headless/augmenta
+RUN useradd --uid 1000 --create-home --home-dir /headless --shell /bin/bash augmenta \
+ && mkdir -p /headless/data /headless/augmenta /headless/.config/carputils \
+ && chown -R augmenta:augmenta /headless
+
+COPY --from=builder --chown=1000:1000 /headless/.config/carputils/settings.yaml /headless/.config/carputils/settings.yaml
+
+USER 1000
+ENV HOME=/headless
+
+WORKDIR /headless/augmenta
+CMD ["bash"]

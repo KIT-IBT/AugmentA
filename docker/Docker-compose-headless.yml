@@ -1,0 +1,26 @@
+services:
+  augmenta_headless:
+    image: augmenta_headless_image
+    build:
+      context: .
+      dockerfile: Dockerfile-headless
+    volumes: #Replace with your data directory
+      - /Branch/To/Your/Data:/headless/data
+      - ../:/headless/augmenta
+    # Example: run the pipeline directly instead of an interactive shell
+    # command: ["python", "main.py", "--help"]
+    stdin_open: true
+    tty: true
+
+  # Native ARM64 variant (Apple Silicon) with newer vtk/pymeshlab, see Dockerfile-headless-arm64
+  augmenta_headless_arm64:
+    image: augmenta_headless_arm64_image
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile-headless-arm64
+    volumes: #Replace with your data directory
+      - /Users/pm930l/Projects/data:/headless/data
+      - ../:/headless/augmenta
+    stdin_open: true
+    tty: true
