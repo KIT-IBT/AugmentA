@@ -19,6 +19,31 @@ Work currently in progress
 4. Change mounted folder to a folder on your pc ```"your/path/to/folder":headless/data``` in _Docker-compose.yml_
 5. Start docker container with `docker-compose up`
 
+# Headless (lightweight) image
+
+If AugmentA does not need any user input (no point picking / GUI), use `Dockerfile-headless`.
+It has no VNC/desktop, uses a multi-stage build (no compilers in the final image) and builds openCARP in Release mode.
+All dependency versions are identical to `Dockerfile-x64`.
+
+1. Build: ```docker build -f Dockerfile-headless -t augmenta_headless_image .```
+    - For ARM PCs (e.g. M3 MAC): ```docker build --platform linux/amd64 -f Dockerfile-headless -t augmenta_headless_image .```
+      (vtk 9.3.1, pymeshlab 2023.12.post2 and pymesh2 0.3.1 only exist for x86_64)
+2. Change the mounted data folder in _Docker-compose-headless.yml_
+3. Start an interactive shell: ```docker compose -f Docker-compose-headless.yml run --rm augmenta_headless```
+   or run directly: ```docker compose -f Docker-compose-headless.yml run --rm augmenta_headless python main.py ...```
+
+### Native ARM64 (Apple Silicon)
+
+`Dockerfile-headless-arm64` runs natively on ARM without amd64 emulation (about 1.3-2.2x faster on an M3 Pro).
+Because the pinned versions have no ARM64 builds, it uses vtk 9.5.2 and pymeshlab 2025.7 and compiles PyMesh from source;
+all other versions are identical. Check your results against the x86 image if exact numerical reproducibility matters.
+
+* Build: ```docker build -f Dockerfile-headless-arm64 -t augmenta_headless_arm64_image .```
+* Run: ```docker compose -f Docker-compose-headless.yml run --rm augmenta_headless_arm64```
+
+Notes:
+* Matplotlib uses the `Agg` backend; interactive VTK windows are not available.
+
 # Running AugmentA
 
 ## Access to UI

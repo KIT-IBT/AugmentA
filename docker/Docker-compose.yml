@@ -7,6 +7,6 @@ services:
       - "6901:6901" #VNC Port browser/web
       - "55146:55146" #Debug Port intelij
     volumes: #Replace with your data directory
-      - /Branch/To/Your/Data:/headless/data
+      - /Users/pm930l/Projects/data:/headless/data
       - ../:/headless/augmenta
 
